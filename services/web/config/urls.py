@@ -6,6 +6,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('accounts/', include('apps.accounts.urls')),
     path('connections/', include('apps.connections.urls')),
+    path('flows/', include('apps.flows.urls')),
     path('transfers/', include('apps.transfers.urls')),
     path('scheduler/', include('apps.scheduler.urls')),
     path('', RedirectView.as_view(url='/transfers/', permanent=False)),

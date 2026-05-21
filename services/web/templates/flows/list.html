@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}FLOWS — TMASK-TRANSPORTER{% endblock %}
+{% block content %}
+<div class="box">
+  <span class="box-title">RELAY FLOWS</span>
+  <div style="margin-bottom:1rem;">
+    <a href="{% url 'flows:create' %}" class="btn">[ + NEW FLOW ]</a>
+  </div>
+  {% if flows %}
+  <table>
+    <thead>
+      <tr>
+        <th>NAME</th><th>SOURCE</th><th>SOURCE PATH</th>
+        <th>DEST</th><th>DEST PATH</th><th>ACTIONS</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for flow in flows %}
+      <tr>
+        <td class="glow">{{ flow.name }}</td>
+        <td>{{ flow.source_conn.name }}</td>
+        <td>{{ flow.source_path }}</td>
+        <td>{{ flow.dest_conn.name }}</td>
+        <td>{{ flow.dest_path }}</td>
+        <td>
+          <form method="post" action="{% url 'flows:run' flow.pk %}" style="display:inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-warn">[ RUN ]</button>
+          </form>
+          <a href="{% url 'flows:edit' flow.pk %}" class="btn">[ EDIT ]</a>
+          <form method="post" action="{% url 'flows:delete' flow.pk %}" style="display:inline"
+            onsubmit="return confirm('DELETE {{ flow.name }}?')">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">[ DEL ]</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:#555;">NO FLOWS CONFIGURED — ADD ONE ABOVE</p>
+  {% endif %}
+</div>
+{% endblock %}

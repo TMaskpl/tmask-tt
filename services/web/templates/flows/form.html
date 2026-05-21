@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}{{ action }} FLOW — TMASK-TRANSPORTER{% endblock %}
+{% block content %}
+<div class="box" style="max-width:700px;">
+  <span class="box-title">{{ action }} RELAY FLOW</span>
+  <form method="post">
+    {% csrf_token %}
+    {% if form.non_field_errors %}
+    <div class="msg-error">{% for e in form.non_field_errors %}> {{ e }}{% endfor %}</div>
+    {% endif %}
+    <div class="field">
+      <label>NAME:</label>
+      {{ form.name }}
+      {% if form.name.errors %}<div style="color:var(--red);font-size:0.8rem;">{{ form.name.errors }}</div>{% endif %}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:1rem;">
+      <div>
+        <span class="box-title" style="font-size:0.75rem;">SOURCE</span>
+        <div class="field">
+          <label>CONNECTION:</label>
+          {{ form.source_conn }}
+          {% if form.source_conn.errors %}<div style="color:var(--red);font-size:0.8rem;">{{ form.source_conn.errors }}</div>{% endif %}
+        </div>
+        <div class="field">
+          <label>PATH:</label>
+          {{ form.source_path }}
+          {% if form.source_path.errors %}<div style="color:var(--red);font-size:0.8rem;">{{ form.source_path.errors }}</div>{% endif %}
+        </div>
+      </div>
+      <div>
+        <span class="box-title" style="font-size:0.75rem;">DESTINATION</span>
+        <div class="field">
+          <label>CONNECTION:</label>
+          {{ form.dest_conn }}
+          {% if form.dest_conn.errors %}<div style="color:var(--red);font-size:0.8rem;">{{ form.dest_conn.errors }}</div>{% endif %}
+        </div>
+        <div class="field">
+          <label>PATH:</label>
+          {{ form.dest_path }}
+          {% if form.dest_path.errors %}<div style="color:var(--red);font-size:0.8rem;">{{ form.dest_path.errors }}</div>{% endif %}
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;gap:1rem;margin-top:1.5rem;">
+      <button type="submit" class="btn">[ SAVE FLOW ]</button>
+      <a href="{% url 'flows:list' %}" class="btn btn-danger">[ CANCEL ]</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
