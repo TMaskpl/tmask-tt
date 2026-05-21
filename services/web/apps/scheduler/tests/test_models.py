@@ -73,3 +73,31 @@ class TestScheduledTransfer:
             user=regular_user,
         )
         assert form.is_valid(), form.errors
+
+
+@pytest.mark.django_db
+class TestScheduledTransferFlowValidation:
+    def test_flow_schedule_requires_no_connection(self, regular_user, make_flow):
+        flow = make_flow(regular_user)
+        sched = ScheduledTransfer.objects.create(
+            owner=regular_user,
+            flow=flow,
+            source_path='',
+            destination_path='',
+            cron_expr='0 3 * * *',
+        )
+        assert sched.connection is None
+        assert sched.flow == flow
+        assert str(sched) == 'Test Flow: 0 3 * * *'
+
+    def test_cannot_set_both_connection_and_flow(self, regular_user, make_connection, make_flow):
+        from django.core.exceptions import ValidationError
+        sched = ScheduledTransfer(
+            owner=regular_user,
+            connection=make_connection(regular_user),
+            flow=make_flow(regular_user),
+            source_path='/x', destination_path='/y',
+            cron_expr='0 3 * * *',
+        )
+        with pytest.raises(ValidationError):
+            sched.full_clean()
