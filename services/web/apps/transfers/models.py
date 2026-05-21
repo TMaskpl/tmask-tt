@@ -24,7 +24,12 @@ class TransferJob(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='jobs'
     )
     connection       = models.ForeignKey(
-        'connections.Connection', on_delete=models.CASCADE, related_name='jobs'
+        'connections.Connection', on_delete=models.CASCADE, related_name='jobs',
+        null=True, blank=True,
+    )
+    flow             = models.ForeignKey(
+        'flows.Flow', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='jobs',
     )
     source_path      = models.CharField(max_length=2000)
     destination_path = models.CharField(max_length=2000)
@@ -34,6 +39,13 @@ class TransferJob(models.Model):
     started_at       = models.DateTimeField(null=True, blank=True)
     finished_at      = models.DateTimeField(null=True, blank=True)
     error_message    = models.TextField(null=True, blank=True)
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        if self.connection_id and self.flow_id:
+            raise ValidationError('Set connection or flow, not both.')
+        if not self.connection_id and not self.flow_id:
+            raise ValidationError('Set either connection or flow.')
 
     def mark_running(self, task_id: str) -> None:
         self.status = STATUS_RUNNING

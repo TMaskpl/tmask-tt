@@ -35,3 +35,25 @@ def make_connection():
         defaults.update(kwargs)
         return Connection.objects.create(owner=user, **defaults)
     return _make
+
+@pytest.fixture
+def make_flow():
+    from apps.flows.models import Flow
+    from apps.connections.models import Connection
+    def _make(user, **kwargs):
+        src = Connection.objects.create(
+            owner=user, name='FlowSrc', host='10.0.0.1', port=22,
+            username='u', password='p', protocol='sftp',
+        )
+        dst = Connection.objects.create(
+            owner=user, name='FlowDst', host='10.0.0.2', port=22,
+            username='u', password='p', protocol='sftp',
+        )
+        defaults = dict(
+            name='Test Flow',
+            source_conn=src, source_path='/data/file.tar',
+            dest_conn=dst,   dest_path='/backup/file.tar',
+        )
+        defaults.update(kwargs)
+        return Flow.objects.create(owner=user, **defaults)
+    return _make

@@ -73,6 +73,44 @@ class TestTransferJob:
 
 
 @pytest.mark.django_db
+class TestTransferJobFlowValidation:
+    def test_flow_job_requires_no_connection(self, regular_user, make_flow):
+        flow = make_flow(regular_user)
+        job = TransferJob.objects.create(
+            owner=regular_user,
+            flow=flow,
+            source_path='/data/file.tar',
+            destination_path='/backup/file.tar',
+        )
+        assert job.connection is None
+        assert job.flow == flow
+
+    def test_cannot_set_both_connection_and_flow(self, regular_user, make_connection, make_flow):
+        from django.core.exceptions import ValidationError
+        conn = make_connection(regular_user)
+        flow = make_flow(regular_user)
+        job = TransferJob(
+            owner=regular_user,
+            connection=conn,
+            flow=flow,
+            source_path='/x',
+            destination_path='/y',
+        )
+        with pytest.raises(ValidationError):
+            job.full_clean()
+
+    def test_must_set_at_least_one(self, regular_user):
+        from django.core.exceptions import ValidationError
+        job = TransferJob(
+            owner=regular_user,
+            source_path='/x',
+            destination_path='/y',
+        )
+        with pytest.raises(ValidationError):
+            job.full_clean()
+
+
+@pytest.mark.django_db
 class TestTransferLog:
     def test_log_appended_to_job(self, regular_user, make_connection):
         job = TransferJob.objects.create(
