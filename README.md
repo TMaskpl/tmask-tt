@@ -1,5 +1,8 @@
 # tmask-transporter
 
+<img width="459" height="459" alt="Zrzut ekranu z 2026-05-21 08-23-32" src="https://github.com/user-attachments/assets/9b08543f-bd36-4d38-88da-811959ad1139" />
+
+
 Webowa aplikacja do przesyłania plików między systemami Linux przez SSH (SFTP/rsync).
 
 Panel użytkownika, harmonogram cron, szyfrowanie transferów (Fernet AES-256), interfejs Terminal/CRT.
