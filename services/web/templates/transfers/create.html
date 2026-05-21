@@ -23,6 +23,13 @@
     <div style="margin-bottom:0.5rem;">
       STATUS: <span class="status status-{{ job.status }}">{{ job.status|upper }}</span>
     </div>
+    {% if job.flow %}
+    <div style="margin-bottom:0.5rem;font-size:0.85rem;">
+      TYPE: RELAY &nbsp;|&nbsp; FLOW: <span class="glow">{{ job.flow.name }}</span><br>
+      SRC: {{ job.flow.source_conn.name }} — {{ job.source_path }}<br>
+      DST: {{ job.flow.dest_conn.name }} — {{ job.destination_path }}
+    </div>
+    {% endif %}
     <div
       id="log-output"
       class="log-terminal"

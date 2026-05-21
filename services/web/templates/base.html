@@ -14,6 +14,7 @@
     <span class="logo">[ TMASK-TRANSPORTER ]</span>
     <a href="{% url 'transfers:create' %}" class="{% if request.resolver_match.app_name == 'transfers' %}active{% endif %}">TRANSFERS</a>
     <a href="{% url 'connections:list' %}" class="{% if request.resolver_match.app_name == 'connections' %}active{% endif %}">CONNECTIONS</a>
+    <a href="{% url 'flows:list' %}" class="{% if request.resolver_match.app_name == 'flows' %}active{% endif %}">FLOWS</a>
     <a href="{% url 'scheduler:list' %}" class="{% if request.resolver_match.app_name == 'scheduler' %}active{% endif %}">SCHEDULER</a>
     <a href="{% url 'transfers:logs' %}">LOGS</a>
     {% if user.is_admin %}

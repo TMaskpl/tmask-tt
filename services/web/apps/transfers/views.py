@@ -19,7 +19,10 @@ def transfer_create(request):
 
 @login_required
 def transfer_detail(request, pk):
-    job = get_object_or_404(TransferJob, pk=pk, owner=request.user)
+    job = get_object_or_404(
+        TransferJob.objects.select_related('connection', 'flow', 'flow__source_conn', 'flow__dest_conn'),
+        pk=pk, owner=request.user,
+    )
     return render(request, 'transfers/create.html', {'job': job})
 
 
@@ -35,5 +38,5 @@ def log_fragment(request, pk):
 
 @login_required
 def transfer_logs(request):
-    jobs = TransferJob.objects.filter(owner=request.user).select_related('connection')
+    jobs = TransferJob.objects.filter(owner=request.user).select_related('connection', 'flow')
     return render(request, 'logs/list.html', {'jobs': jobs})
