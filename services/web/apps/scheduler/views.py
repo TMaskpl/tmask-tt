@@ -7,7 +7,7 @@ from .forms import ScheduledTransferForm
 
 @login_required
 def schedule_list(request):
-    schedules = ScheduledTransfer.objects.filter(owner=request.user).select_related('connection')
+    schedules = ScheduledTransfer.objects.filter(owner=request.user).select_related('connection', 'flow')
     return render(request, 'scheduler/list.html', {'schedules': schedules})
 
 

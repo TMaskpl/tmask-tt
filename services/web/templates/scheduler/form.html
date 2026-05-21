@@ -1,22 +1,61 @@
 {% extends "base.html" %}
 {% block title %}{{ action }} SCHEDULE{% endblock %}
 {% block content %}
-<div class="box" style="max-width:600px;">
+<div class="box" style="max-width:640px;">
   <span class="box-title">{{ action }} SCHEDULE</span>
-  <form method="post">
+  <form method="post" id="sched-form">
     {% csrf_token %}
     {% if form.non_field_errors %}
     <div class="msg-error">{% for e in form.non_field_errors %}> {{ e }}{% endfor %}</div>
     {% endif %}
-    {% for field in form %}
-    <div class="field">
-      <label>{{ field.label|upper }}:</label>
-      {{ field }}
-      {% if field.errors %}
-      <div style="color:var(--red);font-size:0.8rem;">{% for e in field.errors %}{{ e }}{% endfor %}</div>
-      {% endif %}
+
+    <div class="field" style="margin-bottom:1rem;">
+      <label>TYPE:</label>
+      <label style="margin-right:1.5rem;">
+        <input type="radio" name="mode" value="connection" id="mode-conn"
+          {% if not form.instance.flow_id %}checked{% endif %}> CONNECTION
+      </label>
+      <label>
+        <input type="radio" name="mode" value="flow" id="mode-flow"
+          {% if form.instance.flow_id %}checked{% endif %}> RELAY FLOW
+      </label>
     </div>
-    {% endfor %}
+
+    <div id="section-conn">
+      <div class="field">
+        <label>CONNECTION:</label>
+        {{ form.connection }}
+        {% if form.connection.errors %}<div style="color:var(--red);font-size:0.8rem;">{{ form.connection.errors }}</div>{% endif %}
+      </div>
+      <div class="field">
+        <label>SOURCE PATH:</label>
+        {{ form.source_path }}
+        {% if form.source_path.errors %}<div style="color:var(--red);font-size:0.8rem;">{{ form.source_path.errors }}</div>{% endif %}
+      </div>
+      <div class="field">
+        <label>DESTINATION PATH:</label>
+        {{ form.destination_path }}
+        {% if form.destination_path.errors %}<div style="color:var(--red);font-size:0.8rem;">{{ form.destination_path.errors }}</div>{% endif %}
+      </div>
+    </div>
+
+    <div id="section-flow" style="display:none;">
+      <div class="field">
+        <label>FLOW:</label>
+        {{ form.flow }}
+        {% if form.flow.errors %}<div style="color:var(--red);font-size:0.8rem;">{{ form.flow.errors }}</div>{% endif %}
+      </div>
+    </div>
+
+    <div class="field">
+      <label>CRON EXPRESSION:</label>
+      {{ form.cron_expr }}
+      {% if form.cron_expr.errors %}<div style="color:var(--red);font-size:0.8rem;">{{ form.cron_expr.errors }}</div>{% endif %}
+    </div>
+    <div class="field">
+      <label>{{ form.enabled.label|upper }}:</label>
+      {{ form.enabled }}
+    </div>
     <p style="color:#555; font-size:0.8rem; margin-bottom:1rem;">CRON FORMAT: "min hour day month weekday" — e.g. "0 3 * * *" = daily at 03:00</p>
     <div style="display:flex;gap:1rem;">
       <button type="submit" class="btn">[ SAVE ]</button>
@@ -24,4 +63,18 @@
     </div>
   </form>
 </div>
+<script>
+(function () {
+  var radios = document.querySelectorAll('input[name="mode"]');
+  var connSec = document.getElementById('section-conn');
+  var flowSec = document.getElementById('section-flow');
+  function toggle() {
+    var isFlow = document.getElementById('mode-flow').checked;
+    connSec.style.display = isFlow ? 'none' : '';
+    flowSec.style.display = isFlow ? '' : 'none';
+  }
+  radios.forEach(function (r) { r.addEventListener('change', toggle); });
+  toggle();
+})();
+</script>
 {% endblock %}
