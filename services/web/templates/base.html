@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}TMASK-TRANSPORTER{% endblock %}</title>
+  {% load static %}
+  <link rel="stylesheet" href="{% static 'css/crt.css' %}">
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+</head>
+<body>
+  {% if user.is_authenticated %}
+  <nav>
+    <span class="logo">[ TMASK-TRANSPORTER ]</span>
+    <a href="{% url 'transfers:create' %}" class="{% if request.resolver_match.app_name == 'transfers' %}active{% endif %}">TRANSFERS</a>
+    <a href="{% url 'connections:list' %}" class="{% if request.resolver_match.app_name == 'connections' %}active{% endif %}">CONNECTIONS</a>
+    <a href="{% url 'scheduler:list' %}" class="{% if request.resolver_match.app_name == 'scheduler' %}active{% endif %}">SCHEDULER</a>
+    <a href="{% url 'transfers:logs' %}">LOGS</a>
+    {% if user.is_admin %}
+    <a href="{% url 'accounts:users' %}">USERS</a>
+    {% endif %}
+    <span class="nav-right">
+      USER: {{ user.username|upper }} [{{ user.role|upper }}]
+      &nbsp;|&nbsp;
+      <form method="post" action="{% url 'accounts:logout' %}" style="display:inline">
+        {% csrf_token %}
+        <button type="submit" class="btn" style="border:none;padding:0;">LOGOUT</button>
+      </form>
+    </span>
+  </nav>
+  {% endif %}
+
+  <main>
+    {% if messages %}
+    <div class="messages">
+      {% for message in messages %}
+      <div class="msg-{% if message.tags == 'error' %}error{% else %}success{% endif %}">
+        > {{ message }}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

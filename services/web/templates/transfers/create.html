@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}TRANSFER — TMASK-TRANSPORTER{% endblock %}
+{% block content %}
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:2rem;">
+  <div class="box">
+    <span class="box-title">NEW TRANSFER</span>
+    <form method="post">
+      {% csrf_token %}
+      {% for field in form %}
+      <div class="field">
+        <label>{{ field.label|upper }}:</label>
+        {{ field }}
+        {% if field.errors %}<div style="color:var(--red);font-size:0.8rem;">{{ field.errors }}</div>{% endif %}
+      </div>
+      {% endfor %}
+      <button type="submit" class="btn">[ EXECUTE TRANSFER ]</button>
+    </form>
+  </div>
+
+  {% if job %}
+  <div class="box">
+    <span class="box-title">TRANSFER LOG — #{{ job.pk }}</span>
+    <div style="margin-bottom:0.5rem;">
+      STATUS: <span class="status status-{{ job.status }}">{{ job.status|upper }}</span>
+    </div>
+    <div
+      id="log-output"
+      class="log-terminal"
+      {% if job.status == 'running' or job.status == 'pending' %}
+        hx-get="{% url 'transfers:log_fragment' job.pk %}"
+        hx-trigger="every 2s"
+        hx-swap="innerHTML"
+      {% endif %}
+    >
+      {% include "transfers/log_fragment.html" with logs=job.logs.all %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

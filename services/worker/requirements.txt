@@ -1,0 +1,14 @@
+celery==5.4.*
+redis==5.*
+paramiko==3.4.*
+psycopg2-binary==2.9.*
+Django==5.1.*
+django-celery-beat==2.7.*
+django-celery-results==2.5.*
+python-decouple==3.8
+django-encrypted-model-fields==0.6.*
+cryptography==42.*
+bcrypt==4.*
+django-htmx==1.19.*
+pytest==8.*
+pytest-mock==3.*

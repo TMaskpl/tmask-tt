@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}LOGS — TMASK-TRANSPORTER{% endblock %}
+{% block content %}
+<div class="box">
+  <span class="box-title">TRANSFER HISTORY</span>
+  {% if jobs %}
+  <table>
+    <thead>
+      <tr>
+        <th>#</th><th>CONNECTION</th><th>SOURCE</th><th>DEST</th>
+        <th>STATUS</th><th>STARTED</th><th>FINISHED</th><th>ACTIONS</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for job in jobs %}
+      <tr>
+        <td>{{ job.pk }}</td>
+        <td>{{ job.connection.name }}</td>
+        <td>{{ job.source_path }}</td>
+        <td>{{ job.destination_path }}</td>
+        <td><span class="status status-{{ job.status }}">{{ job.status|upper }}</span></td>
+        <td>{{ job.started_at|date:"Y-m-d H:i"|default:"—" }}</td>
+        <td>{{ job.finished_at|date:"Y-m-d H:i"|default:"—" }}</td>
+        <td><a href="{% url 'transfers:detail' job.pk %}" class="btn">[VIEW]</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:#555;">NO TRANSFER HISTORY</p>
+  {% endif %}
+</div>
+{% endblock %}

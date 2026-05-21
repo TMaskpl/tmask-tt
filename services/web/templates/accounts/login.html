@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <title>LOGIN — TMASK-TRANSPORTER</title>
+  {% load static %}
+  <link rel="stylesheet" href="{% static 'css/crt.css' %}">
+</head>
+<body>
+<main style="display:flex; justify-content:center; align-items:center; min-height:100vh;">
+  <div style="width:400px;">
+    <pre class="glow" style="text-align:center; margin-bottom:2rem; font-size:0.75rem;">
+ ████████╗███╗   ███╗ █████╗ ███████╗██╗  ██╗
+    ██╔══╝████╗ ████║██╔══██╗██╔════╝██║ ██╔╝
+    ██║   ██╔████╔██║███████║███████╗█████╔╝
+    ██║   ██║╚██╔╝██║██╔══██║╚════██║██╔═██╗
+    ██║   ██║ ╚═╝ ██║██║  ██║███████║██║  ██╗
+    ╚═╝   ╚═╝     ╚═╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝
+         TRANSPORTER v1.0 — FILE TRANSFER SYSTEM
+    </pre>
+
+    <div class="box">
+      <span class="box-title">AUTHENTICATION REQUIRED</span>
+      <form method="post">
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+        <div class="msg-error">
+          {% for error in form.non_field_errors %}> {{ error }}{% endfor %}
+        </div>
+        {% endif %}
+        <div class="field">
+          <label>USERNAME:</label>
+          <input type="text" name="username" autofocus autocomplete="username"
+                 value="{{ form.username.value|default:'' }}">
+        </div>
+        <div class="field">
+          <label>PASSWORD:</label>
+          <input type="password" name="password" autocomplete="current-password">
+        </div>
+        <button type="submit" class="btn" style="width:100%;">[ LOGIN ]</button>
+      </form>
+    </div>
+  </div>
+</main>
+</body>
+</html>

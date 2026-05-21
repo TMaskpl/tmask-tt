@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}SCHEDULER{% endblock %}
+{% block content %}
+<div class="box">
+  <span class="box-title">SCHEDULED TRANSFERS</span>
+  <div style="margin-bottom:1rem;">
+    <a href="{% url 'scheduler:create' %}" class="btn">[ + NEW SCHEDULE ]</a>
+  </div>
+  {% if schedules %}
+  <table>
+    <thead>
+      <tr><th>CONNECTION</th><th>SOURCE</th><th>DESTINATION</th><th>CRON</th><th>LAST RUN</th><th>STATUS</th><th>ACTIONS</th></tr>
+    </thead>
+    <tbody>
+      {% for s in schedules %}
+      <tr>
+        <td class="glow">{{ s.connection.name }}</td>
+        <td>{{ s.source_path }}</td>
+        <td>{{ s.destination_path }}</td>
+        <td>{{ s.cron_expr }}</td>
+        <td>{{ s.last_run|date:"Y-m-d H:i"|default:"—" }}</td>
+        <td>{% if s.enabled %}<span style="color:var(--green-bright);">● ACTIVE</span>{% else %}<span style="color:#555;">○ PAUSED</span>{% endif %}</td>
+        <td>
+          <form method="post" action="{% url 'scheduler:toggle' s.pk %}" style="display:inline">{% csrf_token %}
+            <button type="submit" class="btn btn-warn">{% if s.enabled %}[PAUSE]{% else %}[RESUME]{% endif %}</button>
+          </form>
+          <a href="{% url 'scheduler:edit' s.pk %}" class="btn">[EDIT]</a>
+          <form method="post" action="{% url 'scheduler:delete' s.pk %}" style="display:inline"
+            onsubmit="return confirm('DELETE schedule?')">{% csrf_token %}
+            <button type="submit" class="btn btn-danger">[DEL]</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:#555;">NO SCHEDULES — ADD ONE ABOVE</p>
+  {% endif %}
+</div>
+{% endblock %}

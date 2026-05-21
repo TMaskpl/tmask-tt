@@ -1,0 +1,34 @@
+import pytest
+from django.urls import reverse
+from apps.transfers.models import TransferJob, TransferLog, STATUS_PENDING
+
+
+@pytest.mark.django_db
+class TestTransferCreateView:
+    def test_create_form_renders(self, auth_client):
+        response = auth_client.get(reverse('transfers:create'))
+        assert response.status_code == 200
+
+    def test_create_transfer_dispatches_celery_task(self, auth_client, regular_user, make_connection, mocker):
+        mock_delay = mocker.patch('apps.transfers.views.execute_transfer.delay')
+        conn = make_connection(regular_user)
+        response = auth_client.post(reverse('transfers:create'), {
+            'connection': conn.pk,
+            'source_path': '/data/file.tar',
+            'destination_path': '/backup/',
+        })
+        assert response.status_code == 302
+        job = TransferJob.objects.get(owner=regular_user)
+        assert job.status == STATUS_PENDING
+        mock_delay.assert_called_once_with(job_id=job.pk)
+
+    def test_log_fragment_returns_logs(self, auth_client, regular_user, make_connection):
+        job = TransferJob.objects.create(
+            owner=regular_user,
+            connection=make_connection(regular_user),
+            source_path='/x', destination_path='/y',
+        )
+        TransferLog.objects.create(job=job, level='info', message='Transfer started')
+        response = auth_client.get(reverse('transfers:log_fragment', args=[job.pk]))
+        assert response.status_code == 200
+        assert b'Transfer started' in response.content

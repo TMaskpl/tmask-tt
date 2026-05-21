@@ -1,0 +1,18 @@
+Django==5.1.*
+gunicorn==22.*
+psycopg2-binary==2.9.*
+redis==5.*
+celery==5.4.*
+django-celery-beat==2.7.*
+django-celery-results==2.5.*
+paramiko==3.4.*
+python-decouple==3.8
+django-encrypted-model-fields==0.6.*
+cryptography==42.*
+bcrypt==4.*
+django-htmx==1.19.*
+# Dev/test
+pytest==8.*
+pytest-django==4.8.*
+pytest-mock==3.*
+factory-boy==3.*

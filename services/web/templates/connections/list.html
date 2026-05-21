@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}CONNECTIONS — TMASK-TRANSPORTER{% endblock %}
+{% block content %}
+<div class="box">
+  <span class="box-title">CONNECTIONS</span>
+  <div style="margin-bottom:1rem;">
+    <a href="{% url 'connections:create' %}" class="btn">[ + NEW CONNECTION ]</a>
+  </div>
+  {% if connections %}
+  <table>
+    <thead>
+      <tr>
+        <th>NAME</th><th>HOST</th><th>PORT</th><th>PROTO</th>
+        <th>COMPRESS</th><th>ENCRYPT</th><th>ACTIONS</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for conn in connections %}
+      <tr>
+        <td class="glow">{{ conn.name }}</td>
+        <td>{{ conn.host }}</td>
+        <td>{{ conn.port }}</td>
+        <td>{{ conn.protocol|upper }}</td>
+        <td>{% if conn.compress %}YES{% else %}—{% endif %}</td>
+        <td>{% if conn.encrypt %}YES{% else %}—{% endif %}</td>
+        <td>
+          <button class="btn btn-warn"
+            hx-get="{% url 'connections:test' conn.pk %}"
+            hx-target="#test-result-{{ conn.pk }}"
+            hx-swap="innerHTML">[TEST]</button>
+          <a href="{% url 'connections:edit' conn.pk %}" class="btn">[EDIT]</a>
+          <form method="post" action="{% url 'connections:delete' conn.pk %}" style="display:inline"
+            onsubmit="return confirm('DELETE {{ conn.name }}?')">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">[DEL]</button>
+          </form>
+          <span id="test-result-{{ conn.pk }}" style="font-size:0.8rem; margin-left:0.5rem;"></span>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:#555;">NO CONNECTIONS CONFIGURED — ADD ONE ABOVE</p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}{{ action }} CONNECTION{% endblock %}
+{% block content %}
+<div class="box" style="max-width:600px;">
+  <span class="box-title">{{ action }} CONNECTION</span>
+  <form method="post">
+    {% csrf_token %}
+    {% if form.non_field_errors %}
+    <div class="msg-error">{% for e in form.non_field_errors %}> {{ e }}{% endfor %}</div>
+    {% endif %}
+    {% for field in form %}
+    <div class="field">
+      <label>{{ field.label|upper }}:</label>
+      {{ field }}
+      {% if field.errors %}
+      <div style="color:var(--red);font-size:0.8rem;">{% for e in field.errors %}{{ e }}{% endfor %}</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+    <div style="display:flex;gap:1rem;margin-top:1.5rem;">
+      <button type="submit" class="btn">[ SAVE ]</button>
+      <a href="{% url 'connections:list' %}" class="btn btn-danger">[ CANCEL ]</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

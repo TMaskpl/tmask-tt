@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}USERS — ADMIN{% endblock %}
+{% block content %}
+<div class="box">
+  <span class="box-title">USER MANAGEMENT</span>
+  <table>
+    <thead>
+      <tr><th>USERNAME</th><th>ROLE</th><th>EMAIL</th><th>LAST LOGIN</th><th>ACTIVE</th></tr>
+    </thead>
+    <tbody>
+      {% for u in users %}
+      <tr>
+        <td class="glow">{{ u.username }}</td>
+        <td><span style="color:{% if u.is_admin %}var(--amber){% else %}var(--green){% endif %}">{{ u.role|upper }}</span></td>
+        <td>{{ u.email|default:"—" }}</td>
+        <td>{{ u.last_login|date:"Y-m-d H:i"|default:"NEVER" }}</td>
+        <td>{% if u.is_active %}<span style="color:var(--green-bright);">● YES</span>{% else %}<span style="color:var(--red);">○ NO</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

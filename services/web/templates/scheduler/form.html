@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}{{ action }} SCHEDULE{% endblock %}
+{% block content %}
+<div class="box" style="max-width:600px;">
+  <span class="box-title">{{ action }} SCHEDULE</span>
+  <form method="post">
+    {% csrf_token %}
+    {% if form.non_field_errors %}
+    <div class="msg-error">{% for e in form.non_field_errors %}> {{ e }}{% endfor %}</div>
+    {% endif %}
+    {% for field in form %}
+    <div class="field">
+      <label>{{ field.label|upper }}:</label>
+      {{ field }}
+      {% if field.errors %}
+      <div style="color:var(--red);font-size:0.8rem;">{% for e in field.errors %}{{ e }}{% endfor %}</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+    <p style="color:#555; font-size:0.8rem; margin-bottom:1rem;">CRON FORMAT: "min hour day month weekday" — e.g. "0 3 * * *" = daily at 03:00</p>
+    <div style="display:flex;gap:1rem;">
+      <button type="submit" class="btn">[ SAVE ]</button>
+      <a href="{% url 'scheduler:list' %}" class="btn btn-danger">[ CANCEL ]</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
