@@ -9,7 +9,17 @@
       {% for field in form %}
       <div class="field">
         <label>{{ field.label|upper }}:</label>
+        {% if field.html_name == 'destination_path' %}
+        <div class="field-with-btn">
+          {{ field }}
+          <button type="button" class="btn btn-small"
+            onclick="openBrowser('id_destination_path', document.getElementById('id_connection').value)">
+            [BROWSE]
+          </button>
+        </div>
+        {% else %}
         {{ field }}
+        {% endif %}
         {% if field.errors %}<div style="color:var(--red);font-size:0.8rem;">{{ field.errors }}</div>{% endif %}
       </div>
       {% endfor %}
