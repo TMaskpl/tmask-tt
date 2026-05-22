@@ -20,3 +20,15 @@ class TestUser:
             username='usr', password='pass', role='user'
         )
         assert user.is_admin is False
+
+    def test_user_has_notify_on_done_default_false(self, django_user_model):
+        user = django_user_model.objects.create_user(
+            username='notif_test', password='pass'
+        )
+        assert user.notify_on_done is False
+
+    def test_user_has_notify_on_failed_default_true(self, django_user_model):
+        user = django_user_model.objects.create_user(
+            username='notif_test2', password='pass'
+        )
+        assert user.notify_on_failed is True

@@ -23,6 +23,7 @@ INSTALLED_APPS = [
     'django_htmx',
     'apps.accounts',
     'apps.connections',
+    'apps.flows',
     'apps.transfers',
     'apps.scheduler',
 ]
