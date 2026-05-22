@@ -1,0 +1,14 @@
+╔══════════════════════════════════════════════════╗
+║  TMASK TRANSPORTER — TRANSFER FAILED             ║
+╚══════════════════════════════════════════════════╝
+
+Job #{{ job.pk }} zakończony błędem.
+
+  FROM  : {{ job.source_path }}
+  TO    : {{ job.destination_path }}
+  START : {% if job.started_at %}{{ job.started_at|date:"Y-m-d H:i" }}{% else %}—{% endif %}
+  ERROR : {{ job.error_message|default:"UNKNOWN ERROR" }}
+  HOST  : {% if job.connection %}{{ job.connection.name }} ({{ job.connection.protocol|upper }}){% elif job.flow %}RELAY: {{ job.flow.name }}{% else %}—{% endif %}
+
+--
+TMask Transporter | ustawienia powiadomień: /accounts/profile/

@@ -76,3 +76,57 @@ class TestProfileView:
         })
         assert response.status_code == 200
         assert 'email' in response.context['form'].errors
+
+
+@pytest.mark.django_db
+class TestNotificationTemplates:
+    def _make_job(self, django_user_model, status, error_message=None):
+        from apps.transfers.models import TransferJob
+        from apps.connections.models import Connection
+        user = django_user_model.objects.create_user(username='tpl_user', password='p')
+        conn = Connection.objects.create(
+            owner=user, name='TestSrv', host='10.0.0.1', port=22,
+            username='u', password='p', protocol='sftp',
+        )
+        job = TransferJob.objects.create(
+            owner=user, connection=conn,
+            source_path='/data/file.tar',
+            destination_path='/backup/file.tar',
+            status=status,
+        )
+        if error_message:
+            job.error_message = error_message
+            job.save()
+        return job
+
+    def test_done_plain_text_contains_key_data(self, django_user_model):
+        from django.template.loader import render_to_string
+        job = self._make_job(django_user_model, 'done')
+        result = render_to_string('notifications/transfer_done.txt', {'job': job})
+        assert 'DONE' in result
+        assert str(job.pk) in result
+        assert '/data/file.tar' in result
+        assert '/backup/file.tar' in result
+
+    def test_failed_plain_text_contains_error(self, django_user_model):
+        from django.template.loader import render_to_string
+        job = self._make_job(django_user_model, 'failed', error_message='AUTH FAILED')
+        result = render_to_string('notifications/transfer_failed.txt', {'job': job})
+        assert 'FAILED' in result
+        assert 'AUTH FAILED' in result
+        assert str(job.pk) in result
+
+    def test_done_html_contains_job_data(self, django_user_model):
+        from django.template.loader import render_to_string
+        job = self._make_job(django_user_model, 'done')
+        result = render_to_string('notifications/transfer_done.html', {'job': job})
+        assert str(job.pk) in result
+        assert '/data/file.tar' in result
+        assert '33ff33' in result
+
+    def test_failed_html_contains_error_color(self, django_user_model):
+        from django.template.loader import render_to_string
+        job = self._make_job(django_user_model, 'failed', error_message='TIMEOUT')
+        result = render_to_string('notifications/transfer_failed.html', {'job': job})
+        assert 'TIMEOUT' in result
+        assert 'ff3333' in result

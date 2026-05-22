@@ -1,0 +1,14 @@
+╔══════════════════════════════════════════════════╗
+║  TMASK TRANSPORTER — TRANSFER DONE               ║
+╚══════════════════════════════════════════════════╝
+
+Job #{{ job.pk }} zakończony sukcesem.
+
+  FROM : {{ job.source_path }}
+  TO   : {{ job.destination_path }}
+  START: {% if job.started_at %}{{ job.started_at|date:"Y-m-d H:i" }}{% else %}—{% endif %}
+  END  : {% if job.finished_at %}{{ job.finished_at|date:"Y-m-d H:i" }}{% else %}—{% endif %}
+  HOST : {% if job.connection %}{{ job.connection.name }} ({{ job.connection.protocol|upper }}){% elif job.flow %}RELAY: {{ job.flow.name }}{% else %}—{% endif %}
+
+--
+TMask Transporter | ustawienia powiadomień: /accounts/profile/

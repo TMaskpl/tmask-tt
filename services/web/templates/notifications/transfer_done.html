@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  body { background:#0a0a0a; color:#33ff33; font-family:monospace; padding:20px; }
+  .header { border:1px solid #33ff33; padding:10px 20px; margin-bottom:20px; }
+  .header h1 { color:#00ff41; font-size:16px; margin:0; letter-spacing:2px; }
+  table { border-collapse:collapse; width:100%; }
+  td { padding:4px 12px; color:#33ff33; }
+  td:first-child { color:#aaffaa; width:80px; }
+  .footer { margin-top:20px; border-top:1px solid #33ff33; padding-top:10px; font-size:11px; color:#557755; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <h1>[ TMASK TRANSPORTER — TRANSFER DONE ]</h1>
+  </div>
+  <p>Job #{{ job.pk }} zakończony sukcesem.</p>
+  <table>
+    <tr><td>FROM</td><td>{{ job.source_path }}</td></tr>
+    <tr><td>TO</td><td>{{ job.destination_path }}</td></tr>
+    <tr><td>START</td><td>{% if job.started_at %}{{ job.started_at|date:"Y-m-d H:i" }}{% else %}—{% endif %}</td></tr>
+    <tr><td>END</td><td>{% if job.finished_at %}{{ job.finished_at|date:"Y-m-d H:i" }}{% else %}—{% endif %}</td></tr>
+    <tr><td>HOST</td><td>{% if job.connection %}{{ job.connection.name }} ({{ job.connection.protocol|upper }}){% elif job.flow %}RELAY: {{ job.flow.name }}{% else %}—{% endif %}</td></tr>
+  </table>
+  <div class="footer">TMask Transporter &mdash; ustawienia powiadomień: /accounts/profile/</div>
+</body>
+</html>
