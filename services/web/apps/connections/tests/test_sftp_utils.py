@@ -105,10 +105,29 @@ class TestListDirectory:
         assert call_kwargs['pkey'] == mock_pkey
         assert 'password' not in call_kwargs
 
-    def test_raises_when_no_credentials(self, mocker):
+    def test_raises_when_no_credentials(self):
         conn = _conn(password=None, ssh_key=None)
-        mock_client = mocker.MagicMock()
-        mocker.patch('apps.connections.sftp_utils.paramiko.SSHClient', return_value=mock_client)
 
         with pytest.raises(ValueError, match='Brak danych uwierzytelniania'):
             list_directory(conn, '/')
+
+    def test_raises_when_strict_host_key_missing(self, mocker):
+        conn = _conn(strict_host_key_checking=True, known_host_key=None)
+        mocker.patch('apps.connections.sftp_utils.paramiko.SSHClient', return_value=mocker.MagicMock())
+
+        with pytest.raises(ValueError, match='strict_host_key_checking wymaga known_host_key'):
+            list_directory(conn, '/')
+
+    def test_closes_connection_on_sftp_error(self, mocker):
+        conn = _conn()
+        mock_client = mocker.MagicMock()
+        mocker.patch('apps.connections.sftp_utils.paramiko.SSHClient', return_value=mock_client)
+        mock_sftp = mocker.MagicMock()
+        mock_client.open_sftp.return_value = mock_sftp
+        mock_sftp.listdir_attr.side_effect = IOError('permission denied')
+
+        with pytest.raises(IOError):
+            list_directory(conn, '/restricted')
+
+        mock_sftp.close.assert_called_once()
+        mock_client.close.assert_called_once()

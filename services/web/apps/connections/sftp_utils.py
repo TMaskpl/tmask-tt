@@ -1,5 +1,6 @@
 import io
 import os
+import posixpath
 import stat
 import tempfile
 from types import SimpleNamespace
@@ -9,7 +10,9 @@ import paramiko
 
 def _build_client(connection):
     client = paramiko.SSHClient()
-    if connection.strict_host_key_checking and connection.known_host_key:
+    if connection.strict_host_key_checking:
+        if not connection.known_host_key:
+            raise ValueError('strict_host_key_checking wymaga known_host_key')
         with tempfile.NamedTemporaryFile(mode='w', suffix='_known_hosts', delete=False) as f:
             f.write(connection.known_host_key)
             tmp_path = f.name
@@ -39,7 +42,10 @@ def list_directory(connection, path):
             'allow_agent': False,
         }
         if connection.ssh_key:
-            connect_kwargs['pkey'] = paramiko.PKey.from_private_key(io.StringIO(connection.ssh_key))
+            try:
+                connect_kwargs['pkey'] = paramiko.PKey.from_private_key(io.StringIO(connection.ssh_key))
+            except paramiko.SSHException as e:
+                raise ValueError(f'Błąd klucza SSH: {e}') from e
         else:
             connect_kwargs['password'] = connection.password
 
@@ -58,7 +64,7 @@ def list_directory(connection, path):
         entries.append(SimpleNamespace(
             name=attr.filename,
             is_dir=is_dir,
-            full_path=path.rstrip('/') + '/' + attr.filename,
+            full_path=posixpath.join(path, attr.filename),
             size=attr.st_size if not is_dir else None,
         ))
     return sorted(entries, key=lambda e: (not e.is_dir, e.name.lower()))
