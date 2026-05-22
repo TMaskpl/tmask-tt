@@ -1,0 +1,20 @@
+{% if error %}
+<p class="msg-error">&gt; {{ error }}</p>
+{% else %}
+<div class="breadcrumbs">
+  {% for crumb in breadcrumbs %}<a href="#" onclick="openBrowser('{{ field_id }}', {{ conn_pk }}, '{{ crumb.path }}'); return false;">{{ crumb.label }}</a>{% if not forloop.last %} / {% endif %}{% endfor %}
+</div>
+<ul class="file-list">
+  {% for entry in entries %}
+  <li>
+    {% if entry.is_dir %}
+    <a href="#" onclick="openBrowser('{{ field_id }}', {{ conn_pk }}, '{{ entry.full_path }}'); return false;">[DIR] {{ entry.name }}</a>
+    {% else %}
+    <a href="#" onclick="selectPath('{{ entry.full_path }}'); return false;">{{ entry.name }}</a>
+    {% endif %}
+  </li>
+  {% empty %}
+  <li>&gt; (pusty katalog)</li>
+  {% endfor %}
+</ul>
+{% endif %}

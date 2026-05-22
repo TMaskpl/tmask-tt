@@ -9,4 +9,5 @@ urlpatterns = [
     path('<int:pk>/edit/', views.connection_edit, name='edit'),
     path('<int:pk>/delete/', views.connection_delete, name='delete'),
     path('<int:pk>/test/', views.connection_test, name='test'),
+    path('<int:pk>/browse/', views.browse_directory, name='browse'),
 ]

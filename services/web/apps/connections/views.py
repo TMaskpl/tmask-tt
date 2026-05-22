@@ -5,6 +5,7 @@ from django.views.decorators.http import require_POST
 from .models import Connection
 from .forms import ConnectionForm
 from .ssh_tester import test_connection as _test_connection
+from .sftp_utils import list_directory, build_breadcrumbs
 
 @login_required
 def connection_list(request):
@@ -42,3 +43,23 @@ def connection_test(request, pk):
     conn = get_object_or_404(Connection, pk=pk, owner=request.user)
     result = _test_connection(conn)
     return JsonResponse({'success': result.success, 'message': result.message})
+
+@login_required
+def browse_directory(request, pk):
+    connection = get_object_or_404(Connection, pk=pk, owner=request.user)
+    path = request.GET.get('path', '/')
+    field_id = request.GET.get('field_id', '')
+    try:
+        entries = list_directory(connection, path)
+        error = None
+    except Exception as e:
+        entries = []
+        error = str(e)
+    return render(request, 'connections/browser_fragment.html', {
+        'entries': entries,
+        'breadcrumbs': build_breadcrumbs(path),
+        'error': error,
+        'conn_pk': pk,
+        'current_path': path,
+        'field_id': field_id,
+    })
