@@ -1,2 +1,57 @@
 {% extends "base.html" %}
-{% block content %}{{ form.as_p }}{% endblock %}
+{% block title %}PROFIL — TMASK-TRANSPORTER{% endblock %}
+{% block content %}
+<div class="panel">
+  <div class="panel-header">[ PROFIL UŻYTKOWNIKA ]</div>
+
+  <div class="panel-section">
+    <div class="field-row">
+      <span class="label">UŻYTKOWNIK:</span>
+      <span class="value">{{ user.username|upper }}</span>
+    </div>
+    <div class="field-row">
+      <span class="label">ROLA:</span>
+      <span class="value">{{ user.role|upper }}</span>
+    </div>
+  </div>
+
+  <div class="panel-section">
+    <div class="panel-subheader">[ POWIADOMIENIA EMAIL ]</div>
+    <form method="post">
+      {% csrf_token %}
+      <div class="field-row">
+        <label class="label" for="{{ form.email.id_for_label }}">ADRES EMAIL:</label>
+        {{ form.email }}
+        {% if form.email.errors %}
+          <span class="error">{{ form.email.errors|join:", " }}</span>
+        {% endif %}
+      </div>
+      <div class="field-row checkbox-row">
+        {{ form.notify_on_failed }}
+        <label for="{{ form.notify_on_failed.id_for_label }}">
+          {{ form.notify_on_failed.label|upper }}
+        </label>
+      </div>
+      <div class="field-row checkbox-row">
+        {{ form.notify_on_done }}
+        <label for="{{ form.notify_on_done.id_for_label }}">
+          {{ form.notify_on_done.label|upper }}
+        </label>
+      </div>
+      {% if not user.email %}
+      <div class="warn">
+        &gt; BRAK ADRESU EMAIL — POWIADOMIENIA NIEAKTYWNE
+      </div>
+      {% endif %}
+      {% if messages %}
+        {% for message in messages %}
+        <div class="msg-success">&gt; {{ message }}</div>
+        {% endfor %}
+      {% endif %}
+      <div class="form-actions">
+        <button type="submit" class="btn">[ ZAPISZ USTAWIENIA ]</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

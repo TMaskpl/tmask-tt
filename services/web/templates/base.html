@@ -23,6 +23,8 @@
     <span class="nav-right">
       USER: {{ user.username|upper }} [{{ user.role|upper }}]
       &nbsp;|&nbsp;
+      <a href="{% url 'accounts:profile' %}">PROFIL</a>
+      &nbsp;|&nbsp;
       <form method="post" action="{% url 'accounts:logout' %}" style="display:inline">
         {% csrf_token %}
         <button type="submit" class="btn" style="border:none;padding:0;">LOGOUT</button>
