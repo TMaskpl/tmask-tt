@@ -23,7 +23,13 @@
         </div>
         <div class="field">
           <label>PATH:</label>
-          {{ form.source_path }}
+          <div class="field-with-btn">
+            {{ form.source_path }}
+            <button type="button" class="btn btn-small"
+              onclick="openBrowser('id_source_path', document.getElementById('id_source_conn').value)">
+              [BROWSE]
+            </button>
+          </div>
           {% if form.source_path.errors %}<div style="color:var(--red);font-size:0.8rem;">{{ form.source_path.errors }}</div>{% endif %}
         </div>
       </div>
@@ -36,7 +42,13 @@
         </div>
         <div class="field">
           <label>PATH:</label>
-          {{ form.dest_path }}
+          <div class="field-with-btn">
+            {{ form.dest_path }}
+            <button type="button" class="btn btn-small"
+              onclick="openBrowser('id_dest_path', document.getElementById('id_dest_conn').value)">
+              [BROWSE]
+            </button>
+          </div>
           {% if form.dest_path.errors %}<div style="color:var(--red);font-size:0.8rem;">{{ form.dest_path.errors }}</div>{% endif %}
         </div>
       </div>
