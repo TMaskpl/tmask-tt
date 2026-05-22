@@ -1,3 +1,4 @@
+import re
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
@@ -49,6 +50,8 @@ def browse_directory(request, pk):
     connection = get_object_or_404(Connection, pk=pk, owner=request.user)
     path = request.GET.get('path', '/')
     field_id = request.GET.get('field_id', '')
+    if not re.match(r'^[A-Za-z0-9_-]{1,64}$', field_id):
+        field_id = ''
     try:
         entries = list_directory(connection, path)
         error = None

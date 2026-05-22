@@ -1,7 +1,6 @@
 import pytest
 from django.urls import reverse
-
-from apps.connections.models import Connection
+from types import SimpleNamespace
 
 
 @pytest.mark.django_db
@@ -17,7 +16,6 @@ class TestBrowseDirectory:
 
     def test_returns_fragment_for_valid_path(self, auth_client, regular_user, make_connection, mocker):
         conn = make_connection(regular_user)
-        from types import SimpleNamespace
         entries = [
             SimpleNamespace(name='docs', is_dir=True, full_path='/docs', size=None),
             SimpleNamespace(name='file.txt', is_dir=False, full_path='/file.txt', size=512),
