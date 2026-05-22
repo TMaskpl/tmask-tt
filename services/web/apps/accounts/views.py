@@ -1,11 +1,12 @@
 from django.conf import settings
+from django.contrib import messages
 from django.contrib.auth import login, logout, authenticate, get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.shortcuts import render, redirect
 from django.views.decorators.http import require_POST
 
-from .forms import LoginForm
+from .forms import LoginForm, ProfileForm
 
 
 def login_view(request):
@@ -38,3 +39,16 @@ def users_list(request):
     User = get_user_model()
     users = User.objects.all().order_by('username')
     return render(request, 'users/list.html', {'users': users})
+
+
+@login_required
+def profile_view(request):
+    if request.method == 'POST':
+        form = ProfileForm(request.POST, instance=request.user)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Ustawienia zapisane.')
+            return redirect('accounts:profile')
+    else:
+        form = ProfileForm(instance=request.user)
+    return render(request, 'accounts/profile.html', {'form': form})
