@@ -9,6 +9,7 @@ from apps.transfers.models import TransferJob, TransferLog
 from modules.sftp.handler import SFTPHandler, SFTPTransferError
 from modules.rsync.handler import RsyncHandler, RsyncTransferError
 from modules.relay.handler import RelayHandler, RelayTransferError
+from notifications import send_email_notification
 
 app = Celery('transporter')
 app.config_from_object('django.conf:settings', namespace='CELERY')
@@ -78,6 +79,19 @@ def _create_job_from_schedule(scheduled_id: int):
     return job
 
 
+@app.task(bind=True, name='transfers.send_notification', max_retries=3, default_retry_delay=60)
+def send_notification(self, job_id: int):
+    try:
+        job = TransferJob.objects.select_related('owner', 'connection', 'flow').get(pk=job_id)
+    except Exception:
+        logger.error(f'TransferJob {job_id} not found — notification skipped')
+        return
+    try:
+        send_email_notification(job)
+    except Exception as exc:
+        raise self.retry(exc=exc)
+
+
 @app.task(bind=True, name='transfers.execute')
 def execute_transfer(self, job_id: int = None, scheduled_id: int = None):
     if job_id is None and scheduled_id is not None:
@@ -105,12 +119,15 @@ def execute_transfer(self, job_id: int = None, scheduled_id: int = None):
             handler_cls = SFTPHandler if job.connection.protocol == 'sftp' else RsyncHandler
             handler_cls(params).execute(log_callback=log_callback)
         job.mark_done()
+        send_notification.delay(job.pk)
     except (SFTPTransferError, RsyncTransferError, RelayTransferError) as e:
         job.mark_failed(str(e))
+        send_notification.delay(job.pk)
         log_callback('error', str(e))
         logger.error(f'Transfer job {job.pk} failed: {e}')
     except Exception as e:
         job.mark_failed(f'UNEXPECTED ERROR — {e}')
+        send_notification.delay(job.pk)
         log_callback('error', f'UNEXPECTED ERROR — {e}')
         logger.error(f'Transfer job {job.pk} unexpected error: {e}')
         raise

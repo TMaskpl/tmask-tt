@@ -11,6 +11,7 @@ class TestExecuteTransferTask:
             MockJob.objects.get.return_value = mock_job
             mock_job.flow_id = None
             mock_job.connection.protocol = 'sftp'
+            mock_job.pk = 1
             MockSFTP.return_value.execute.return_value = None
             from tasks import execute_transfer
             execute_transfer(job_id=1)
@@ -26,6 +27,7 @@ class TestExecuteTransferTask:
             MockJob.objects.get.return_value = mock_job
             mock_job.flow_id = None
             mock_job.connection.protocol = 'sftp'
+            mock_job.pk = 1
             from modules.sftp.handler import SFTPTransferError
             MockSFTP.return_value.execute.side_effect = SFTPTransferError('AUTH FAILED')
             from tasks import execute_transfer
@@ -40,6 +42,7 @@ class TestExecuteTransferTask:
             MockJob.objects.get.return_value = mock_job
             mock_job.flow_id = None
             mock_job.connection.protocol = 'rsync'
+            mock_job.pk = 1
             MockRsync.return_value.execute.return_value = None
             from tasks import execute_transfer
             execute_transfer(job_id=1)
@@ -54,6 +57,7 @@ class TestExecuteTransferTask:
             MockJob.objects.get.return_value = mock_job
             mock_job.flow_id = None
             mock_job.connection.protocol = 'sftp'
+            mock_job.pk = 1
             MockSFTP.return_value.execute.side_effect = RuntimeError('disk full')
             from tasks import execute_transfer
             with pytest.raises(RuntimeError):
@@ -67,6 +71,7 @@ class TestExecuteTransferTask:
             mock_job = MagicMock()
             MockJob.objects.get.return_value = mock_job
             mock_job.flow_id = 99
+            mock_job.pk = 1
             MockRelay.return_value.execute.return_value = None
             from tasks import execute_transfer
             execute_transfer(job_id=1)
@@ -81,6 +86,7 @@ class TestExecuteTransferTask:
             mock_job = MagicMock()
             MockJob.objects.get.return_value = mock_job
             mock_job.flow_id = 99
+            mock_job.pk = 1
             from modules.relay.handler import RelayTransferError
             MockRelay.return_value.execute.side_effect = RelayTransferError('SOURCE ERROR — AUTH FAILED')
             from tasks import execute_transfer
@@ -95,6 +101,7 @@ class TestExecuteTransferTask:
             mock_job = MagicMock()
             mock_job.flow_id = None
             mock_job.connection.protocol = 'sftp'
+            mock_job.pk = 1
             MockCreate.return_value = mock_job
             MockSFTP.return_value.execute.return_value = None
             from tasks import execute_transfer
@@ -109,6 +116,58 @@ class TestExecuteTransferTask:
             from tasks import execute_transfer
             execute_transfer(job_id=None, scheduled_id=999)
             MockJob.objects.get.assert_not_called()
+
+
+class TestSendNotificationTask:
+    def test_calls_send_email_notification(self):
+        with patch('tasks.TransferJob') as MockJob, \
+             patch('tasks.send_email_notification') as mock_notif:
+            mock_job = MagicMock()
+            MockJob.objects.select_related.return_value.get.return_value = mock_job
+            from tasks import send_notification
+            send_notification(job_id=42)
+            mock_notif.assert_called_once_with(mock_job)
+
+    def test_logs_and_skips_when_job_not_found(self):
+        with patch('tasks.TransferJob') as MockJob, \
+             patch('tasks.logger') as mock_logger:
+            MockJob.objects.select_related.return_value.get.side_effect = Exception('not found')
+            from tasks import send_notification
+            send_notification(job_id=999)
+            mock_logger.error.assert_called()
+
+
+class TestExecuteTransferDispatchesNotification:
+    def test_dispatches_notification_on_done(self):
+        with patch('tasks.SFTPHandler') as MockSFTP, \
+             patch('tasks.TransferJob') as MockJob, \
+             patch('tasks.TransferLog'), \
+             patch('tasks.send_notification') as mock_notif:
+            mock_job = MagicMock()
+            MockJob.objects.get.return_value = mock_job
+            mock_job.flow_id = None
+            mock_job.connection.protocol = 'sftp'
+            mock_job.pk = 99
+            MockSFTP.return_value.execute.return_value = None
+            from tasks import execute_transfer
+            execute_transfer(job_id=99)
+            mock_notif.delay.assert_called_once_with(99)
+
+    def test_dispatches_notification_on_failed(self):
+        with patch('tasks.SFTPHandler') as MockSFTP, \
+             patch('tasks.TransferJob') as MockJob, \
+             patch('tasks.TransferLog'), \
+             patch('tasks.send_notification') as mock_notif:
+            from modules.sftp.handler import SFTPTransferError
+            mock_job = MagicMock()
+            MockJob.objects.get.return_value = mock_job
+            mock_job.flow_id = None
+            mock_job.connection.protocol = 'sftp'
+            mock_job.pk = 99
+            MockSFTP.return_value.execute.side_effect = SFTPTransferError('TIMEOUT')
+            from tasks import execute_transfer
+            execute_transfer(job_id=99)
+            mock_notif.delay.assert_called_once_with(99)
 
 
 class TestCleanupOrphanJobs:
