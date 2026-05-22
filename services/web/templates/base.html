@@ -45,5 +45,42 @@
     {% endif %}
     {% block content %}{% endblock %}
   </main>
+  <div id="file-browser-overlay" style="display:none">
+    <div id="file-browser-modal">
+      <span class="box-title">FILE BROWSER</span>
+      <div id="file-browser-content"></div>
+      <button type="button" class="btn btn-danger" onclick="closeBrowser()">[ ZAMKNIJ ]</button>
+    </div>
+  </div>
+  <script>
+    var _browserTargetField = null;
+
+    function openBrowser(fieldId, connPk, path) {
+      if (!connPk) {
+        alert('Wybierz najpierw połączenie.');
+        return;
+      }
+      path = path || '/';
+      _browserTargetField = fieldId;
+      var url = '/connections/' + connPk + '/browse/?path=' + encodeURIComponent(path)
+              + '&field_id=' + encodeURIComponent(fieldId);
+      htmx.ajax('GET', url, {target: '#file-browser-content', swap: 'innerHTML'})
+        .catch(function () {
+          document.getElementById('file-browser-content').innerHTML =
+            '<p class="msg-error">&gt; BŁĄD: Brak dostępu do połączenia.</p>';
+        });
+      document.getElementById('file-browser-overlay').style.display = 'flex';
+    }
+
+    function selectPath(path) {
+      document.getElementById(_browserTargetField).value = path;
+      closeBrowser();
+    }
+
+    function closeBrowser() {
+      document.getElementById('file-browser-overlay').style.display = 'none';
+      document.getElementById('file-browser-content').innerHTML = '';
+    }
+  </script>
 </body>
 </html>

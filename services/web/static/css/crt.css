@@ -178,3 +178,52 @@ label { display: block; margin-bottom: 0.25rem; color: #aaffaa; font-size: 0.85r
 .messages { margin-bottom: 1rem; }
 .msg-error { color: var(--red); padding: 0.5rem; border: 1px solid var(--red); margin-bottom: 0.5rem; }
 .msg-success { color: var(--green-bright); padding: 0.5rem; border: 1px solid var(--green-bright); margin-bottom: 0.5rem; }
+
+/* File Browser Modal */
+#file-browser-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+#file-browser-modal {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 1.5rem;
+  width: min(700px, 90vw);
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  position: relative;
+}
+
+#file-browser-content {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 200px;
+}
+
+.breadcrumbs {
+  font-size: 0.85rem;
+  color: var(--amber);
+  margin-bottom: 0.5rem;
+  word-break: break-all;
+}
+
+.breadcrumbs a { color: var(--amber); text-decoration: none; }
+.breadcrumbs a:hover { color: var(--green-bright); }
+
+.file-list { list-style: none; padding: 0; }
+.file-list li { padding: 0.25rem 0; border-bottom: 1px solid var(--dim); }
+.file-list a { color: var(--green); text-decoration: none; }
+.file-list a:hover { color: var(--green-bright); }
+
+.field-with-btn { display: flex; gap: 0.5rem; align-items: center; }
+.field-with-btn input,
+.field-with-btn select { flex: 1; }
+.btn-small { padding: 0.4rem 0.6rem; letter-spacing: 1px; font-size: 0.8rem; white-space: nowrap; }
