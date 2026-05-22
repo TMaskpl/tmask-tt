@@ -32,3 +32,26 @@ class TestUser:
             username='notif_test2', password='pass'
         )
         assert user.notify_on_failed is True
+
+
+@pytest.mark.django_db
+class TestProfileForm:
+    def test_form_has_required_fields(self):
+        from apps.accounts.forms import ProfileForm
+        form = ProfileForm()
+        assert 'email' in form.fields
+        assert 'notify_on_done' in form.fields
+        assert 'notify_on_failed' in form.fields
+
+    def test_form_saves_email_and_prefs(self, django_user_model):
+        from apps.accounts.forms import ProfileForm
+        user = django_user_model.objects.create_user(username='ptest', password='p')
+        form = ProfileForm(
+            data={'email': 'user@example.com', 'notify_on_done': True, 'notify_on_failed': False},
+            instance=user,
+        )
+        assert form.is_valid(), form.errors
+        saved = form.save()
+        assert saved.email == 'user@example.com'
+        assert saved.notify_on_done is True
+        assert saved.notify_on_failed is False
