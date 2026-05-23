@@ -1,10 +1,13 @@
+# services/worker/modules/sftp/handler.py
 import io
+import os
 import socket
 import time
 
 import paramiko
 
 from .config import SFTP_TIMEOUT, SFTP_MAX_RETRIES, SFTP_RETRY_DELAY
+from modules.gpg.handler import encrypt_file, GPGEncryptError
 
 
 class SFTPTransferError(Exception):
@@ -18,7 +21,6 @@ class SFTPHandler:
     def _build_client(self) -> paramiko.SSHClient:
         client = paramiko.SSHClient()
         if self.params.get('strict_host_key_checking') and self.params.get('known_host_key'):
-            import os
             import tempfile
             with tempfile.NamedTemporaryFile(mode='w', suffix='_known_hosts', delete=False) as f:
                 f.write(self.params['known_host_key'])
@@ -53,43 +55,60 @@ class SFTPHandler:
         if not (self.params.get('strict_host_key_checking') and self.params.get('known_host_key')):
             log_callback('warn', 'Host key verification DISABLED — connection is vulnerable to MITM')
 
-        last_error = None
+        use_gpg = self.params.get('encrypt') and self.params.get('gpg_passphrase')
+        encrypted_path = None
 
-        for attempt in range(1, SFTP_MAX_RETRIES + 1):
-            client = self._build_client()
-            try:
-                log_callback('info', f'Connecting to {self.params["host"]}:{self.params["port"]} (attempt {attempt})')
-                self._connect(client)
-                log_callback('info', 'Authentication OK')
+        try:
+            if use_gpg:
+                log_callback('info', 'GPG: szyfrowanie pliku...')
                 try:
-                    log_callback('info', f'Transferring: {self.params["source_path"]}')
-                    with client.open_sftp() as sftp:
-                        def _progress(done: int, total: int) -> None:
-                            if total:
-                                log_callback('info', f'Progress: {int(done / total * 100)}%')
-                        sftp.put(
-                            self.params['source_path'],
-                            self.params['destination_path'],
-                            callback=_progress,
-                        )
-                    log_callback('info', 'Transfer complete')
-                    return
-                except FileNotFoundError:
-                    raise SFTPTransferError(f'SOURCE NOT FOUND: {self.params["source_path"]}')
-                except OSError as e:
-                    if 'No space' in str(e):
-                        raise SFTPTransferError('INSUFFICIENT SPACE ON DESTINATION')
-                    raise SFTPTransferError(f'TRANSFER ERROR — {e}')
-            except paramiko.AuthenticationException:
-                raise SFTPTransferError('AUTH FAILED — check credentials')
-            except (socket.timeout, socket.gaierror) as e:
-                last_error = str(e)
-                if attempt < SFTP_MAX_RETRIES:
-                    log_callback('warn', f'Connection failed, retrying in {SFTP_RETRY_DELAY}s...')
-                    time.sleep(SFTP_RETRY_DELAY)
-            except paramiko.SSHException as e:
-                raise SFTPTransferError(f'SSH ERROR — {e}')
-            finally:
-                client.close()
+                    encrypted_path = encrypt_file(
+                        self.params['source_path'], self.params['gpg_passphrase']
+                    )
+                except GPGEncryptError as e:
+                    raise SFTPTransferError(str(e))
+                source = encrypted_path
+                dest = self.params['destination_path'] + '.gpg'
+            else:
+                source = self.params['source_path']
+                dest = self.params['destination_path']
 
-        raise SFTPTransferError(f'CONNECTION TIMEOUT — {self.params["host"]} unreachable')
+            last_error = None
+
+            for attempt in range(1, SFTP_MAX_RETRIES + 1):
+                client = self._build_client()
+                try:
+                    log_callback('info', f'Connecting to {self.params["host"]}:{self.params["port"]} (attempt {attempt})')
+                    self._connect(client)
+                    log_callback('info', 'Authentication OK')
+                    try:
+                        log_callback('info', f'Transferring: {source}')
+                        with client.open_sftp() as sftp:
+                            def _progress(done: int, total: int) -> None:
+                                if total:
+                                    log_callback('info', f'Progress: {int(done / total * 100)}%')
+                            sftp.put(source, dest, callback=_progress)
+                        log_callback('info', 'Transfer complete')
+                        return
+                    except FileNotFoundError:
+                        raise SFTPTransferError(f'SOURCE NOT FOUND: {source}')
+                    except OSError as e:
+                        if 'No space' in str(e):
+                            raise SFTPTransferError('INSUFFICIENT SPACE ON DESTINATION')
+                        raise SFTPTransferError(f'TRANSFER ERROR — {e}')
+                except paramiko.AuthenticationException:
+                    raise SFTPTransferError('AUTH FAILED — check credentials')
+                except (socket.timeout, socket.gaierror) as e:
+                    last_error = str(e)
+                    if attempt < SFTP_MAX_RETRIES:
+                        log_callback('warn', f'Connection failed, retrying in {SFTP_RETRY_DELAY}s...')
+                        time.sleep(SFTP_RETRY_DELAY)
+                except paramiko.SSHException as e:
+                    raise SFTPTransferError(f'SSH ERROR — {e}')
+                finally:
+                    client.close()
+
+            raise SFTPTransferError(f'CONNECTION TIMEOUT — {self.params["host"]} unreachable')
+        finally:
+            if encrypted_path and os.path.exists(encrypted_path):
+                os.unlink(encrypted_path)

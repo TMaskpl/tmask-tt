@@ -102,6 +102,53 @@ class TestSFTPHandler:
         params.update(kwargs)
         return params
 
+    def test_execute_with_encrypt_uses_encrypted_paths(self, sftp_params):
+        sftp_params['encrypt'] = True
+        sftp_params['gpg_passphrase'] = 'secret123'
+        encrypted_tmp = '/tmp/file_abc.gpg'
+
+        with patch('modules.sftp.handler.encrypt_file', return_value=encrypted_tmp) as mock_encrypt, \
+             patch('modules.sftp.handler.os.path.exists', return_value=True), \
+             patch('modules.sftp.handler.os.unlink') as mock_unlink, \
+             patch('modules.sftp.handler.paramiko.SSHClient') as MockSSH:
+            mock_client = MagicMock()
+            MockSSH.return_value = mock_client
+            mock_sftp = MagicMock()
+            mock_client.open_sftp.return_value.__enter__ = MagicMock(return_value=mock_sftp)
+            mock_client.open_sftp.return_value.__exit__ = MagicMock(return_value=False)
+
+            SFTPHandler(sftp_params).execute(log_callback=lambda lvl, msg: None)
+
+            mock_encrypt.assert_called_once_with(
+                sftp_params['source_path'], sftp_params['gpg_passphrase']
+            )
+            mock_sftp.put.assert_called_once()
+            call_args = mock_sftp.put.call_args[0]
+            assert call_args[0] == encrypted_tmp
+            assert call_args[1] == sftp_params['destination_path'] + '.gpg'
+            mock_unlink.assert_called_once_with(encrypted_tmp)
+
+    def test_cleanup_encrypted_file_even_on_transfer_error(self, sftp_params):
+        sftp_params['encrypt'] = True
+        sftp_params['gpg_passphrase'] = 'secret123'
+        encrypted_tmp = '/tmp/file_abc.gpg'
+
+        with patch('modules.sftp.handler.encrypt_file', return_value=encrypted_tmp), \
+             patch('modules.sftp.handler.os.path.exists', return_value=True), \
+             patch('modules.sftp.handler.os.unlink') as mock_unlink, \
+             patch('modules.sftp.handler.paramiko.SSHClient') as MockSSH:
+            mock_client = MagicMock()
+            MockSSH.return_value = mock_client
+            mock_sftp = MagicMock()
+            mock_sftp.put.side_effect = OSError('No space left on device')
+            mock_client.open_sftp.return_value.__enter__ = MagicMock(return_value=mock_sftp)
+            mock_client.open_sftp.return_value.__exit__ = MagicMock(return_value=False)
+
+            with pytest.raises(SFTPTransferError):
+                SFTPHandler(sftp_params).execute(log_callback=lambda lvl, msg: None)
+
+            mock_unlink.assert_called_once_with(encrypted_tmp)
+
     def test_ssh_key_auth_path(self):
         with patch('modules.sftp.handler.paramiko.SSHClient') as MockSSH:
             mock_client = MagicMock()
