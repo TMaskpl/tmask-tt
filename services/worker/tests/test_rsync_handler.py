@@ -103,3 +103,43 @@ class TestRsyncHandler:
             assert MockPopen.call_count == RSYNC_MAX_RETRIES
             assert mock_sleep.call_count == RSYNC_MAX_RETRIES - 1
             mock_sleep.assert_called_with(RSYNC_RETRY_DELAY)
+
+    def test_execute_with_encrypt_uses_encrypted_paths(self):
+        params = self._make_params(encrypt=True, gpg_passphrase='secret123')
+        encrypted_tmp = '/tmp/data_abc.gpg'
+
+        with patch('modules.rsync.handler.encrypt_file', return_value=encrypted_tmp) as mock_encrypt, \
+             patch('modules.rsync.handler.os.path.exists', return_value=True), \
+             patch('modules.rsync.handler.os.unlink') as mock_unlink, \
+             patch('modules.rsync.handler.subprocess.Popen') as MockPopen:
+            mock_proc = MagicMock()
+            mock_proc.stdout = iter([])
+            mock_proc.wait.return_value = 0
+            MockPopen.return_value = mock_proc
+
+            RsyncHandler(params).execute(log_callback=lambda lvl, msg: None)
+
+            mock_encrypt.assert_called_once_with(params['source_path'], params['gpg_passphrase'])
+            cmd = MockPopen.call_args[0][0]
+            assert encrypted_tmp in cmd
+            expected_dest = f'{params["username"]}@{params["host"]}:{params["destination_path"]}.gpg'
+            assert expected_dest in cmd
+            mock_unlink.assert_called_once_with(encrypted_tmp)
+
+    def test_cleanup_encrypted_file_even_on_transfer_error(self):
+        params = self._make_params(encrypt=True, gpg_passphrase='secret123')
+        encrypted_tmp = '/tmp/data_abc.gpg'
+
+        with patch('modules.rsync.handler.encrypt_file', return_value=encrypted_tmp), \
+             patch('modules.rsync.handler.os.path.exists', return_value=True), \
+             patch('modules.rsync.handler.os.unlink') as mock_unlink, \
+             patch('modules.rsync.handler.subprocess.Popen') as MockPopen:
+            mock_proc = MagicMock()
+            mock_proc.stdout = iter(['Permission denied\n'])
+            mock_proc.wait.return_value = 255
+            MockPopen.return_value = mock_proc
+
+            with pytest.raises(RsyncTransferError):
+                RsyncHandler(params).execute(log_callback=lambda lvl, msg: None)
+
+            mock_unlink.assert_called_once_with(encrypted_tmp)
