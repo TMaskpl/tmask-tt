@@ -19,6 +19,7 @@ def encrypt_file(source_path: str, passphrase: str) -> str:
     Rzuca GPGEncryptError przy każdym błędzie i czyści temp plik.
     """
     stem = Path(source_path).stem
+    encrypted_path = None
     fd, encrypted_path = tempfile.mkstemp(suffix='.gpg', prefix=f'{stem}_')
     os.close(fd)
     try:
@@ -39,14 +40,18 @@ def encrypt_file(source_path: str, passphrase: str) -> str:
             raise GPGEncryptError(f'GPG FAILED — {result.stderr.strip()}')
         return encrypted_path
     except GPGEncryptError:
-        os.unlink(encrypted_path)
+        if encrypted_path and os.path.exists(encrypted_path):
+            os.unlink(encrypted_path)
         raise
     except subprocess.TimeoutExpired:
-        os.unlink(encrypted_path)
+        if encrypted_path and os.path.exists(encrypted_path):
+            os.unlink(encrypted_path)
         raise GPGEncryptError('GPG TIMEOUT — encryption took too long')
     except FileNotFoundError:
-        os.unlink(encrypted_path)
+        if encrypted_path and os.path.exists(encrypted_path):
+            os.unlink(encrypted_path)
         raise GPGEncryptError('GPG NOT INSTALLED — install gnupg package')
     except Exception as e:
-        os.unlink(encrypted_path)
+        if encrypted_path and os.path.exists(encrypted_path):
+            os.unlink(encrypted_path)
         raise GPGEncryptError(f'GPG ERROR — {e}')
