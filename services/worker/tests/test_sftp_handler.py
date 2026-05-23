@@ -163,3 +163,24 @@ class TestSFTPHandler:
             call_kwargs = mock_client.connect.call_args[1]
             assert 'pkey' in call_kwargs
             assert 'password' not in call_kwargs
+
+    def test_gpg_passphrase_never_appears_in_logs(self, sftp_params):
+        sftp_params['encrypt'] = True
+        sftp_params['gpg_passphrase'] = 'super_secret_passphrase'
+        encrypted_tmp = '/tmp/file_abc.gpg'
+
+        with patch('modules.sftp.handler.encrypt_file', return_value=encrypted_tmp), \
+             patch('modules.sftp.handler.os.path.exists', return_value=True), \
+             patch('modules.sftp.handler.os.unlink'), \
+             patch('modules.sftp.handler.paramiko.SSHClient') as MockSSH:
+            mock_client = MagicMock()
+            MockSSH.return_value = mock_client
+            mock_sftp = MagicMock()
+            mock_client.open_sftp.return_value.__enter__ = MagicMock(return_value=mock_sftp)
+            mock_client.open_sftp.return_value.__exit__ = MagicMock(return_value=False)
+
+            logs = []
+            SFTPHandler(sftp_params).execute(log_callback=lambda lvl, msg: logs.append(msg))
+
+            all_log_text = ' '.join(logs)
+            assert 'super_secret_passphrase' not in all_log_text

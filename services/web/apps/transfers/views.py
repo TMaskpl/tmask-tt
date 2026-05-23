@@ -12,7 +12,7 @@ def transfer_create(request):
         job = form.save(commit=False)
         job.owner = request.user
         job.save()
-        passphrase = form.cleaned_data.get('gpg_passphrase') or None
+        passphrase = (form.cleaned_data.get('gpg_passphrase') or '').strip() or None
         execute_transfer.delay(job_id=job.pk, gpg_passphrase=passphrase)
         return redirect('transfers:detail', pk=job.pk)
     return render(request, 'transfers/create.html', {'form': form})
