@@ -20,7 +20,7 @@ class TestTransferCreateView:
         assert response.status_code == 302
         job = TransferJob.objects.get(owner=regular_user)
         assert job.status == STATUS_PENDING
-        mock_delay.assert_called_once_with(job_id=job.pk)
+        mock_delay.assert_called_once_with(job_id=job.pk, gpg_passphrase=None)
 
     def test_log_fragment_returns_logs(self, auth_client, regular_user, make_connection):
         job = TransferJob.objects.create(

@@ -4,6 +4,12 @@ from apps.connections.models import Connection
 
 
 class TransferForm(forms.ModelForm):
+    gpg_passphrase = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput(attrs={'autocomplete': 'off'}),
+        label='GPG Passphrase',
+    )
+
     class Meta:
         model = TransferJob
         fields = ['connection', 'source_path', 'destination_path']
