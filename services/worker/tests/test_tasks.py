@@ -117,6 +117,32 @@ class TestExecuteTransferTask:
             execute_transfer(job_id=None, scheduled_id=999)
             MockJob.objects.get.assert_not_called()
 
+    def test_scheduled_transfer_logs_warn_when_encrypt_true_but_no_passphrase(self):
+        with patch('tasks.SFTPHandler') as MockSFTP, \
+             patch('tasks.TransferJob') as MockJob, \
+             patch('tasks.TransferLog') as MockLog, \
+             patch('tasks._create_job_from_schedule') as MockCreate:
+            mock_job = MagicMock()
+            mock_job.flow_id = None
+            mock_job.connection.protocol = 'sftp'
+            mock_job.connection.encrypt = True
+            mock_job.pk = 1
+            MockCreate.return_value = mock_job
+            MockSFTP.return_value.execute.return_value = None
+
+            logged = []
+            MockLog.objects.create.side_effect = lambda **kw: logged.append((kw['level'], kw['message']))
+
+            from tasks import execute_transfer
+            execute_transfer(job_id=None, scheduled_id=5)
+
+            warn_messages = [msg for lvl, msg in logged if lvl == 'warn']
+            assert any('GPG' in msg for msg in warn_messages)
+
+            # gpg_passphrase=None w params przekazanych do handlera
+            handler_params = MockSFTP.call_args[0][0]
+            assert handler_params.get('gpg_passphrase') is None
+
 
 class TestSendNotificationTask:
     def test_calls_send_email_notification(self):

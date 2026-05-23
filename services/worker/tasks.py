@@ -17,7 +17,7 @@ app.config_from_object('django.conf:settings', namespace='CELERY')
 logger = get_task_logger(__name__)
 
 
-def _build_params(job: TransferJob) -> dict:
+def _build_params(job: TransferJob, gpg_passphrase=None) -> dict:
     conn = job.connection
     return {
         'host': conn.host,
@@ -29,6 +29,7 @@ def _build_params(job: TransferJob) -> dict:
         'destination_path': job.destination_path,
         'compress': conn.compress,
         'encrypt': conn.encrypt,
+        'gpg_passphrase': gpg_passphrase,
         'strict_host_key_checking': conn.strict_host_key_checking,
         'known_host_key': conn.known_host_key,
     }
@@ -93,7 +94,7 @@ def send_notification(self, job_id: int):
 
 
 @app.task(bind=True, name='transfers.execute')
-def execute_transfer(self, job_id: int = None, scheduled_id: int = None):
+def execute_transfer(self, job_id: int = None, scheduled_id: int = None, gpg_passphrase: str = None):
     if job_id is None and scheduled_id is not None:
         job = _create_job_from_schedule(scheduled_id)
         if job is None:
@@ -115,7 +116,9 @@ def execute_transfer(self, job_id: int = None, scheduled_id: int = None):
             source_params, dest_params = _build_relay_params(job.flow)
             RelayHandler(source_params, dest_params).execute(log_callback=log_callback)
         else:
-            params = _build_params(job)
+            if job.connection.encrypt and not gpg_passphrase:
+                log_callback('warn', 'GPG: brak hasła — transfer bez szyfrowania')
+            params = _build_params(job, gpg_passphrase=gpg_passphrase)
             handler_cls = SFTPHandler if job.connection.protocol == 'sftp' else RsyncHandler
             handler_cls(params).execute(log_callback=log_callback)
         job.mark_done()
