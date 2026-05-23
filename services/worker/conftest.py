@@ -13,6 +13,7 @@ def sftp_params():
         'destination_path': '/backup/file.tar',
         'compress': False,
         'encrypt': False,
+        'gpg_passphrase': None,
         'strict_host_key_checking': False,
         'known_host_key': None,
     }
@@ -30,6 +31,7 @@ def rsync_params():
         'destination_path': '/backup/',
         'compress': False,
         'encrypt': False,
+        'gpg_passphrase': None,
         'strict_host_key_checking': False,
         'known_host_key': None,
     }
