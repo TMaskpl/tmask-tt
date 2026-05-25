@@ -1,3 +1,7 @@
+import socket
+from unittest.mock import MagicMock, patch
+
+import paramiko
 import pytest
 from django.urls import reverse
 from apps.connections.models import Connection
@@ -36,6 +40,85 @@ class TestConnectionCreate:
         })
         assert response.status_code == 200
         assert response.context['form'].errors
+
+@pytest.mark.django_db
+class TestConnectionScanHostkey:
+    def test_requires_login(self, client, regular_user, make_connection):
+        conn = make_connection(regular_user)
+        response = client.get(reverse('connections:scan_hostkey', args=[conn.pk]))
+        assert response.status_code == 302
+        assert '/login/' in response['Location']
+
+    def test_returns_404_for_other_users_connection(self, auth_client, admin_user, make_connection):
+        conn = make_connection(admin_user)
+        response = auth_client.get(reverse('connections:scan_hostkey', args=[conn.pk]))
+        assert response.status_code == 404
+
+    def test_returns_host_key_on_success(self, auth_client, regular_user, make_connection):
+        conn = make_connection(regular_user)
+        mock_key = MagicMock()
+        mock_key.get_name.return_value = 'ssh-rsa'
+        mock_key.get_base64.return_value = 'AAAAB3NzaC1yc2EAAAA'
+        mock_transport = MagicMock()
+        mock_transport.get_remote_server_key.return_value = mock_key
+        mock_client = MagicMock()
+        mock_client.get_transport.return_value = mock_transport
+
+        with patch('apps.connections.views.paramiko.SSHClient', return_value=mock_client):
+            response = auth_client.get(reverse('connections:scan_hostkey', args=[conn.pk]))
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data['success'] is True
+        assert 'ssh-rsa' in data['known_host_key']
+        assert conn.host in data['known_host_key']
+
+    def test_returns_error_on_network_failure(self, auth_client, regular_user, make_connection):
+        conn = make_connection(regular_user)
+        mock_client = MagicMock()
+        mock_client.connect.side_effect = socket.gaierror('name resolution failed')
+        mock_client.get_transport.return_value = None
+
+        with patch('apps.connections.views.paramiko.SSHClient', return_value=mock_client):
+            response = auth_client.get(reverse('connections:scan_hostkey', args=[conn.pk]))
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data['success'] is False
+        assert 'TIMEOUT' in data['message']
+
+    def test_captures_key_even_after_auth_failure(self, auth_client, regular_user, make_connection):
+        conn = make_connection(regular_user)
+        mock_key = MagicMock()
+        mock_key.get_name.return_value = 'ecdsa-sha2-nistp256'
+        mock_key.get_base64.return_value = 'AAAAE2VjZHNh'
+        mock_transport = MagicMock()
+        mock_transport.get_remote_server_key.return_value = mock_key
+        mock_client = MagicMock()
+        mock_client.connect.side_effect = paramiko.AuthenticationException
+        mock_client.get_transport.return_value = mock_transport
+
+        with patch('apps.connections.views.paramiko.SSHClient', return_value=mock_client):
+            response = auth_client.get(reverse('connections:scan_hostkey', args=[conn.pk]))
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data['success'] is True
+        assert 'ecdsa-sha2-nistp256' in data['known_host_key']
+
+    def test_returns_error_when_no_transport(self, auth_client, regular_user, make_connection):
+        conn = make_connection(regular_user)
+        mock_client = MagicMock()
+        mock_client.connect.side_effect = paramiko.AuthenticationException
+        mock_client.get_transport.return_value = None
+
+        with patch('apps.connections.views.paramiko.SSHClient', return_value=mock_client):
+            response = auth_client.get(reverse('connections:scan_hostkey', args=[conn.pk]))
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data['success'] is False
+
 
 @pytest.mark.django_db
 class TestConnectionDelete:

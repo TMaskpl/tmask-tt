@@ -1,4 +1,8 @@
+import io
 import re
+import socket
+
+import paramiko
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
@@ -44,6 +48,46 @@ def connection_test(request, pk):
     conn = get_object_or_404(Connection, pk=pk, owner=request.user)
     result = _test_connection(conn)
     return JsonResponse({'success': result.success, 'message': result.message})
+
+@login_required
+def connection_scan_hostkey(request, pk):
+    conn = get_object_or_404(Connection, pk=pk, owner=request.user)
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    host_key = None
+    try:
+        connect_kwargs = {
+            'hostname': conn.host,
+            'port': conn.port,
+            'username': conn.username,
+            'timeout': 10,
+            'look_for_keys': False,
+            'allow_agent': False,
+        }
+        if conn.ssh_key:
+            connect_kwargs['pkey'] = paramiko.PKey.from_private_key(io.StringIO(conn.ssh_key))
+        elif conn.password:
+            connect_kwargs['password'] = conn.password
+        try:
+            client.connect(**connect_kwargs)
+        except paramiko.AuthenticationException:
+            pass  # transport already has the host key from SSH handshake
+        transport = client.get_transport()
+        if transport:
+            host_key = transport.get_remote_server_key()
+    except (socket.timeout, socket.gaierror):
+        return JsonResponse({'success': False, 'message': f'CONNECTION TIMEOUT — {conn.host} nieosiągalny'})
+    except paramiko.SSHException as e:
+        return JsonResponse({'success': False, 'message': f'SSH ERROR — {e}'})
+    finally:
+        client.close()
+
+    if not host_key:
+        return JsonResponse({'success': False, 'message': 'Nie udało się pobrać klucza hosta'})
+
+    known_host_entry = f'{conn.host} {host_key.get_name()} {host_key.get_base64()}'
+    return JsonResponse({'success': True, 'known_host_key': known_host_entry})
+
 
 @login_required
 def browse_directory(request, pk):

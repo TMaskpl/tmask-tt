@@ -6,7 +6,7 @@
   <title>{% block title %}TMASK-TRANSPORTER{% endblock %}</title>
   {% load static %}
   <link rel="stylesheet" href="{% static 'css/crt.css' %}">
-  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <script src="{% static 'js/htmx.min.js' %}"></script>
 </head>
 <body>
   {% if user.is_authenticated %}

@@ -9,6 +9,22 @@
     <div class="msg-error">{% for e in form.non_field_errors %}> {{ e }}{% endfor %}</div>
     {% endif %}
     {% for field in form %}
+    {% if field.name == 'known_host_key' %}
+    <div class="field" id="known-host-section" style="display:none">
+      <label>{{ field.label|upper }}:</label>
+      {{ field }}
+      {% if conn %}
+      <div style="margin-top:0.4rem;">
+        <button type="button" class="btn btn-warn" id="scan-btn"
+                onclick="scanHostKey({{ conn.pk }})">[ SCAN HOST KEY ]</button>
+        <span id="scan-result" style="font-size:0.8rem; margin-left:0.5rem;"></span>
+      </div>
+      {% endif %}
+      {% if field.errors %}
+      <div style="color:var(--red);font-size:0.8rem;">{% for e in field.errors %}{{ e }}{% endfor %}</div>
+      {% endif %}
+    </div>
+    {% else %}
     <div class="field">
       <label>{{ field.label|upper }}:</label>
       {{ field }}
@@ -16,6 +32,7 @@
       <div style="color:var(--red);font-size:0.8rem;">{% for e in field.errors %}{{ e }}{% endfor %}</div>
       {% endif %}
     </div>
+    {% endif %}
     {% endfor %}
     <div style="display:flex;gap:1rem;margin-top:1.5rem;">
       <button type="submit" class="btn">[ SAVE ]</button>
@@ -23,4 +40,46 @@
     </div>
   </form>
 </div>
+<script>
+  function toggleKnownHost() {
+    var strict = document.getElementById('id_strict_host_key_checking');
+    var section = document.getElementById('known-host-section');
+    if (strict && section) {
+      section.style.display = strict.checked ? 'block' : 'none';
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    var strict = document.getElementById('id_strict_host_key_checking');
+    if (strict) {
+      strict.addEventListener('change', toggleKnownHost);
+      toggleKnownHost();
+    }
+  });
+
+  function scanHostKey(pk) {
+    var btn = document.getElementById('scan-btn');
+    var result = document.getElementById('scan-result');
+    btn.disabled = true;
+    result.textContent = 'SCANNING...';
+    result.style.color = '';
+    fetch('/connections/' + pk + '/scan-hostkey/')
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.success) {
+          document.getElementById('id_known_host_key').value = data.known_host_key;
+          result.textContent = 'KEY SCANNED — VERIFY AND SAVE';
+          result.style.color = 'var(--green)';
+        } else {
+          result.textContent = data.message;
+          result.style.color = 'var(--red)';
+        }
+      })
+      .catch(function () {
+        result.textContent = 'SCAN ERROR';
+        result.style.color = 'var(--red)';
+      })
+      .finally(function () { btn.disabled = false; });
+  }
+</script>
 {% endblock %}

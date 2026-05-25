@@ -104,6 +104,53 @@ class TestRsyncHandler:
             assert mock_sleep.call_count == RSYNC_MAX_RETRIES - 1
             mock_sleep.assert_called_with(RSYNC_RETRY_DELAY)
 
+    def test_known_host_key_adds_userkownhostsfile(self):
+        handler = RsyncHandler(self._make_params(
+            strict_host_key_checking=True,
+            known_host_key='192.168.1.10 ssh-rsa AAAAB3Nz...',
+        ))
+        opts = handler._build_ssh_options(known_hosts_path='/tmp/kh_test')
+        assert 'UserKnownHostsFile=' in opts
+        assert 'StrictHostKeyChecking=yes' in opts
+        assert 'StrictHostKeyChecking=no' not in opts
+
+    def test_strict_false_adds_stricthostkeychecking_no(self):
+        handler = RsyncHandler(self._make_params(strict_host_key_checking=False))
+        opts = handler._build_ssh_options()
+        assert '-o StrictHostKeyChecking=no' in opts
+
+    def test_strict_true_without_known_key_no_userkownhostsfile(self):
+        handler = RsyncHandler(self._make_params(
+            strict_host_key_checking=True,
+            known_host_key=None,
+        ))
+        opts = handler._build_ssh_options()
+        assert 'UserKnownHostsFile' not in opts
+        assert 'StrictHostKeyChecking=no' not in opts
+
+    def test_execute_creates_and_cleans_up_known_hosts_tempfile(self):
+        params = self._make_params(
+            strict_host_key_checking=True,
+            known_host_key='192.168.1.10 ssh-rsa AAAA...',
+        )
+        created_paths = []
+
+        def fake_popen(cmd, **kwargs):
+            for part in cmd:
+                if 'UserKnownHostsFile=' in part:
+                    path = part.split('=', 1)[1].strip("'")
+                    created_paths.append(path)
+            m = MagicMock()
+            m.stdout = iter([])
+            m.wait.return_value = 0
+            return m
+
+        with patch('modules.rsync.handler.subprocess.Popen', side_effect=fake_popen):
+            RsyncHandler(params).execute(log_callback=lambda lvl, msg: None)
+
+        assert len(created_paths) == 1
+        assert not __import__('os').path.exists(created_paths[0])
+
     def test_execute_with_encrypt_uses_encrypted_paths(self):
         params = self._make_params(encrypt=True, gpg_passphrase='secret123')
         encrypted_tmp = '/tmp/data_abc.gpg'
