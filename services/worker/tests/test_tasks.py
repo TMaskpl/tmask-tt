@@ -208,3 +208,57 @@ class TestCleanupOrphanJobs:
             call_kwargs = mock_qs.update.call_args[1]
             assert call_kwargs.get('status') == 'failed'
             assert 'TASK INTERRUPTED' in call_kwargs.get('error_message', '')
+
+
+class TestSendWebhookTask:
+    def test_calls_send_webhook_notification(self):
+        with patch('tasks.TransferJob') as MockJob, \
+             patch('tasks.send_webhook_notification') as mock_notif:
+            mock_job = MagicMock()
+            MockJob.objects.select_related.return_value.get.return_value = mock_job
+            from tasks import send_webhook
+            send_webhook(job_id=42)
+            mock_notif.assert_called_once_with(mock_job)
+
+    def test_logs_and_skips_when_job_not_found(self):
+        with patch('tasks.TransferJob') as MockJob, \
+             patch('tasks.logger') as mock_logger:
+            MockJob.objects.select_related.return_value.get.side_effect = Exception('not found')
+            from tasks import send_webhook
+            send_webhook(job_id=999)
+            mock_logger.error.assert_called()
+
+
+class TestExecuteTransferDispatchesWebhook:
+    def test_dispatches_webhook_on_done(self):
+        with patch('tasks.SFTPHandler') as MockSFTP, \
+             patch('tasks.TransferJob') as MockJob, \
+             patch('tasks.TransferLog'), \
+             patch('tasks.send_notification'), \
+             patch('tasks.send_webhook') as mock_webhook:
+            mock_job = MagicMock()
+            MockJob.objects.get.return_value = mock_job
+            mock_job.flow_id = None
+            mock_job.connection.protocol = 'sftp'
+            mock_job.pk = 99
+            MockSFTP.return_value.execute.return_value = None
+            from tasks import execute_transfer
+            execute_transfer(job_id=99)
+            mock_webhook.delay.assert_called_once_with(99)
+
+    def test_dispatches_webhook_on_failed(self):
+        with patch('tasks.SFTPHandler') as MockSFTP, \
+             patch('tasks.TransferJob') as MockJob, \
+             patch('tasks.TransferLog'), \
+             patch('tasks.send_notification'), \
+             patch('tasks.send_webhook') as mock_webhook:
+            from modules.sftp.handler import SFTPTransferError
+            mock_job = MagicMock()
+            MockJob.objects.get.return_value = mock_job
+            mock_job.flow_id = None
+            mock_job.connection.protocol = 'sftp'
+            mock_job.pk = 99
+            MockSFTP.return_value.execute.side_effect = SFTPTransferError('TIMEOUT')
+            from tasks import execute_transfer
+            execute_transfer(job_id=99)
+            mock_webhook.delay.assert_called_once_with(99)

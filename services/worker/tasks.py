@@ -9,7 +9,7 @@ from apps.transfers.models import TransferJob, TransferLog
 from modules.sftp.handler import SFTPHandler, SFTPTransferError
 from modules.rsync.handler import RsyncHandler, RsyncTransferError
 from modules.relay.handler import RelayHandler, RelayTransferError
-from notifications import send_email_notification
+from notifications import send_email_notification, send_webhook_notification
 
 app = Celery('transporter')
 app.config_from_object('django.conf:settings', namespace='CELERY')
@@ -80,6 +80,28 @@ def _create_job_from_schedule(scheduled_id: int):
     return job
 
 
+def _resolve_job(job_id: int | None, scheduled_id: int | None):
+    if job_id is None and scheduled_id is not None:
+        return _create_job_from_schedule(scheduled_id)
+    try:
+        return TransferJob.objects.get(pk=job_id)
+    except TransferJob.DoesNotExist:
+        logger.error(f'TransferJob {job_id} not found — task aborted')
+        return None
+
+
+def _run_transfer(job, gpg_passphrase: str | None, log_callback) -> None:
+    if job.flow_id:
+        source_params, dest_params = _build_relay_params(job.flow)
+        RelayHandler(source_params, dest_params).execute(log_callback=log_callback)
+    else:
+        if job.connection.encrypt and not gpg_passphrase:
+            log_callback('warn', 'GPG: brak hasła — transfer bez szyfrowania')
+        params = _build_params(job, gpg_passphrase=gpg_passphrase)
+        handler_cls = SFTPHandler if job.connection.protocol == 'sftp' else RsyncHandler
+        handler_cls(params).execute(log_callback=log_callback)
+
+
 @app.task(bind=True, name='transfers.send_notification', max_retries=3, default_retry_delay=60)
 def send_notification(self, job_id: int):
     try:
@@ -93,18 +115,24 @@ def send_notification(self, job_id: int):
         raise self.retry(exc=exc)
 
 
+@app.task(bind=True, name='transfers.send_webhook', max_retries=3, default_retry_delay=60)
+def send_webhook(self, job_id: int):
+    try:
+        job = TransferJob.objects.select_related('owner', 'connection', 'flow').get(pk=job_id)
+    except Exception:
+        logger.error(f'TransferJob {job_id} not found — webhook skipped')
+        return
+    try:
+        send_webhook_notification(job)
+    except Exception as exc:
+        raise self.retry(exc=exc)
+
+
 @app.task(bind=True, name='transfers.execute')
-def execute_transfer(self, job_id: int = None, scheduled_id: int = None, gpg_passphrase: str = None):
-    if job_id is None and scheduled_id is not None:
-        job = _create_job_from_schedule(scheduled_id)
-        if job is None:
-            return
-    else:
-        try:
-            job = TransferJob.objects.get(pk=job_id)
-        except TransferJob.DoesNotExist:
-            logger.error(f'TransferJob {job_id} not found — task aborted')
-            return
+def execute_transfer(self, job_id: int | None = None, scheduled_id: int | None = None, gpg_passphrase: str | None = None):
+    job = _resolve_job(job_id, scheduled_id)
+    if job is None:
+        return
 
     job.mark_running(self.request.id)
 
@@ -112,25 +140,20 @@ def execute_transfer(self, job_id: int = None, scheduled_id: int = None, gpg_pas
         TransferLog.objects.create(job=job, level=level, message=message)
 
     try:
-        if job.flow_id:
-            source_params, dest_params = _build_relay_params(job.flow)
-            RelayHandler(source_params, dest_params).execute(log_callback=log_callback)
-        else:
-            if job.connection.encrypt and not gpg_passphrase:
-                log_callback('warn', 'GPG: brak hasła — transfer bez szyfrowania')
-            params = _build_params(job, gpg_passphrase=gpg_passphrase)
-            handler_cls = SFTPHandler if job.connection.protocol == 'sftp' else RsyncHandler
-            handler_cls(params).execute(log_callback=log_callback)
+        _run_transfer(job, gpg_passphrase, log_callback)
         job.mark_done()
         send_notification.delay(job.pk)
+        send_webhook.delay(job.pk)
     except (SFTPTransferError, RsyncTransferError, RelayTransferError) as e:
         job.mark_failed(str(e))
         send_notification.delay(job.pk)
+        send_webhook.delay(job.pk)
         log_callback('error', str(e))
         logger.error(f'Transfer job {job.pk} failed: {e}')
     except Exception as e:
         job.mark_failed(f'UNEXPECTED ERROR — {e}')
         send_notification.delay(job.pk)
+        send_webhook.delay(job.pk)
         log_callback('error', f'UNEXPECTED ERROR — {e}')
         logger.error(f'Transfer job {job.pk} unexpected error: {e}')
         raise
