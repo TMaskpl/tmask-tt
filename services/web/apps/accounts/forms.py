@@ -10,9 +10,19 @@ class LoginForm(forms.Form):
 class ProfileForm(forms.ModelForm):
     class Meta:
         model  = get_user_model()
-        fields = ['email', 'notify_on_done', 'notify_on_failed']
+        fields = [
+            'email',
+            'notify_on_done',
+            'notify_on_failed',
+            'webhook_url',
+            'webhook_on_done',
+            'webhook_on_failed',
+        ]
         labels = {
-            'email':            'Adres email',
-            'notify_on_done':   'Powiadamiaj o sukcesach transferu',
-            'notify_on_failed': 'Powiadamiaj o błędach transferu',
+            'email':             'Adres email',
+            'notify_on_done':    'Powiadamiaj o sukcesach transferu',
+            'notify_on_failed':  'Powiadamiaj o błędach transferu',
+            'webhook_url':       'Webhook URL',
+            'webhook_on_done':   'Webhook przy sukcesie transferu',
+            'webhook_on_failed': 'Webhook przy błędzie transferu',
         }

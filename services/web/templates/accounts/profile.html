@@ -48,6 +48,55 @@
         <div class="msg-success">&gt; {{ message }}</div>
         {% endfor %}
       {% endif %}
+
+      <div class="panel-subheader">[ WEBHOOK ]</div>
+      <div class="field-row">
+        <label class="label" for="{{ form.webhook_url.id_for_label }}">WEBHOOK URL:</label>
+        {{ form.webhook_url }}
+        {% if form.webhook_url.errors %}
+          <span class="error">{{ form.webhook_url.errors|join:", " }}</span>
+        {% endif %}
+        <button type="button" class="btn btn-sm"
+                hx-post="{% url 'accounts:test_webhook' %}"
+                hx-include="[name='webhook_url']"
+                hx-target="#webhook-test-result"
+                hx-swap="innerHTML">[ TEST ]</button>
+      </div>
+      <div id="webhook-test-result" class="field-row"></div>
+      <script>
+        document.body.addEventListener('htmx:afterRequest', function(evt) {
+          if (!evt.detail.successful) return;
+          var el = document.getElementById('webhook-test-result');
+          if (!el) return;
+          try {
+            var data = JSON.parse(evt.detail.xhr.responseText);
+            if (data.ok) {
+              el.innerHTML = '<span class="msg-success">&gt; OK &mdash; ' + data.code + '</span>';
+            } else {
+              el.innerHTML = '<span class="error">&gt; ERROR &mdash; ' + data.error + '</span>';
+            }
+          } catch(e) {}
+        });
+      </script>
+      <div class="field-row checkbox-row">
+        {{ form.webhook_on_failed }}
+        <label for="{{ form.webhook_on_failed.id_for_label }}">
+          {{ form.webhook_on_failed.label|upper }}
+        </label>
+      </div>
+      <div class="field-row checkbox-row">
+        {{ form.webhook_on_done }}
+        <label for="{{ form.webhook_on_done.id_for_label }}">
+          {{ form.webhook_on_done.label|upper }}
+        </label>
+      </div>
+      {% if user.webhook_url %}
+      <div class="field-row">
+        <span class="label">WEBHOOK STATUS:</span>
+        <span class="value">&gt; AKTYWNY</span>
+      </div>
+      {% endif %}
+
       <div class="form-actions">
         <button type="submit" class="btn">[ ZAPISZ USTAWIENIA ]</button>
       </div>

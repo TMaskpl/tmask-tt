@@ -61,12 +61,18 @@ class TestProfileView:
             'email': 'updated@example.com',
             'notify_on_done': True,
             'notify_on_failed': False,
+            'webhook_url': 'http://hooks.slack.com/test',
+            'webhook_on_done': True,
+            'webhook_on_failed': False,
         })
         assert response.status_code == 302
         regular_user.refresh_from_db()
         assert regular_user.email == 'updated@example.com'
         assert regular_user.notify_on_done is True
         assert regular_user.notify_on_failed is False
+        assert regular_user.webhook_url == 'http://hooks.slack.com/test'
+        assert regular_user.webhook_on_done is True
+        assert regular_user.webhook_on_failed is False
 
     def test_post_with_invalid_email_shows_errors(self, auth_client):
         url = reverse('accounts:profile')
