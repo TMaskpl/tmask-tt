@@ -1,4 +1,4 @@
-Django==5.1.*
+Django>=5.1.14
 gunicorn==22.*
 psycopg2-binary==2.9.*
 redis==5.*
@@ -8,8 +8,9 @@ django-celery-results==2.5.*
 paramiko==3.4.*
 python-decouple==3.8
 django-encrypted-model-fields==0.6.*
-cryptography==42.*
+cryptography>=46.0.5
 bcrypt==4.*
+requests==2.*
 django-htmx==1.19.*
 # Dev/test
 pytest==8.*

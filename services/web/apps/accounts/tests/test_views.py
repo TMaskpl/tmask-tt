@@ -1,5 +1,6 @@
 import pytest
 from django.urls import reverse
+from unittest.mock import MagicMock, patch
 
 
 @pytest.mark.django_db
@@ -130,3 +131,42 @@ class TestNotificationTemplates:
         result = render_to_string('notifications/transfer_failed.html', {'job': job})
         assert 'TIMEOUT' in result
         assert 'ff3333' in result
+
+
+@pytest.mark.django_db
+class TestTestWebhookView:
+    def test_requires_login(self, client):
+        url = reverse('accounts:test_webhook')
+        response = client.post(url, {'webhook_url': 'http://hooks.example.com/'})
+        assert response.status_code == 302
+        assert '/login/' in response['Location']
+
+    def test_returns_ok_on_success(self, auth_client):
+        url = reverse('accounts:test_webhook')
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        with patch('apps.accounts.views.requests.post', return_value=mock_resp):
+            response = auth_client.post(url, {'webhook_url': 'http://hooks.example.com/'})
+        assert response.status_code == 200
+        data = response.json()
+        assert data['ok'] is True
+        assert data['code'] == 200
+
+    def test_returns_error_on_connection_refused(self, auth_client):
+        import requests as req
+        url = reverse('accounts:test_webhook')
+        with patch('apps.accounts.views.requests.post',
+                   side_effect=req.ConnectionError('Connection refused')):
+            response = auth_client.post(url, {'webhook_url': 'http://hooks.example.com/'})
+        assert response.status_code == 200
+        data = response.json()
+        assert data['ok'] is False
+        assert 'Connection refused' in data['error']
+
+    def test_returns_error_on_missing_url(self, auth_client):
+        url = reverse('accounts:test_webhook')
+        response = auth_client.post(url, {'webhook_url': ''})
+        assert response.status_code == 200
+        data = response.json()
+        assert data['ok'] is False
+        assert 'URL' in data['error']
