@@ -262,3 +262,20 @@ class TestExecuteTransferDispatchesWebhook:
             from tasks import execute_transfer
             execute_transfer(job_id=99)
             mock_webhook.delay.assert_called_once_with(99)
+
+    def test_dispatches_webhook_on_unexpected_exception(self):
+        with patch('tasks.SFTPHandler') as MockSFTP, \
+             patch('tasks.TransferJob') as MockJob, \
+             patch('tasks.TransferLog'), \
+             patch('tasks.send_notification'), \
+             patch('tasks.send_webhook') as mock_webhook:
+            mock_job = MagicMock()
+            MockJob.objects.get.return_value = mock_job
+            mock_job.flow_id = None
+            mock_job.connection.protocol = 'sftp'
+            mock_job.pk = 99
+            MockSFTP.return_value.execute.side_effect = RuntimeError('unexpected')
+            from tasks import execute_transfer
+            with pytest.raises(RuntimeError):
+                execute_transfer(job_id=99)
+            mock_webhook.delay.assert_called_once_with(99)

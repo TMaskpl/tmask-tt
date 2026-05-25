@@ -176,3 +176,13 @@ class TestTestWebhookView:
         data = response.json()
         assert data['ok'] is False
         assert 'URL' in data['error']
+
+    def test_returns_error_on_timeout(self, auth_client):
+        import requests as req
+        url = reverse('accounts:test_webhook')
+        with patch('apps.accounts.views.requests.post',
+                   side_effect=req.Timeout('timeout')):
+            response = auth_client.post(url, {'webhook_url': 'http://hooks.example.com/'})
+        assert response.status_code == 200
+        data = response.json()
+        assert data['ok'] is False
