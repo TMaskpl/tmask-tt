@@ -58,16 +58,15 @@
         {% endif %}
         <button type="button" class="btn btn-sm"
                 hx-post="{% url 'accounts:test_webhook' %}"
-                hx-include="[name='webhook_url']"
+                hx-include="#id_webhook_url"
                 hx-target="#webhook-test-result"
                 hx-swap="innerHTML">[ TEST ]</button>
       </div>
       <div id="webhook-test-result" class="field-row"></div>
       <script>
         document.body.addEventListener('htmx:afterRequest', function(evt) {
-          if (!evt.detail.successful) return;
-          var el = document.getElementById('webhook-test-result');
-          if (!el) return;
+          if (evt.detail.target !== document.getElementById('webhook-test-result')) return;
+          var el = evt.detail.target;
           try {
             var data = JSON.parse(evt.detail.xhr.responseText);
             if (data.ok) {
