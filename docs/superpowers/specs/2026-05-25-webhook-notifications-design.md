@@ -181,7 +181,7 @@ Przycisk `[TEST]` — HTMX `hx-post="/accounts/test-webhook/"`, `hx-include` pob
 
 ## Zależności
 
-- `requests` — już w `services/worker/requirements.txt` (relay handler)
+- `requests` — **dodać do `services/worker/requirements.txt`** (brakuje, używane przez `send_webhook_notification`)
 - `requests` — **dodać do `services/web/requirements.txt`** (endpoint testowy w widoku Django)
 
 ## Wdrożenie
