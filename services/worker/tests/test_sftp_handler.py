@@ -184,3 +184,69 @@ class TestSFTPHandler:
 
             all_log_text = ' '.join(logs)
             assert 'super_secret_passphrase' not in all_log_text
+
+
+class TestSFTPChecksumVerification:
+    def _make_params(self, **kwargs):
+        defaults = {
+            'host': '192.168.1.10',
+            'port': 22,
+            'username': 'deploy',
+            'password': 'secret',
+            'ssh_key': None,
+            'source_path': '/data/file.tar',
+            'destination_path': '/backup/file.tar',
+            'compress': False,
+            'encrypt': False,
+            'gpg_passphrase': None,
+            'strict_host_key_checking': False,
+            'known_host_key': None,
+            'verify_checksum': False,
+        }
+        defaults.update(kwargs)
+        return defaults
+
+    def _make_mock_ssh(self):
+        mock_client = MagicMock()
+        mock_sftp = MagicMock()
+        mock_client.open_sftp.return_value.__enter__ = MagicMock(return_value=mock_sftp)
+        mock_client.open_sftp.return_value.__exit__ = MagicMock(return_value=False)
+        return mock_client
+
+    def test_calls_verify_sftp_after_transfer(self):
+        with patch('modules.sftp.handler.paramiko.SSHClient') as MockSSH, \
+             patch('modules.sftp.handler.verify_sftp') as mock_verify:
+            MockSSH.return_value = self._make_mock_ssh()
+            SFTPHandler(self._make_params(verify_checksum=True)).execute(lambda lvl, msg: None)
+        mock_verify.assert_called_once()
+
+    def test_skips_verify_when_disabled(self):
+        with patch('modules.sftp.handler.paramiko.SSHClient') as MockSSH, \
+             patch('modules.sftp.handler.verify_sftp') as mock_verify:
+            MockSSH.return_value = self._make_mock_ssh()
+            SFTPHandler(self._make_params(verify_checksum=False)).execute(lambda lvl, msg: None)
+        mock_verify.assert_not_called()
+
+    def test_raises_transfer_error_on_mismatch(self):
+        from modules.checksum.handler import ChecksumVerificationError
+        with patch('modules.sftp.handler.paramiko.SSHClient') as MockSSH, \
+             patch('modules.sftp.handler.verify_sftp',
+                   side_effect=ChecksumVerificationError('SHA-256 MISMATCH')):
+            MockSSH.return_value = self._make_mock_ssh()
+            with pytest.raises(SFTPTransferError, match='MISMATCH'):
+                SFTPHandler(self._make_params(verify_checksum=True)).execute(lambda lvl, msg: None)
+
+    def test_skips_verify_when_gpg_enabled(self):
+        encrypted_tmp = '/tmp/file_abc.gpg'
+        logs = []
+        with patch('modules.sftp.handler.encrypt_file', return_value=encrypted_tmp), \
+             patch('modules.sftp.handler.os.path.exists', return_value=True), \
+             patch('modules.sftp.handler.os.unlink'), \
+             patch('modules.sftp.handler.paramiko.SSHClient') as MockSSH, \
+             patch('modules.sftp.handler.verify_sftp') as mock_verify:
+            MockSSH.return_value = self._make_mock_ssh()
+            SFTPHandler(self._make_params(
+                encrypt=True, gpg_passphrase='secret', verify_checksum=True,
+            )).execute(lambda lvl, msg: logs.append((lvl, msg)))
+        mock_verify.assert_not_called()
+        assert any('SHA-256' in msg and 'pomijane' in msg for _, msg in logs)

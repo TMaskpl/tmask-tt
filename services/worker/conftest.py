@@ -16,6 +16,7 @@ def sftp_params():
         'gpg_passphrase': None,
         'strict_host_key_checking': False,
         'known_host_key': None,
+        'verify_checksum': False,
     }
 
 
