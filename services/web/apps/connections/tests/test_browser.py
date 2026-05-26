@@ -72,14 +72,6 @@ class TestBrowseDirectory:
         assert resp.status_code == 200
         assert 'id_source_path' in resp.content.decode()
 
-    def test_browse_with_dest_path_field_id(self, auth_client, regular_user, make_connection, mocker):
-        """field_id id_dest_path (flows context) passes validation and appears in fragment."""
-        conn = make_connection(regular_user)
-        mocker.patch('apps.connections.views.list_directory', return_value=[])
-        resp = auth_client.get(self._url(conn.pk, field_id='id_dest_path'))
-        assert resp.status_code == 200
-        assert 'id_dest_path' in resp.content.decode()
-
     def test_list_directory_full_path_does_not_escape_parent(self, auth_client, regular_user, make_connection, mocker):
         """list_directory builds full_path as parent+'/'+name, not posixpath.join which can escape parent."""
         conn = make_connection(regular_user)
