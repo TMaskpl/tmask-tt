@@ -9,5 +9,6 @@ urlpatterns = [
     path('flows/', include('apps.flows.urls')),
     path('transfers/', include('apps.transfers.urls')),
     path('scheduler/', include('apps.scheduler.urls')),
+    path('api/', include('apps.api.urls')),
     path('', RedirectView.as_view(url='/transfers/', permanent=False)),
 ]
