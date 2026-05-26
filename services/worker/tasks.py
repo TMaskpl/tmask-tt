@@ -32,6 +32,8 @@ def _build_params(job: TransferJob, gpg_passphrase=None) -> dict:
         'gpg_passphrase': gpg_passphrase,
         'strict_host_key_checking': conn.strict_host_key_checking,
         'known_host_key': conn.known_host_key,
+        'dry_run': conn.dry_run_before_transfer,
+        'verify_checksum': conn.verify_checksum,
     }
 
 
