@@ -186,3 +186,58 @@ class TestTestWebhookView:
         assert response.status_code == 200
         data = response.json()
         assert data['ok'] is False
+
+    def test_blocks_private_ip(self, auth_client):
+        url = reverse('accounts:test_webhook')
+        response = auth_client.post(url, {'webhook_url': 'http://192.168.1.100/hook'})
+        assert response.status_code == 200
+        data = response.json()
+        assert data['ok'] is False
+        assert 'wewnętrznych' in data['error']
+
+    def test_blocks_loopback_ip(self, auth_client):
+        url = reverse('accounts:test_webhook')
+        response = auth_client.post(url, {'webhook_url': 'http://127.0.0.1/hook'})
+        assert response.status_code == 200
+        data = response.json()
+        assert data['ok'] is False
+
+    def test_blocks_localhost(self, auth_client):
+        url = reverse('accounts:test_webhook')
+        response = auth_client.post(url, {'webhook_url': 'http://localhost/hook'})
+        assert response.status_code == 200
+        data = response.json()
+        assert data['ok'] is False
+
+    def test_blocks_non_http_scheme(self, auth_client):
+        url = reverse('accounts:test_webhook')
+        response = auth_client.post(url, {'webhook_url': 'file:///etc/passwd'})
+        assert response.status_code == 200
+        data = response.json()
+        assert data['ok'] is False
+        assert 'http' in data['error']
+
+
+@pytest.mark.django_db
+class TestProfileFormSSRF:
+    def test_rejects_private_webhook_url(self, auth_client):
+        url = reverse('accounts:profile')
+        response = auth_client.post(url, {
+            'email': '',
+            'webhook_url': 'http://10.0.0.1/hook',
+            'webhook_on_done': False,
+            'webhook_on_failed': False,
+        })
+        assert response.status_code == 200
+        assert 'webhook_url' in response.context['form'].errors
+
+    def test_rejects_localhost_webhook_url(self, auth_client):
+        url = reverse('accounts:profile')
+        response = auth_client.post(url, {
+            'email': '',
+            'webhook_url': 'http://localhost/hook',
+            'webhook_on_done': False,
+            'webhook_on_failed': False,
+        })
+        assert response.status_code == 200
+        assert 'webhook_url' in response.context['form'].errors

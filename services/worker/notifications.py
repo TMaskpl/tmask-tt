@@ -2,6 +2,7 @@ import requests
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.conf import settings
+from url_validator import block_private_url
 
 
 def _render_notification(job):
@@ -63,6 +64,10 @@ def send_webhook_notification(job) -> bool:
     if job.status == 'done' and not user.webhook_on_done:
         return False
     if job.status == 'failed' and not user.webhook_on_failed:
+        return False
+    try:
+        block_private_url(user.webhook_url)
+    except ValueError:
         return False
     payload = _build_webhook_payload(job)
     resp = requests.post(user.webhook_url, json=payload, timeout=10)

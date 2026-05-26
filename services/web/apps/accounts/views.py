@@ -9,6 +9,7 @@ from django.views.decorators.http import require_POST
 import requests
 
 from .forms import LoginForm, ProfileForm
+from utils.url_validator import block_private_url
 
 
 def login_view(request):
@@ -72,6 +73,10 @@ def test_webhook(request):
         'finished_at': None,
         'error': None,
     }
+    try:
+        block_private_url(url)
+    except ValueError as e:
+        return JsonResponse({'ok': False, 'error': str(e)})
     try:
         resp = requests.post(url, json=payload, timeout=5)
         resp.raise_for_status()

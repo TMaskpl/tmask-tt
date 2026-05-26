@@ -1,5 +1,6 @@
 from django import forms
 from django.contrib.auth import get_user_model
+from utils.url_validator import block_private_url
 
 
 class LoginForm(forms.Form):
@@ -26,3 +27,12 @@ class ProfileForm(forms.ModelForm):
             'webhook_on_done':   'Webhook przy sukcesie transferu',
             'webhook_on_failed': 'Webhook przy błędzie transferu',
         }
+
+    def clean_webhook_url(self):
+        url = self.cleaned_data.get('webhook_url', '').strip()
+        if url:
+            try:
+                block_private_url(url)
+            except ValueError as e:
+                raise forms.ValidationError(str(e))
+        return url

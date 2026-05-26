@@ -1,6 +1,8 @@
 import pytest
 from django.urls import reverse
 from apps.transfers.models import TransferJob, TransferLog, STATUS_PENDING
+from apps.transfers.forms import _validate_transfer_path
+from django.core.exceptions import ValidationError
 
 
 @pytest.mark.django_db
@@ -32,3 +34,31 @@ class TestTransferCreateView:
         response = auth_client.get(reverse('transfers:log_fragment', args=[job.pk]))
         assert response.status_code == 200
         assert b'Transfer started' in response.content
+
+
+class TestValidateTransferPath:
+    def test_accepts_normal_absolute_path(self):
+        _validate_transfer_path('/data/backups/file.tar')
+
+    def test_accepts_normal_relative_path(self):
+        _validate_transfer_path('backups/file.tar')
+
+    def test_rejects_double_dot_traversal(self):
+        with pytest.raises(ValidationError, match='\\.\\.'):
+            _validate_transfer_path('../../etc/passwd')
+
+    def test_rejects_double_dot_in_middle(self):
+        with pytest.raises(ValidationError):
+            _validate_transfer_path('/data/../etc/passwd')
+
+    def test_rejects_windows_style_traversal(self):
+        with pytest.raises(ValidationError):
+            _validate_transfer_path('data\\..\\etc\\passwd')
+
+    def test_rejects_leading_dash(self):
+        with pytest.raises(ValidationError):
+            _validate_transfer_path('-rf /tmp')
+
+    def test_rejects_control_characters(self):
+        with pytest.raises(ValidationError):
+            _validate_transfer_path('/data/file\x00name')

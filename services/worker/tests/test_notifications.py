@@ -202,6 +202,33 @@ class TestSendWebhookNotification:
         assert 'SFTP' in p['connection']
         assert p['error'] is None
 
+    def test_skips_if_private_ip_url(self):
+        from notifications import send_webhook_notification
+        job = self._make_job('failed', webhook_url='http://192.168.1.1/hook',
+                             webhook_on_failed=True)
+        with patch('notifications.requests.post') as mock_post:
+            result = send_webhook_notification(job)
+        assert result is False
+        mock_post.assert_not_called()
+
+    def test_skips_if_localhost_url(self):
+        from notifications import send_webhook_notification
+        job = self._make_job('failed', webhook_url='http://localhost/hook',
+                             webhook_on_failed=True)
+        with patch('notifications.requests.post') as mock_post:
+            result = send_webhook_notification(job)
+        assert result is False
+        mock_post.assert_not_called()
+
+    def test_skips_if_loopback_url(self):
+        from notifications import send_webhook_notification
+        job = self._make_job('failed', webhook_url='http://127.0.0.1/hook',
+                             webhook_on_failed=True)
+        with patch('notifications.requests.post') as mock_post:
+            result = send_webhook_notification(job)
+        assert result is False
+        mock_post.assert_not_called()
+
     def test_payload_connection_label_for_relay_flow(self):
         from notifications import send_webhook_notification
         job = self._make_job('done', webhook_url='http://hooks.example.com/',
