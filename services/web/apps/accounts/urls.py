@@ -10,4 +10,5 @@ urlpatterns = [
     path('users/', views.users_list, name='users'),
     path('profile/', views.profile_view, name='profile'),
     path('test-webhook/', views.test_webhook, name='test_webhook'),
+    path('api-tokens/generate/', views.generate_api_token, name='generate_api_token'),
 ]

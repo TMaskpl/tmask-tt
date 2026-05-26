@@ -11,6 +11,7 @@ import requests
 
 from .forms import LoginForm, ProfileForm
 from utils.url_validator import block_private_url
+from apps.api.models import ApiToken, MAX_TOKENS_PER_USER
 
 
 def login_view(request):
@@ -58,7 +59,13 @@ def profile_view(request):
             return redirect('accounts:profile')
     else:
         form = ProfileForm(instance=request.user)
-    return render(request, 'accounts/profile.html', {'form': form})
+    new_token = request.session.pop('new_api_token', None)
+    api_tokens = request.user.api_tokens.all()
+    return render(request, 'accounts/profile.html', {
+        'form': form,
+        'api_tokens': api_tokens,
+        'new_token': new_token,
+    })
 
 
 @login_required
@@ -87,3 +94,19 @@ def test_webhook(request):
         return JsonResponse({'ok': True, 'code': resp.status_code})
     except requests.RequestException as e:
         return JsonResponse({'ok': False, 'error': str(e)})
+
+
+@login_required
+@require_POST
+def generate_api_token(request):
+    if request.user.api_tokens.count() >= MAX_TOKENS_PER_USER:
+        messages.error(request, f'Limit {MAX_TOKENS_PER_USER} tokenów osiągnięty. Usuń token aby dodać nowy.')
+        return redirect('accounts:profile')
+    label = request.POST.get('label', '').strip()[:100]
+    if not label:
+        messages.error(request, 'Etykieta tokenu jest wymagana.')
+        return redirect('accounts:profile')
+    _, raw_key = ApiToken.generate(request.user, label)
+    request.session['new_api_token'] = raw_key
+    messages.success(request, 'Token wygenerowany. Zapisz go — nie zostanie pokazany ponownie.')
+    return redirect('accounts:profile')
