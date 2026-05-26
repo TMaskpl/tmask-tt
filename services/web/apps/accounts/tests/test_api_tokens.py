@@ -75,7 +75,7 @@ class TestRevokeApiToken:
     def test_revoke_redirects_to_profile(self, auth_client, regular_user, make_api_token):
         token, _ = make_api_token(regular_user)
         response = auth_client.post(f'/accounts/api-tokens/{token.pk}/revoke/')
-        assert response.url == '/accounts/profile/'
+        assert response.url == reverse('accounts:profile')
 
     def test_revoke_cannot_delete_other_users_token(self, auth_client, admin_user, make_api_token):
         token, _ = make_api_token(admin_user)  # admin's token
