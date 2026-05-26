@@ -27,13 +27,15 @@ class TestLocalSha256:
 
 
 class TestVerifySftp:
-    def _make_client(self, stdout_content: bytes, stderr_content: bytes = b""):
+    def _make_client(self, stdout_content: bytes, stderr_content: bytes = b"", exit_status: int = 0):
         mock_client = MagicMock()
+        mock_chan = MagicMock()
+        mock_chan.recv_exit_status.return_value = exit_status
         mock_stdout = MagicMock()
         mock_stdout.read.return_value = stdout_content
         mock_stderr = MagicMock()
         mock_stderr.read.return_value = stderr_content
-        mock_client.exec_command.return_value = (None, mock_stdout, mock_stderr)
+        mock_client.exec_command.return_value = (mock_chan, mock_stdout, mock_stderr)
         return mock_client
 
     def test_ok_when_hashes_match(self, tmp_path):
@@ -57,7 +59,15 @@ class TestVerifySftp:
     def test_raises_when_sha256sum_missing(self, tmp_path):
         src = tmp_path / "src.bin"
         src.write_bytes(b"content")
-        client = self._make_client(b"", b"sha256sum: command not found")
+        client = self._make_client(b"", b"sha256sum: command not found", exit_status=1)
+        with pytest.raises(ChecksumVerificationError, match="sha256sum failed"):
+            verify_sftp(str(src), client, "/dest/file.bin", lambda lvl, msg: None)
+
+    def test_raises_when_exit_status_nonzero(self, tmp_path):
+        src = tmp_path / "src.bin"
+        src.write_bytes(b"content")
+        # sha256sum writes something to stdout but exit != 0 (e.g. read error)
+        client = self._make_client(b"partial output", b"read error", exit_status=1)
         with pytest.raises(ChecksumVerificationError, match="sha256sum failed"):
             verify_sftp(str(src), client, "/dest/file.bin", lambda lvl, msg: None)
 
@@ -100,6 +110,17 @@ class TestVerifyRsync:
         src = tmp_path / "src.bin"
         src.write_bytes(b"content")
         result = self._make_result(1, "", "sha256sum: No such file or directory")
+        with patch("modules.checksum.handler.subprocess.run", return_value=result):
+            with pytest.raises(ChecksumVerificationError, match="sha256sum failed"):
+                verify_rsync(
+                    str(src), ["ssh", "user@host"], "/dest/file.bin",
+                    lambda lvl, msg: None,
+                )
+
+    def test_raises_when_stdout_empty(self, tmp_path):
+        src = tmp_path / "src.bin"
+        src.write_bytes(b"content")
+        result = self._make_result(0, "", "")  # returncode=0 but empty stdout
         with patch("modules.checksum.handler.subprocess.run", return_value=result):
             with pytest.raises(ChecksumVerificationError, match="sha256sum failed"):
                 verify_rsync(
