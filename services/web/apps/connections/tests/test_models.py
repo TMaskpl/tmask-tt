@@ -46,3 +46,15 @@ class TestConnection:
     def test_strict_host_key_checking_default_true(self, regular_user):
         conn = Connection(owner=regular_user, name='X', host='h', username='u', protocol='sftp')
         assert conn.strict_host_key_checking is True
+
+    def test_dry_run_before_transfer_default_false(self, regular_user):
+        conn = Connection(
+            owner=regular_user, name='X', host='h', username='u', protocol='rsync'
+        )
+        assert conn.dry_run_before_transfer is False
+
+    def test_verify_checksum_default_false(self, regular_user):
+        conn = Connection(
+            owner=regular_user, name='X', host='h', username='u', protocol='sftp'
+        )
+        assert conn.verify_checksum is False

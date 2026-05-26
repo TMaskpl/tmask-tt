@@ -19,6 +19,8 @@ class Connection(models.Model):
     encrypt  = models.BooleanField(default=False)
     strict_host_key_checking = models.BooleanField(default=True)
     known_host_key = models.TextField(null=True, blank=True)
+    dry_run_before_transfer = models.BooleanField(default=False)
+    verify_checksum = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
