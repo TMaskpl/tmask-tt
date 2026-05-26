@@ -9,11 +9,11 @@
       {% for field in form %}
       <div class="field">
         <label>{{ field.label|upper }}:</label>
-        {% if field.html_name == 'destination_path' %}
+        {% if field.html_name == 'source_path' or field.html_name == 'destination_path' %}
         <div class="field-with-btn">
           {{ field }}
           <button type="button" class="btn btn-small"
-            onclick="openBrowser('id_destination_path', document.getElementById('id_connection').value)">
+            onclick="openBrowser('{{ field.auto_id }}', document.getElementById('id_connection').value)">
             [BROWSE]
           </button>
         </div>

@@ -63,3 +63,42 @@ class TestBrowseDirectory:
 
         assert resp.status_code == 200
         assert 'id_dest_path' in resp.content.decode()
+
+    def test_browse_with_source_path_field_id(self, auth_client, regular_user, make_connection, mocker):
+        """field_id id_source_path (transfers/flows context) passes validation and appears in fragment."""
+        conn = make_connection(regular_user)
+        mocker.patch('apps.connections.views.list_directory', return_value=[])
+        resp = auth_client.get(self._url(conn.pk, field_id='id_source_path'))
+        assert resp.status_code == 200
+        assert 'id_source_path' in resp.content.decode()
+
+    def test_browse_with_dest_path_field_id(self, auth_client, regular_user, make_connection, mocker):
+        """field_id id_dest_path (flows context) passes validation and appears in fragment."""
+        conn = make_connection(regular_user)
+        mocker.patch('apps.connections.views.list_directory', return_value=[])
+        resp = auth_client.get(self._url(conn.pk, field_id='id_dest_path'))
+        assert resp.status_code == 200
+        assert 'id_dest_path' in resp.content.decode()
+
+    def test_list_directory_full_path_does_not_escape_parent(self, auth_client, regular_user, make_connection, mocker):
+        """list_directory builds full_path as parent+'/'+name, not posixpath.join which can escape parent."""
+        conn = make_connection(regular_user)
+
+        mock_attr = mocker.MagicMock()
+        mock_attr.filename = '/etc/passwd'
+        mock_attr.st_mode = 0o100644
+        mock_attr.st_size = 512
+
+        mock_sftp = mocker.MagicMock()
+        mock_sftp.listdir_attr.return_value = [mock_attr]
+        mock_client = mocker.MagicMock()
+        mock_client.open_sftp.return_value = mock_sftp
+
+        mocker.patch('apps.connections.sftp_utils._build_client', return_value=mock_client)
+
+        from apps.connections.sftp_utils import list_directory
+        entries = list_directory(conn, '/home/user')
+
+        assert len(entries) == 1
+        assert entries[0].full_path != '/etc/passwd'
+        assert '/home/user' in entries[0].full_path

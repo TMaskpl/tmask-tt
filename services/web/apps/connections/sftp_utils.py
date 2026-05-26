@@ -64,7 +64,7 @@ def list_directory(connection, path):
         entries.append(SimpleNamespace(
             name=attr.filename,
             is_dir=is_dir,
-            full_path=posixpath.join(path, attr.filename),
+            full_path=path.rstrip('/') + '/' + attr.filename,
             size=attr.st_size if not is_dir else None,
         ))
     return sorted(entries, key=lambda e: (not e.is_dir, e.name.lower()))
