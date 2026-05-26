@@ -273,6 +273,59 @@ class TestRsyncDryRun:
         assert '--dry-run' not in calls[0]
 
 
+class TestBuildSshCmdPrefix:
+    def _make_params(self, **kwargs):
+        defaults = {
+            'host': '192.168.1.10',
+            'port': 22,
+            'username': 'deploy',
+            'password': None,
+            'ssh_key': None,
+            'source_path': '/data/file.tar',
+            'destination_path': '/backup/file.tar',
+            'compress': False,
+            'encrypt': False,
+            'gpg_passphrase': None,
+            'strict_host_key_checking': False,
+            'known_host_key': None,
+            'dry_run': False,
+            'verify_checksum': False,
+        }
+        defaults.update(kwargs)
+        return defaults
+
+    def test_basic_command_structure(self):
+        handler = RsyncHandler(self._make_params())
+        prefix = handler._build_ssh_cmd_prefix()
+        assert prefix[0] == 'ssh'
+        assert '-p' in prefix
+        assert '22' in prefix
+        assert 'deploy@192.168.1.10' in prefix
+
+    def test_ssh_key_included(self):
+        handler = RsyncHandler(self._make_params(ssh_key='/home/user/.ssh/id_rsa'))
+        prefix = handler._build_ssh_cmd_prefix()
+        assert '-i' in prefix
+        assert '/home/user/.ssh/id_rsa' in prefix
+
+    def test_strict_host_key_checking_with_known_hosts(self):
+        handler = RsyncHandler(self._make_params(strict_host_key_checking=True))
+        prefix = handler._build_ssh_cmd_prefix(known_hosts_path='/tmp/known_hosts')
+        options_str = ' '.join(prefix)
+        assert 'UserKnownHostsFile' in options_str
+        assert 'StrictHostKeyChecking=yes' in options_str
+
+    def test_strict_host_key_checking_disabled(self):
+        handler = RsyncHandler(self._make_params(strict_host_key_checking=False))
+        prefix = handler._build_ssh_cmd_prefix()
+        assert 'StrictHostKeyChecking=no' in prefix
+
+    def test_invalid_port_raises(self):
+        handler = RsyncHandler(self._make_params(port=99999))
+        with pytest.raises(ValueError, match='Invalid port'):
+            handler._build_ssh_cmd_prefix()
+
+
 class TestRsyncChecksumVerification:
     def _make_params(self, **kwargs):
         defaults = {
@@ -305,6 +358,9 @@ class TestRsyncChecksumVerification:
              patch('modules.rsync.handler.verify_rsync') as mock_verify:
             RsyncHandler(self._make_params(verify_checksum=True)).execute(lambda lvl, msg: None)
         mock_verify.assert_called_once()
+        call_args = mock_verify.call_args
+        assert call_args[0][0] == '/data/file.tar'    # source_path
+        assert call_args[0][2] == '/backup/file.tar'  # destination_path
 
     def test_skips_verify_when_disabled(self):
         with patch('modules.rsync.handler.subprocess.Popen', return_value=self._popen_ok()), \

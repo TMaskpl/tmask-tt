@@ -56,14 +56,16 @@ class RsyncHandler:
 
     def _build_ssh_cmd_prefix(self, known_hosts_path=None) -> list:
         port = int(self.params['port'])
+        if not (1 <= port <= 65535):
+            raise ValueError(f'Invalid port: {port}')
         cmd = ['ssh', '-p', str(port), '-o', 'BatchMode=yes']
         if self.params.get('strict_host_key_checking') and known_hosts_path:
-            cmd += ['-o', f'UserKnownHostsFile={known_hosts_path}',
+            cmd += ['-o', f'UserKnownHostsFile={shlex.quote(known_hosts_path)}',
                     '-o', 'StrictHostKeyChecking=yes']
         elif not self.params.get('strict_host_key_checking', True):
             cmd += ['-o', 'StrictHostKeyChecking=no']
         if self.params.get('ssh_key'):
-            cmd += ['-i', self.params['ssh_key']]
+            cmd += ['-i', shlex.quote(self.params['ssh_key'])]
         cmd.append(f'{self.params["username"]}@{self.params["host"]}')
         return cmd
 
@@ -144,19 +146,20 @@ class RsyncHandler:
                 self._check_rsync_output(last_exit_code, output)
                 if last_exit_code == 0:
                     log_callback('info', 'Transfer complete')
-                    if self.params.get('verify_checksum') and not use_gpg:
-                        try:
-                            ssh_prefix = self._build_ssh_cmd_prefix(known_hosts_path)
-                            verify_rsync(
-                                source_override or self.params['source_path'],
-                                ssh_prefix,
-                                dest_override or self.params['destination_path'],
-                                log_callback,
-                            )
-                        except ChecksumVerificationError as e:
-                            raise RsyncTransferError(str(e))
-                    elif self.params.get('verify_checksum') and use_gpg:
-                        log_callback('warn', 'SHA-256: pomijane — GPG włączone (encrypted file)')
+                    if self.params.get('verify_checksum'):
+                        if use_gpg:
+                            log_callback('warn', 'SHA-256: pomijane — GPG włączone (encrypted file)')
+                        else:
+                            try:
+                                ssh_prefix = self._build_ssh_cmd_prefix(known_hosts_path)
+                                verify_rsync(
+                                    source_override or self.params['source_path'],
+                                    ssh_prefix,
+                                    dest_override or self.params['destination_path'],
+                                    log_callback,
+                                )
+                            except ChecksumVerificationError as e:
+                                raise RsyncTransferError(str(e))
                     return
                 if attempt < RSYNC_MAX_RETRIES:
                     log_callback('warn', f'rsync failed (exit {last_exit_code}), retrying in {RSYNC_RETRY_DELAY}s...')
