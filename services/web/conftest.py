@@ -57,3 +57,10 @@ def make_flow():
         defaults.update(kwargs)
         return Flow.objects.create(owner=user, **defaults)
     return _make
+
+@pytest.fixture
+def make_api_token():
+    from apps.api.models import ApiToken
+    def _make(user, label='Test Token'):
+        return ApiToken.generate(user, label)  # returns (token, raw_key)
+    return _make
