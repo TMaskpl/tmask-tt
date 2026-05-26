@@ -60,12 +60,12 @@ class RsyncHandler:
             raise ValueError(f'Invalid port: {port}')
         cmd = ['ssh', '-p', str(port), '-o', 'BatchMode=yes']
         if self.params.get('strict_host_key_checking') and known_hosts_path:
-            cmd += ['-o', f'UserKnownHostsFile={shlex.quote(known_hosts_path)}',
+            cmd += ['-o', f'UserKnownHostsFile={known_hosts_path}',
                     '-o', 'StrictHostKeyChecking=yes']
         elif not self.params.get('strict_host_key_checking', True):
             cmd += ['-o', 'StrictHostKeyChecking=no']
         if self.params.get('ssh_key'):
-            cmd += ['-i', shlex.quote(self.params['ssh_key'])]
+            cmd += ['-i', self.params['ssh_key']]
         cmd.append(f'{self.params["username"]}@{self.params["host"]}')
         return cmd
 
