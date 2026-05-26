@@ -1,9 +1,11 @@
 import pytest
 import paramiko
 from unittest.mock import MagicMock, patch, call
+from unittest import mock
 
 from modules.sftp.handler import SFTPHandler, SFTPTransferError
 from modules.sftp.config import SFTP_MAX_RETRIES, SFTP_RETRY_DELAY
+from modules.checksum.handler import ChecksumVerificationError
 
 
 class TestSFTPHandler:
@@ -218,7 +220,12 @@ class TestSFTPChecksumVerification:
              patch('modules.sftp.handler.verify_sftp') as mock_verify:
             MockSSH.return_value = self._make_mock_ssh()
             SFTPHandler(self._make_params(verify_checksum=True)).execute(lambda lvl, msg: None)
-        mock_verify.assert_called_once()
+        mock_verify.assert_called_once_with(
+            '/data/file.tar',
+            MockSSH.return_value,
+            '/backup/file.tar',
+            mock.ANY,
+        )
 
     def test_skips_verify_when_disabled(self):
         with patch('modules.sftp.handler.paramiko.SSHClient') as MockSSH, \
@@ -228,7 +235,6 @@ class TestSFTPChecksumVerification:
         mock_verify.assert_not_called()
 
     def test_raises_transfer_error_on_mismatch(self):
-        from modules.checksum.handler import ChecksumVerificationError
         with patch('modules.sftp.handler.paramiko.SSHClient') as MockSSH, \
              patch('modules.sftp.handler.verify_sftp',
                    side_effect=ChecksumVerificationError('SHA-256 MISMATCH')):

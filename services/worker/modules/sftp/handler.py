@@ -77,6 +77,8 @@ class SFTPHandler:
                     except ChecksumVerificationError as e:
                         raise SFTPTransferError(str(e))
             log_callback('info', 'Transfer complete')
+        except (socket.timeout, socket.gaierror, TimeoutError):
+            raise
         except FileNotFoundError:
             raise SFTPTransferError(f'SOURCE NOT FOUND: {source}')
         except OSError as e:
