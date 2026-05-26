@@ -13,6 +13,7 @@ from .config import (
     RSYNC_TIMEOUT,
 )
 from modules.gpg.handler import encrypt_file, GPGEncryptError
+from modules.checksum.handler import verify_rsync, ChecksumVerificationError
 
 
 class RsyncTransferError(Exception):
@@ -51,6 +52,19 @@ class RsyncHandler:
         cmd += ['-e', f'ssh {ssh_opts}', '--']
         cmd.append(source)
         cmd.append(f'{self.params["username"]}@{self.params["host"]}:{dest}')
+        return cmd
+
+    def _build_ssh_cmd_prefix(self, known_hosts_path=None) -> list:
+        port = int(self.params['port'])
+        cmd = ['ssh', '-p', str(port), '-o', 'BatchMode=yes']
+        if self.params.get('strict_host_key_checking') and known_hosts_path:
+            cmd += ['-o', f'UserKnownHostsFile={known_hosts_path}',
+                    '-o', 'StrictHostKeyChecking=yes']
+        elif not self.params.get('strict_host_key_checking', True):
+            cmd += ['-o', 'StrictHostKeyChecking=no']
+        if self.params.get('ssh_key'):
+            cmd += ['-i', self.params['ssh_key']]
+        cmd.append(f'{self.params["username"]}@{self.params["host"]}')
         return cmd
 
     def _run_attempt(self, cmd: list, log_callback: Callable[[str, str], None]) -> tuple[int, str]:
@@ -130,6 +144,19 @@ class RsyncHandler:
                 self._check_rsync_output(last_exit_code, output)
                 if last_exit_code == 0:
                     log_callback('info', 'Transfer complete')
+                    if self.params.get('verify_checksum') and not use_gpg:
+                        try:
+                            ssh_prefix = self._build_ssh_cmd_prefix(known_hosts_path)
+                            verify_rsync(
+                                source_override or self.params['source_path'],
+                                ssh_prefix,
+                                dest_override or self.params['destination_path'],
+                                log_callback,
+                            )
+                        except ChecksumVerificationError as e:
+                            raise RsyncTransferError(str(e))
+                    elif self.params.get('verify_checksum') and use_gpg:
+                        log_callback('warn', 'SHA-256: pomijane — GPG włączone (encrypted file)')
                     return
                 if attempt < RSYNC_MAX_RETRIES:
                     log_callback('warn', f'rsync failed (exit {last_exit_code}), retrying in {RSYNC_RETRY_DELAY}s...')

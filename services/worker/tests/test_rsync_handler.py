@@ -271,3 +271,65 @@ class TestRsyncDryRun:
 
         assert len(calls) == 1
         assert '--dry-run' not in calls[0]
+
+
+class TestRsyncChecksumVerification:
+    def _make_params(self, **kwargs):
+        defaults = {
+            'host': '192.168.1.10',
+            'port': 22,
+            'username': 'deploy',
+            'password': None,
+            'ssh_key': None,
+            'source_path': '/data/file.tar',
+            'destination_path': '/backup/file.tar',
+            'compress': False,
+            'encrypt': False,
+            'gpg_passphrase': None,
+            'strict_host_key_checking': False,
+            'known_host_key': None,
+            'dry_run': False,
+            'verify_checksum': False,
+        }
+        defaults.update(kwargs)
+        return defaults
+
+    def _popen_ok(self):
+        m = MagicMock()
+        m.stdout = iter([])
+        m.wait.return_value = 0
+        return m
+
+    def test_calls_verify_rsync_after_successful_transfer(self):
+        with patch('modules.rsync.handler.subprocess.Popen', return_value=self._popen_ok()), \
+             patch('modules.rsync.handler.verify_rsync') as mock_verify:
+            RsyncHandler(self._make_params(verify_checksum=True)).execute(lambda lvl, msg: None)
+        mock_verify.assert_called_once()
+
+    def test_skips_verify_when_disabled(self):
+        with patch('modules.rsync.handler.subprocess.Popen', return_value=self._popen_ok()), \
+             patch('modules.rsync.handler.verify_rsync') as mock_verify:
+            RsyncHandler(self._make_params(verify_checksum=False)).execute(lambda lvl, msg: None)
+        mock_verify.assert_not_called()
+
+    def test_raises_transfer_error_on_mismatch(self):
+        from modules.checksum.handler import ChecksumVerificationError
+        with patch('modules.rsync.handler.subprocess.Popen', return_value=self._popen_ok()), \
+             patch('modules.rsync.handler.verify_rsync',
+                   side_effect=ChecksumVerificationError('SHA-256 MISMATCH')):
+            with pytest.raises(RsyncTransferError, match='MISMATCH'):
+                RsyncHandler(self._make_params(verify_checksum=True)).execute(lambda lvl, msg: None)
+
+    def test_skips_verify_when_gpg_enabled(self):
+        encrypted_tmp = '/tmp/data_abc.gpg'
+        logs = []
+        with patch('modules.rsync.handler.encrypt_file', return_value=encrypted_tmp), \
+             patch('modules.rsync.handler.os.path.exists', return_value=True), \
+             patch('modules.rsync.handler.os.unlink'), \
+             patch('modules.rsync.handler.subprocess.Popen', return_value=self._popen_ok()), \
+             patch('modules.rsync.handler.verify_rsync') as mock_verify:
+            RsyncHandler(self._make_params(
+                encrypt=True, gpg_passphrase='secret', verify_checksum=True,
+            )).execute(lambda lvl, msg: logs.append((lvl, msg)))
+        mock_verify.assert_not_called()
+        assert any('SHA-256' in msg and 'pomijane' in msg for _, msg in logs)
