@@ -107,6 +107,7 @@
           <th style="text-align:left; padding:4px 8px; border-bottom:1px solid var(--fg);">ETYKIETA</th>
           <th style="text-align:left; padding:4px 8px; border-bottom:1px solid var(--fg);">UTWORZONY</th>
           <th style="text-align:left; padding:4px 8px; border-bottom:1px solid var(--fg);">OSTATNIO UŻYWANY</th>
+          <th style="text-align:left; padding:4px 8px; border-bottom:1px solid var(--fg);">AKCJA</th>
         </tr>
       </thead>
       <tbody>
@@ -115,6 +116,12 @@
           <td style="padding:4px 8px;">{{ token.label }}</td>
           <td style="padding:4px 8px;">{{ token.created_at|date:"Y-m-d H:i" }}</td>
           <td style="padding:4px 8px;">{{ token.last_used_at|date:"Y-m-d H:i"|default:"—" }}</td>
+          <td style="padding:4px 8px;">
+            <form method="post" action="{% url 'accounts:revoke_api_token' token.pk %}" onsubmit="return confirm('Usunąć token {{ token.label|escapejs }}?')">
+              {% csrf_token %}
+              <button type="submit" class="btn-danger">[ REVOKE ]</button>
+            </form>
+          </td>
         </tr>
         {% endfor %}
       </tbody>

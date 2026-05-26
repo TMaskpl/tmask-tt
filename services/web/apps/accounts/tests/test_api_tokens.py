@@ -61,3 +61,34 @@ class TestGenerateApiToken:
         auth_client.get(profile_url)  # konsumuje sesję
         response = auth_client.get(profile_url)  # drugi visit — modal nie powinien być
         assert b'NOWY TOKEN API' not in response.content
+
+
+@pytest.mark.django_db
+class TestRevokeApiToken:
+    def test_revoke_deletes_token(self, auth_client, regular_user, make_api_token):
+        token, _ = make_api_token(regular_user)
+        response = auth_client.post(f'/accounts/api-tokens/{token.pk}/revoke/')
+        assert response.status_code == 302
+        from apps.api.models import ApiToken
+        assert not ApiToken.objects.filter(pk=token.pk).exists()
+
+    def test_revoke_redirects_to_profile(self, auth_client, regular_user, make_api_token):
+        token, _ = make_api_token(regular_user)
+        response = auth_client.post(f'/accounts/api-tokens/{token.pk}/revoke/')
+        assert response.url == '/accounts/profile/'
+
+    def test_revoke_cannot_delete_other_users_token(self, auth_client, admin_user, make_api_token):
+        token, _ = make_api_token(admin_user)  # admin's token
+        response = auth_client.post(f'/accounts/api-tokens/{token.pk}/revoke/')
+        assert response.status_code == 404
+        from apps.api.models import ApiToken
+        assert ApiToken.objects.filter(pk=token.pk).exists()
+
+    def test_revoke_nonexistent_token_returns_404(self, auth_client):
+        response = auth_client.post('/accounts/api-tokens/99999/revoke/')
+        assert response.status_code == 404
+
+    def test_revoke_unauthenticated_redirects_to_login(self, client):
+        response = client.post('/accounts/api-tokens/1/revoke/')
+        assert response.status_code == 302
+        assert '/accounts/login/' in response.url

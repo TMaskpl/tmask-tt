@@ -4,7 +4,7 @@ from django.contrib.auth import login, logout, authenticate, get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.http import JsonResponse
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 import requests
@@ -110,4 +110,13 @@ def generate_api_token(request):
     _, raw_key = ApiToken.generate(request.user, label)
     request.session['new_api_token'] = raw_key
     messages.success(request, 'Token wygenerowany. Zapisz go — nie zostanie pokazany ponownie.')
+    return redirect('accounts:profile')
+
+
+@login_required
+@require_POST
+def revoke_api_token(request, token_id):
+    token = get_object_or_404(ApiToken, pk=token_id, user=request.user)
+    token.delete()
+    messages.success(request, 'Token usunięty.')
     return redirect('accounts:profile')
