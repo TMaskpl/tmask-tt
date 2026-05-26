@@ -35,4 +35,6 @@ def rsync_params():
         'gpg_passphrase': None,
         'strict_host_key_checking': False,
         'known_host_key': None,
+        'dry_run': False,
+        'verify_checksum': False,
     }

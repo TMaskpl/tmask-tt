@@ -272,6 +272,31 @@ class TestRsyncDryRun:
         assert len(calls) == 1
         assert '--dry-run' not in calls[0]
 
+    def test_dry_run_uses_encrypted_path_when_gpg_enabled(self):
+        encrypted_tmp = '/tmp/data_abc.gpg'
+        calls = []
+
+        def fake_popen(cmd, **kwargs):
+            calls.append(list(cmd))
+            m = MagicMock()
+            m.stdout = iter([])
+            m.wait.return_value = 0
+            return m
+
+        with patch('modules.rsync.handler.encrypt_file', return_value=encrypted_tmp), \
+             patch('modules.rsync.handler.os.path.exists', return_value=True), \
+             patch('modules.rsync.handler.os.unlink'), \
+             patch('modules.rsync.handler.subprocess.Popen', side_effect=fake_popen):
+            RsyncHandler(self._make_params(
+                dry_run=True, encrypt=True, gpg_passphrase='secret',
+            )).execute(lambda lvl, msg: None)
+
+        assert len(calls) == 2
+        assert '--dry-run' in calls[0]
+        assert encrypted_tmp in calls[0]   # dry-run uses encrypted path
+        assert '--dry-run' not in calls[1]
+        assert encrypted_tmp in calls[1]   # real transfer also uses encrypted path
+
 
 class TestBuildSshCmdPrefix:
     def _make_params(self, **kwargs):

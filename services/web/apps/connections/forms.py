@@ -28,3 +28,10 @@ class ConnectionForm(forms.ModelForm):
         if not cleaned.get('password') and not cleaned.get('ssh_key'):
             raise forms.ValidationError('Podaj hasło lub klucz SSH.')
         return cleaned
+
+    def clean_dry_run_before_transfer(self):
+        value = self.cleaned_data.get('dry_run_before_transfer')
+        protocol = self.cleaned_data.get('protocol')
+        if value and protocol != 'rsync':
+            raise forms.ValidationError('Dry-run jest dostępny tylko dla protokołu rsync.')
+        return value

@@ -3,6 +3,9 @@ import shlex
 import subprocess
 
 
+CHECKSUM_TIMEOUT = 30
+
+
 class ChecksumVerificationError(Exception):
     pass
 
@@ -33,7 +36,7 @@ def verify_sftp(source_path: str, ssh_client, remote_path: str, log_callback) ->
 def verify_rsync(source_path: str, ssh_cmd_prefix: list, remote_path: str, log_callback) -> None:
     local_hash = _local_sha256(source_path)
     cmd = ssh_cmd_prefix + [f'sha256sum {shlex.quote(remote_path)}']
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=CHECKSUM_TIMEOUT)
     if result.returncode != 0:
         raise ChecksumVerificationError(f'sha256sum failed: {result.stderr.strip()}')
     parts = result.stdout.strip().split()
