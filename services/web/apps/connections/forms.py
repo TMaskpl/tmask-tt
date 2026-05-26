@@ -1,11 +1,19 @@
 from django import forms
 from .models import Connection
 
+
 class ConnectionForm(forms.ModelForm):
     class Meta:
         model = Connection
-        fields = ['name', 'host', 'port', 'username', 'password', 'ssh_key',
-                  'protocol', 'compress', 'encrypt', 'strict_host_key_checking', 'known_host_key']
+        fields = [
+            'name', 'host', 'port', 'username', 'password', 'ssh_key',
+            'protocol', 'compress', 'encrypt', 'strict_host_key_checking',
+            'known_host_key', 'dry_run_before_transfer', 'verify_checksum',
+        ]
+        labels = {
+            'dry_run_before_transfer': 'Dry-run przed transferem (tylko rsync)',
+            'verify_checksum':         'Weryfikuj integralność SHA-256 po transferze',
+        }
         widgets = {
             'password': forms.PasswordInput(render_value=True),
             'ssh_key': forms.Textarea(attrs={'rows': 6}),

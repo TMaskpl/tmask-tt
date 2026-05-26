@@ -24,6 +24,25 @@
       <div style="color:var(--red);font-size:0.8rem;">{% for e in field.errors %}{{ e }}{% endfor %}</div>
       {% endif %}
     </div>
+    {% elif field.name == 'dry_run_before_transfer' %}
+    <div class="box-title" style="margin-top:1.2rem;font-size:0.85rem;">[ OPCJE ZAAWANSOWANE ]</div>
+    <div class="field">
+      <label>{{ field.label|upper }}:</label>
+      {{ field }}
+      <span style="font-size:0.75rem;color:var(--dim);">Sprawdza listę plików bez kopiowania. Transfer anulowany jeśli dry-run zakończy się błędem.</span>
+      {% if field.errors %}
+      <div style="color:var(--red);font-size:0.8rem;">{% for e in field.errors %}{{ e }}{% endfor %}</div>
+      {% endif %}
+    </div>
+    {% elif field.name == 'verify_checksum' %}
+    <div class="field">
+      <label>{{ field.label|upper }}:</label>
+      {{ field }}
+      <span style="font-size:0.75rem;color:var(--dim);">Wymaga sha256sum na zdalnym hoście. Ignorowane gdy GPG włączone.</span>
+      {% if field.errors %}
+      <div style="color:var(--red);font-size:0.8rem;">{% for e in field.errors %}{{ e }}{% endfor %}</div>
+      {% endif %}
+    </div>
     {% else %}
     <div class="field">
       <label>{{ field.label|upper }}:</label>
