@@ -190,3 +190,84 @@ class TestRsyncHandler:
                 RsyncHandler(params).execute(log_callback=lambda lvl, msg: None)
 
             mock_unlink.assert_called_once_with(encrypted_tmp)
+
+
+class TestRsyncDryRun:
+    def _make_params(self, **kwargs):
+        defaults = {
+            'host': '192.168.1.10',
+            'port': 22,
+            'username': 'deploy',
+            'password': None,
+            'ssh_key': None,
+            'source_path': '/data/',
+            'destination_path': '/backup/',
+            'compress': False,
+            'encrypt': False,
+            'gpg_passphrase': None,
+            'strict_host_key_checking': False,
+            'known_host_key': None,
+            'dry_run': False,
+            'verify_checksum': False,
+        }
+        defaults.update(kwargs)
+        return defaults
+
+    def test_dry_run_command_includes_flag(self):
+        handler = RsyncHandler(self._make_params())
+        cmd = handler._build_command(dry_run=True)
+        assert '--dry-run' in cmd
+
+    def test_real_command_excludes_dry_run_flag(self):
+        handler = RsyncHandler(self._make_params())
+        cmd = handler._build_command(dry_run=False)
+        assert '--dry-run' not in cmd
+
+    def test_dry_run_runs_before_real_transfer(self):
+        calls = []
+
+        def fake_popen(cmd, **kwargs):
+            calls.append(list(cmd))
+            m = MagicMock()
+            m.stdout = iter([])
+            m.wait.return_value = 0
+            return m
+
+        with patch('modules.rsync.handler.subprocess.Popen', side_effect=fake_popen):
+            RsyncHandler(self._make_params(dry_run=True)).execute(lambda lvl, msg: None)
+
+        assert len(calls) == 2
+        assert '--dry-run' in calls[0]
+        assert '--dry-run' not in calls[1]
+
+    def test_dry_run_failure_aborts_transfer(self):
+        call_count = [0]
+
+        def fake_popen(cmd, **kwargs):
+            call_count[0] += 1
+            m = MagicMock()
+            m.stdout = iter([])
+            m.wait.return_value = 1
+            return m
+
+        with patch('modules.rsync.handler.subprocess.Popen', side_effect=fake_popen):
+            with pytest.raises(RsyncTransferError, match='DRY-RUN FAILED'):
+                RsyncHandler(self._make_params(dry_run=True)).execute(lambda lvl, msg: None)
+
+        assert call_count[0] == 1  # tylko dry-run, właściwy transfer nie wywołany
+
+    def test_dry_run_skipped_when_disabled(self):
+        calls = []
+
+        def fake_popen(cmd, **kwargs):
+            calls.append(list(cmd))
+            m = MagicMock()
+            m.stdout = iter([])
+            m.wait.return_value = 0
+            return m
+
+        with patch('modules.rsync.handler.subprocess.Popen', side_effect=fake_popen):
+            RsyncHandler(self._make_params(dry_run=False)).execute(lambda lvl, msg: None)
+
+        assert len(calls) == 1
+        assert '--dry-run' not in calls[0]
