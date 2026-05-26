@@ -54,7 +54,19 @@ def trigger_connection(request, connection_id):
 @require_POST
 @require_api_token
 def trigger_flow(request, flow_id):
-    return JsonResponse({'status': 'not implemented'}, status=501)
+    try:
+        flow = Flow.objects.get(pk=flow_id, owner=request.api_user)
+    except Flow.DoesNotExist:
+        return JsonResponse({'error': 'Not found'}, status=404)
+
+    job = TransferJob.objects.create(
+        owner=request.api_user,
+        flow=flow,
+        source_path=flow.source_path,
+        destination_path=flow.dest_path,
+    )
+    execute_transfer.delay(job_id=job.pk)
+    return JsonResponse({'job_id': job.pk}, status=202)
 
 
 @require_api_token

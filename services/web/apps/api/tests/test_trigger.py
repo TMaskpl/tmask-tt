@@ -110,3 +110,63 @@ class TestTriggerConnectionEndpoint:
             HTTP_AUTHORIZATION=f'Token {raw_key}',
         )
         assert response.status_code == 405
+
+
+@pytest.mark.django_db
+class TestTriggerFlowEndpoint:
+    def _url(self, flow_id):
+        return reverse('api:trigger_flow', args=[flow_id])
+
+    def _post(self, client, flow_id, raw_key, body=None):
+        return client.post(
+            self._url(flow_id),
+            data=json.dumps(body or {}),
+            content_type='application/json',
+            HTTP_AUTHORIZATION=f'Token {raw_key}',
+        )
+
+    def test_valid_trigger_returns_202_with_job_id(
+        self, client, regular_user, make_flow, make_api_token, mocker
+    ):
+        mocker.patch('apps.api.views.execute_transfer.delay')
+        flow = make_flow(regular_user)
+        _, raw_key = make_api_token(regular_user)
+        response = self._post(client, flow.pk, raw_key)
+        assert response.status_code == 202
+        assert 'job_id' in response.json()
+
+    def test_valid_trigger_creates_job_with_flow_paths(
+        self, client, regular_user, make_flow, make_api_token, mocker
+    ):
+        mocker.patch('apps.api.views.execute_transfer.delay')
+        flow = make_flow(regular_user)
+        _, raw_key = make_api_token(regular_user)
+        self._post(client, flow.pk, raw_key)
+        from apps.transfers.models import TransferJob
+        job = TransferJob.objects.get(owner=regular_user, flow=flow)
+        assert job.source_path == flow.source_path
+        assert job.destination_path == flow.dest_path
+
+    def test_wrong_owner_flow_returns_404(
+        self, client, regular_user, admin_user, make_flow, make_api_token, mocker
+    ):
+        mocker.patch('apps.api.views.execute_transfer.delay')
+        other_flow = make_flow(admin_user)
+        _, raw_key = make_api_token(regular_user)
+        response = self._post(client, other_flow.pk, raw_key)
+        assert response.status_code == 404
+
+    def test_no_token_returns_403(self, client, regular_user, make_flow):
+        flow = make_flow(regular_user)
+        response = client.post(
+            self._url(flow.pk),
+            data=json.dumps({}),
+            content_type='application/json',
+        )
+        assert response.status_code == 403
+
+    def test_get_method_returns_405(self, client, regular_user, make_flow, make_api_token):
+        flow = make_flow(regular_user)
+        _, raw_key = make_api_token(regular_user)
+        response = client.get(self._url(flow.pk), HTTP_AUTHORIZATION=f'Token {raw_key}')
+        assert response.status_code == 405
