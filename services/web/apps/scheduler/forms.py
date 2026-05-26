@@ -2,6 +2,7 @@ from django import forms
 
 from apps.connections.models import Connection
 from apps.flows.models import Flow
+from apps.transfers.forms import _validate_transfer_path
 from .models import ScheduledTransfer
 
 
@@ -37,6 +38,18 @@ class ScheduledTransferForm(forms.ModelForm):
             if not cleaned.get('destination_path'):
                 self.add_error('destination_path', 'Required when using a connection.')
         return cleaned
+
+    def clean_source_path(self):
+        value = self.cleaned_data.get('source_path', '')
+        if value:
+            _validate_transfer_path(value)
+        return value
+
+    def clean_destination_path(self):
+        value = self.cleaned_data.get('destination_path', '')
+        if value:
+            _validate_transfer_path(value)
+        return value
 
     def clean_cron_expr(self):
         expr = self.cleaned_data['cron_expr']

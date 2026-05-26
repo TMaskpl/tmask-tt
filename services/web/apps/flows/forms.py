@@ -1,5 +1,6 @@
 from django import forms
 from apps.connections.models import Connection
+from apps.transfers.forms import _validate_transfer_path
 from .models import Flow
 
 
@@ -14,3 +15,15 @@ class FlowForm(forms.ModelForm):
             qs = Connection.objects.filter(owner=user)
             self.fields['source_conn'].queryset = qs
             self.fields['dest_conn'].queryset = qs
+
+    def clean_source_path(self):
+        value = self.cleaned_data.get('source_path', '')
+        if value:
+            _validate_transfer_path(value)
+        return value
+
+    def clean_dest_path(self):
+        value = self.cleaned_data.get('dest_path', '')
+        if value:
+            _validate_transfer_path(value)
+        return value

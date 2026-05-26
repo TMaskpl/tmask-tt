@@ -5,6 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.http import JsonResponse
 from django.shortcuts import render, redirect
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 import requests
 
@@ -24,7 +25,10 @@ def login_view(request):
         )
         if user:
             login(request, user)
-            return redirect(request.GET.get('next', settings.LOGIN_REDIRECT_URL))
+            next_url = request.GET.get('next', '')
+            if next_url and url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
+                return redirect(next_url)
+            return redirect(settings.LOGIN_REDIRECT_URL)
         form.add_error(None, 'Nieprawidłowa nazwa użytkownika lub hasło.')
     return render(request, 'accounts/login.html', {'form': form})
 

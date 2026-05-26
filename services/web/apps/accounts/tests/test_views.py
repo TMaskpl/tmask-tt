@@ -1,4 +1,5 @@
 import pytest
+from django.conf import settings
 from django.urls import reverse
 from unittest.mock import MagicMock, patch
 
@@ -216,6 +217,28 @@ class TestTestWebhookView:
         data = response.json()
         assert data['ok'] is False
         assert 'http' in data['error']
+
+
+@pytest.mark.django_db
+class TestLoginOpenRedirect:
+    def test_redirects_to_default_after_login_when_no_next(self, client, regular_user):
+        url = reverse('accounts:login')
+        response = client.post(url, {'username': 'user_test', 'password': 'testpass123'})
+        assert response.status_code == 302
+        assert response['Location'] == settings.LOGIN_REDIRECT_URL
+
+    def test_redirects_to_safe_next_after_login(self, client, regular_user):
+        url = reverse('accounts:login') + '?next=/transfers/'
+        response = client.post(url, {'username': 'user_test', 'password': 'testpass123'})
+        assert response.status_code == 302
+        assert response['Location'] == '/transfers/'
+
+    def test_blocks_external_redirect_after_login(self, client, regular_user):
+        url = reverse('accounts:login') + '?next=https://evil.com/'
+        response = client.post(url, {'username': 'user_test', 'password': 'testpass123'})
+        assert response.status_code == 302
+        assert 'evil.com' not in response['Location']
+        assert response['Location'] == settings.LOGIN_REDIRECT_URL
 
 
 @pytest.mark.django_db
