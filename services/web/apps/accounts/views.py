@@ -57,9 +57,10 @@ def profile_view(request):
             form.save()
             messages.success(request, 'Ustawienia zapisane.')
             return redirect('accounts:profile')
+        new_token = None
     else:
         form = ProfileForm(instance=request.user)
-    new_token = request.session.pop('new_api_token', None)
+        new_token = request.session.pop('new_api_token', None)
     api_tokens = request.user.api_tokens.all()
     return render(request, 'accounts/profile.html', {
         'form': form,
