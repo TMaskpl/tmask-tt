@@ -71,4 +71,15 @@ def trigger_flow(request, flow_id):
 
 @require_api_token
 def job_status(request, job_id):
-    return JsonResponse({'status': 'not implemented'}, status=501)
+    try:
+        job = TransferJob.objects.get(pk=job_id, owner=request.api_user)
+    except TransferJob.DoesNotExist:
+        return JsonResponse({'error': 'Not found'}, status=404)
+
+    return JsonResponse({
+        'job_id': job.pk,
+        'status': job.status,
+        'started_at': job.started_at.isoformat() if job.started_at else None,
+        'finished_at': job.finished_at.isoformat() if job.finished_at else None,
+        'error': job.error_message,
+    })
