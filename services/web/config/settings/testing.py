@@ -26,6 +26,7 @@ INSTALLED_APPS = [
     'apps.flows',
     'apps.transfers',
     'apps.scheduler',
+    'apps.api',
 ]
 
 MIDDLEWARE = [
