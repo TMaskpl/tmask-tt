@@ -52,6 +52,17 @@ class SFTPHandler:
             connect_kwargs['password'] = self.params['password']
         client.connect(**connect_kwargs)
 
+    def _verify_checksum_sftp(self, source: str, client, dest: str, log_callback, use_gpg: bool) -> None:
+        if not self.params.get('verify_checksum'):
+            return
+        if use_gpg:
+            log_callback('warn', 'SHA-256: pomijane — GPG włączone (encrypted file)')
+            return
+        try:
+            verify_sftp(source, client, dest, log_callback)
+        except ChecksumVerificationError as e:
+            raise SFTPTransferError(str(e))
+
     def _transfer_once(self, source: str, dest: str, log_callback, use_gpg: bool = False) -> None:
         """Single SFTP connection + transfer. socket.timeout/gaierror bubble up for retry."""
         client = self._build_client()
@@ -68,14 +79,7 @@ class SFTPHandler:
                     if total:
                         log_callback('info', f'Progress: {int(done / total * 100)}%')
                 sftp.put(source, dest, callback=_progress)
-            if self.params.get('verify_checksum'):
-                if use_gpg:
-                    log_callback('warn', 'SHA-256: pomijane — GPG włączone (encrypted file)')
-                else:
-                    try:
-                        verify_sftp(source, client, dest, log_callback)
-                    except ChecksumVerificationError as e:
-                        raise SFTPTransferError(str(e))
+            self._verify_checksum_sftp(source, client, dest, log_callback, use_gpg)
             log_callback('info', 'Transfer complete')
         except (socket.timeout, socket.gaierror, TimeoutError):
             raise

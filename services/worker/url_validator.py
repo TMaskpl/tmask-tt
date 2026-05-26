@@ -14,6 +14,9 @@ _BLOCKED_NETWORKS = [
 ]
 
 
+_ERR_PRIVATE = 'Połączenia do adresów wewnętrznych są niedozwolone.'
+
+
 def _is_private(ip_str: str) -> bool:
     try:
         addr = ipaddress.ip_address(ip_str)
@@ -31,12 +34,12 @@ def block_private_url(url: str) -> None:
     if not hostname:
         raise ValueError('Brak nazwy hosta w URL.')
     if hostname.lower() == 'localhost':
-        raise ValueError('Połączenia do adresów wewnętrznych są niedozwolone.')
+        raise ValueError(_ERR_PRIVATE)
     if _is_private(hostname):
-        raise ValueError('Połączenia do adresów wewnętrznych są niedozwolone.')
+        raise ValueError(_ERR_PRIVATE)
     try:
         resolved = socket.gethostbyname(hostname)
         if _is_private(resolved):
-            raise ValueError('Połączenia do adresów wewnętrznych są niedozwolone.')
+            raise ValueError(_ERR_PRIVATE)
     except socket.gaierror:
         pass
