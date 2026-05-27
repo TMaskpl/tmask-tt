@@ -30,6 +30,7 @@ services:
     env_file: .env
     environment:
       - DJANGO_SETTINGS_MODULE=config.settings.production
+      - TZ=Europe/Warsaw
     volumes:
       - static_files:/app/staticfiles
     depends_on:
@@ -54,6 +55,9 @@ services:
     env_file: .env
     environment:
       - DJANGO_SETTINGS_MODULE=config.settings.production
+      - TZ=Europe/Warsaw
+    volumes:
+      - ./transfers:/transfers
     depends_on:
       postgres:
         condition: service_healthy
@@ -76,6 +80,7 @@ services:
     env_file: .env
     environment:
       - DJANGO_SETTINGS_MODULE=config.settings.production
+      - TZ=Europe/Warsaw
     command: celery -A tasks beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
     depends_on:
       postgres:
