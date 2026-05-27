@@ -13,6 +13,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY services/worker/ .
 COPY services/web/config ./config
 COPY services/web/apps ./apps
+COPY services/web/utils ./utils
 COPY services/web/templates ./templates
 
 RUN addgroup --system app && adduser --system --ingroup app app \

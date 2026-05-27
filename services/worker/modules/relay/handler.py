@@ -1,5 +1,6 @@
 import io
 import os
+import stat as stat_module
 import tempfile
 
 import paramiko
@@ -48,11 +49,70 @@ class RelayHandler:
             connect_kwargs['password'] = params['password']
         client.connect(**connect_kwargs)
 
-    def execute(self, log_callback) -> None:
-        buf = None
-        tmp_path = None
+    def _transfer_file(self, src_sftp, dst_sftp, src_path: str, dst_path: str,
+                       log_callback, file_stat=None) -> None:
+        if file_stat is None:
+            try:
+                file_stat = src_sftp.stat(src_path)
+            except FileNotFoundError:
+                raise RelayTransferError(f'SOURCE ERROR — FILE NOT FOUND: {src_path}')
+            except OSError as e:
+                raise RelayTransferError(f'SOURCE ERROR — {e}')
 
+        size = file_stat.st_size or 0
+        tmp_path = None
+        try:
+            if size > RELAY_STREAM_THRESHOLD:
+                tmp = tempfile.NamedTemporaryFile(delete=False, dir=RELAY_TEMP_DIR)
+                tmp_path = tmp.name
+                tmp.close()
+                src_sftp.get(src_path, tmp_path)
+                log_callback('info', f'{os.path.basename(src_path)}: {size} bytes (tempfile)')
+                dst_sftp.put(tmp_path, dst_path)
+            else:
+                buf = io.BytesIO()
+                src_sftp.getfo(src_path, buf)
+                buf.seek(0)
+                log_callback('info', f'{os.path.basename(src_path)}: {buf.getbuffer().nbytes} bytes')
+                dst_sftp.putfo(buf, dst_path)
+        except RelayTransferError:
+            raise
+        except OSError as e:
+            raise RelayTransferError(f'DEST ERROR — {e}')
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
+    def _transfer_directory(self, src_sftp, dst_sftp, source_dir: str,
+                             dest_dir: str, log_callback) -> int:
+        try:
+            entries = src_sftp.listdir_attr(source_dir)
+        except IOError as e:
+            raise RelayTransferError(f'SOURCE ERROR — cannot list {source_dir}: {e}')
+
+        files = [e for e in entries if stat_module.S_ISREG(e.st_mode)]
+
+        if not files:
+            log_callback('info', f'Source directory is empty: {source_dir}')
+            return 0
+
+        log_callback('info', f'Found {len(files)} file(s) in {source_dir}')
+        source_dir = source_dir.rstrip('/')
+        dest_dir = dest_dir.rstrip('/')
+
+        for i, entry in enumerate(files, 1):
+            src_path = f'{source_dir}/{entry.filename}'
+            dst_path = f'{dest_dir}/{entry.filename}'
+            log_callback('info', f'[{i}/{len(files)}] {entry.filename}')
+            self._transfer_file(src_sftp, dst_sftp, src_path, dst_path, log_callback,
+                                file_stat=entry)
+
+        return len(files)
+
+    def execute(self, log_callback) -> None:
         source_client = self._build_client(self.source_params)
+        dest_client = self._build_client(self.dest_params)
+
         try:
             log_callback('info', f'SOURCE: Connecting to {self.source_params["host"]}:{self.source_params["port"]}')
             try:
@@ -62,35 +122,6 @@ class RelayHandler:
             except Exception as e:
                 raise RelayTransferError(f'SOURCE ERROR — {e}')
 
-            log_callback('info', f'SOURCE: Downloading {self.source_params["source_path"]}')
-            try:
-                with source_client.open_sftp() as sftp:
-                    try:
-                        size = sftp.stat(self.source_params['source_path']).st_size or 0
-                    except FileNotFoundError:
-                        raise RelayTransferError(
-                            f'SOURCE ERROR — FILE NOT FOUND: {self.source_params["source_path"]}'
-                        )
-                    if size > RELAY_STREAM_THRESHOLD:
-                        tmp = tempfile.NamedTemporaryFile(delete=False, dir=RELAY_TEMP_DIR)
-                        tmp_path = tmp.name
-                        tmp.close()
-                        sftp.get(self.source_params['source_path'], tmp_path)
-                        log_callback('info', f'SOURCE: Downloaded {size} bytes to tempfile')
-                    else:
-                        buf = io.BytesIO()
-                        sftp.getfo(self.source_params['source_path'], buf)
-                        buf.seek(0)
-                        log_callback('info', f'SOURCE: Downloaded {buf.getbuffer().nbytes} bytes to buffer')
-            except RelayTransferError:
-                raise
-            except OSError as e:
-                raise RelayTransferError(f'SOURCE ERROR — {e}')
-        finally:
-            source_client.close()
-
-        dest_client = self._build_client(self.dest_params)
-        try:
             log_callback('info', f'DEST: Connecting to {self.dest_params["host"]}:{self.dest_params["port"]}')
             try:
                 self._connect(dest_client, self.dest_params)
@@ -99,20 +130,29 @@ class RelayHandler:
             except Exception as e:
                 raise RelayTransferError(f'DEST ERROR — {e}')
 
-            log_callback('info', f'DEST: Uploading to {self.dest_params["destination_path"]}')
-            try:
-                with dest_client.open_sftp() as sftp:
-                    if tmp_path:
-                        sftp.put(tmp_path, self.dest_params['destination_path'])
-                    else:
-                        sftp.putfo(buf, self.dest_params['destination_path'])
-            except RelayTransferError:
-                raise
-            except OSError as e:
-                raise RelayTransferError(f'DEST ERROR — {e}')
+            with source_client.open_sftp() as src_sftp, dest_client.open_sftp() as dst_sftp:
+                source_path = self.source_params['source_path']
+                dest_path = self.dest_params['destination_path']
 
-            log_callback('info', 'RELAY: Transfer complete')
+                try:
+                    source_stat = src_sftp.stat(source_path)
+                except FileNotFoundError:
+                    raise RelayTransferError(f'SOURCE ERROR — FILE NOT FOUND: {source_path}')
+                except OSError as e:
+                    raise RelayTransferError(f'SOURCE ERROR — {e}')
+
+                if stat_module.S_ISDIR(source_stat.st_mode):
+                    count = self._transfer_directory(
+                        src_sftp, dst_sftp, source_path, dest_path, log_callback
+                    )
+                    log_callback('info', f'RELAY: {count} file(s) transferred')
+                else:
+                    self._transfer_file(
+                        src_sftp, dst_sftp, source_path, dest_path, log_callback,
+                        file_stat=source_stat,
+                    )
+                    log_callback('info', 'RELAY: Transfer complete')
+
         finally:
+            source_client.close()
             dest_client.close()
-            if tmp_path and os.path.exists(tmp_path):
-                os.unlink(tmp_path)

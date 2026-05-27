@@ -1,4 +1,5 @@
 import io
+import stat as stat_module
 import pytest
 import paramiko
 from unittest.mock import MagicMock, patch
@@ -23,26 +24,43 @@ def relay_params():
     return source, dest
 
 
+def _setup_two_clients(MockSSH):
+    mock_src_client = MagicMock()
+    mock_dst_client = MagicMock()
+    MockSSH.side_effect = [mock_src_client, mock_dst_client]
+
+    mock_src_sftp = MagicMock()
+    mock_dst_sftp = MagicMock()
+    mock_src_client.open_sftp.return_value.__enter__ = MagicMock(return_value=mock_src_sftp)
+    mock_src_client.open_sftp.return_value.__exit__ = MagicMock(return_value=False)
+    mock_dst_client.open_sftp.return_value.__enter__ = MagicMock(return_value=mock_dst_sftp)
+    mock_dst_client.open_sftp.return_value.__exit__ = MagicMock(return_value=False)
+
+    return mock_src_client, mock_dst_client, mock_src_sftp, mock_dst_sftp
+
+
+def _file_stat(size=10):
+    s = MagicMock()
+    s.st_mode = stat_module.S_IFREG
+    s.st_size = size
+    return s
+
+
+def _dir_stat():
+    s = MagicMock()
+    s.st_mode = stat_module.S_IFDIR
+    return s
+
+
 class TestRelayHandler:
     def test_happy_path_small_file(self, relay_params):
         source_params, dest_params = relay_params
         fake_data = b'hello relay'
 
         with patch('modules.relay.handler.paramiko.SSHClient') as MockSSH:
-            mock_src_client = MagicMock()
-            mock_dst_client = MagicMock()
-            MockSSH.side_effect = [mock_src_client, mock_dst_client]
+            _, _, mock_src_sftp, mock_dst_sftp = _setup_two_clients(MockSSH)
 
-            mock_src_sftp = MagicMock()
-            mock_dst_sftp = MagicMock()
-            mock_src_client.open_sftp.return_value.__enter__ = MagicMock(return_value=mock_src_sftp)
-            mock_src_client.open_sftp.return_value.__exit__ = MagicMock(return_value=False)
-            mock_dst_client.open_sftp.return_value.__enter__ = MagicMock(return_value=mock_dst_sftp)
-            mock_dst_client.open_sftp.return_value.__exit__ = MagicMock(return_value=False)
-
-            mock_stat = MagicMock()
-            mock_stat.st_size = 10
-            mock_src_sftp.stat.return_value = mock_stat
+            mock_src_sftp.stat.return_value = _file_stat(size=len(fake_data))
 
             def fake_getfo(remote_path, buf):
                 buf.write(fake_data)
@@ -70,15 +88,6 @@ class TestRelayHandler:
             mock_src_client = MagicMock()
             mock_dst_client = MagicMock()
             MockSSH.side_effect = [mock_src_client, mock_dst_client]
-
-            mock_src_sftp = MagicMock()
-            mock_src_client.open_sftp.return_value.__enter__ = MagicMock(return_value=mock_src_sftp)
-            mock_src_client.open_sftp.return_value.__exit__ = MagicMock(return_value=False)
-            mock_stat = MagicMock()
-            mock_stat.st_size = 5
-            mock_src_sftp.stat.return_value = mock_stat
-            mock_src_sftp.getfo.side_effect = lambda p, buf: buf.write(b'x')
-
             mock_dst_client.connect.side_effect = paramiko.AuthenticationException()
             with pytest.raises(RelayTransferError, match='DEST ERROR'):
                 RelayHandler(source_params, dest_params).execute(log_callback=lambda l, m: None)
@@ -104,24 +113,111 @@ class TestRelayHandler:
              patch('modules.relay.handler.os.path.exists', return_value=True), \
              patch('modules.relay.handler.os.unlink') as mock_unlink:
 
-            mock_src_client = MagicMock()
-            mock_dst_client = MagicMock()
-            MockSSH.side_effect = [mock_src_client, mock_dst_client]
+            _, _, mock_src_sftp, mock_dst_sftp = _setup_two_clients(MockSSH)
 
-            mock_src_sftp = MagicMock()
-            mock_src_client.open_sftp.return_value.__enter__ = MagicMock(return_value=mock_src_sftp)
-            mock_src_client.open_sftp.return_value.__exit__ = MagicMock(return_value=False)
-            mock_stat = MagicMock()
-            mock_stat.st_size = large_size
-            mock_src_sftp.stat.return_value = mock_stat
+            mock_src_sftp.stat.return_value = _file_stat(size=large_size)
 
             fake_tmp = MagicMock()
             fake_tmp.name = '/tmp/relay_test_abc'
             MockTmp.return_value = fake_tmp
 
-            mock_dst_client.connect.side_effect = paramiko.AuthenticationException()
+            mock_dst_sftp.put.side_effect = OSError('No space left on device')
 
             with pytest.raises(RelayTransferError):
                 RelayHandler(source_params, dest_params).execute(log_callback=lambda l, m: None)
 
             mock_unlink.assert_called_once_with('/tmp/relay_test_abc')
+
+
+class TestRelayHandlerDirectory:
+    def test_directory_transfers_all_files(self, relay_params):
+        source_params, dest_params = relay_params
+        source_params['source_path'] = '/data/dir'
+        dest_params['destination_path'] = '/backup/dir'
+
+        with patch('modules.relay.handler.paramiko.SSHClient') as MockSSH:
+            _, _, mock_src_sftp, mock_dst_sftp = _setup_two_clients(MockSSH)
+
+            mock_src_sftp.stat.return_value = _dir_stat()
+
+            file1 = MagicMock()
+            file1.filename = 'a.txt'
+            file1.st_mode = stat_module.S_IFREG
+            file1.st_size = 5
+
+            file2 = MagicMock()
+            file2.filename = 'b.txt'
+            file2.st_mode = stat_module.S_IFREG
+            file2.st_size = 7
+
+            mock_src_sftp.listdir_attr.return_value = [file1, file2]
+            mock_src_sftp.getfo.side_effect = lambda path, buf: buf.write(b'x')
+
+            logs = []
+            RelayHandler(source_params, dest_params).execute(log_callback=lambda l, m: logs.append((l, m)))
+
+            assert mock_src_sftp.getfo.call_count == 2
+            assert mock_dst_sftp.putfo.call_count == 2
+            assert any('2 file(s)' in msg for _, msg in logs)
+
+        mock_src_sftp.listdir_attr.assert_called_once_with('/data/dir')
+
+    def test_directory_skips_subdirectories(self, relay_params):
+        source_params, dest_params = relay_params
+        source_params['source_path'] = '/data/dir'
+        dest_params['destination_path'] = '/backup/dir'
+
+        with patch('modules.relay.handler.paramiko.SSHClient') as MockSSH:
+            _, _, mock_src_sftp, mock_dst_sftp = _setup_two_clients(MockSSH)
+
+            mock_src_sftp.stat.return_value = _dir_stat()
+
+            file1 = MagicMock()
+            file1.filename = 'file.txt'
+            file1.st_mode = stat_module.S_IFREG
+            file1.st_size = 3
+
+            subdir = MagicMock()
+            subdir.filename = 'subdir'
+            subdir.st_mode = stat_module.S_IFDIR
+            subdir.st_size = 0
+
+            mock_src_sftp.listdir_attr.return_value = [file1, subdir]
+            mock_src_sftp.getfo.side_effect = lambda path, buf: buf.write(b'x')
+
+            logs = []
+            RelayHandler(source_params, dest_params).execute(log_callback=lambda l, m: logs.append((l, m)))
+
+            assert mock_src_sftp.getfo.call_count == 1
+            assert mock_dst_sftp.putfo.call_count == 1
+            assert any('1 file(s)' in msg for _, msg in logs)
+
+    def test_empty_directory_no_transfer(self, relay_params):
+        source_params, dest_params = relay_params
+        source_params['source_path'] = '/data/empty'
+
+        with patch('modules.relay.handler.paramiko.SSHClient') as MockSSH:
+            _, _, mock_src_sftp, mock_dst_sftp = _setup_two_clients(MockSSH)
+
+            mock_src_sftp.stat.return_value = _dir_stat()
+            mock_src_sftp.listdir_attr.return_value = []
+
+            logs = []
+            RelayHandler(source_params, dest_params).execute(log_callback=lambda l, m: logs.append((l, m)))
+
+            mock_src_sftp.getfo.assert_not_called()
+            mock_dst_sftp.putfo.assert_not_called()
+            assert any('empty' in msg.lower() for _, msg in logs)
+
+    def test_directory_listdir_failure_raises_error(self, relay_params):
+        source_params, dest_params = relay_params
+        source_params['source_path'] = '/data/dir'
+
+        with patch('modules.relay.handler.paramiko.SSHClient') as MockSSH:
+            _, _, mock_src_sftp, _ = _setup_two_clients(MockSSH)
+
+            mock_src_sftp.stat.return_value = _dir_stat()
+            mock_src_sftp.listdir_attr.side_effect = IOError('Permission denied')
+
+            with pytest.raises(RelayTransferError, match='SOURCE ERROR'):
+                RelayHandler(source_params, dest_params).execute(log_callback=lambda l, m: None)
