@@ -1,6 +1,7 @@
 import pytest
 from django.urls import reverse
 from types import SimpleNamespace
+from django.test import override_settings
 
 
 @pytest.mark.django_db
@@ -94,3 +95,48 @@ class TestBrowseDirectory:
         assert len(entries) == 1
         assert entries[0].full_path != '/etc/passwd'
         assert '/home/user' in entries[0].full_path
+
+
+@pytest.mark.django_db
+class TestBrowseButtonCSPRegression:
+    """Regression: BROWSE button must use data-browse-open, never onclick handlers.
+    Inline onclick was CSP-blocked — this test prevents that regression."""
+
+    def test_transfer_create_browse_button_uses_data_attribute(self, auth_client, regular_user, make_connection):
+        make_connection(regular_user)
+        resp = auth_client.get(reverse('transfers:create'))
+        assert resp.status_code == 200
+        html = resp.content.decode()
+        assert 'data-browse-open' in html
+        assert 'onclick' not in html
+
+    def test_transfer_create_loads_browser_js_not_inline(self, auth_client):
+        resp = auth_client.get(reverse('transfers:create'))
+        assert resp.status_code == 200
+        html = resp.content.decode()
+        assert 'browser.js' in html
+        assert 'function openBrowser' not in html
+
+    def test_flows_form_browse_button_uses_data_attribute(self, auth_client, regular_user, make_connection):
+        make_connection(regular_user)
+        resp = auth_client.get(reverse('flows:create'))
+        assert resp.status_code == 200
+        html = resp.content.decode()
+        assert 'data-browse-open' in html
+        assert 'onclick' not in html
+
+    def test_browse_fragment_uses_data_attributes_not_onclick(self, auth_client, regular_user, make_connection, mocker):
+        conn = make_connection(regular_user)
+        from types import SimpleNamespace
+        entries = [
+            SimpleNamespace(name='subdir', is_dir=True, full_path='/subdir', size=None),
+            SimpleNamespace(name='file.txt', is_dir=False, full_path='/file.txt', size=128),
+        ]
+        mocker.patch('apps.connections.views.list_directory', return_value=entries)
+        resp = auth_client.get(
+            reverse('connections:browse', args=[conn.pk]) + '?path=/&field_id=id_source_path'
+        )
+        assert resp.status_code == 200
+        html = resp.content.decode()
+        assert 'data-browse-open' in html or 'data-browse-select' in html
+        assert 'onclick' not in html

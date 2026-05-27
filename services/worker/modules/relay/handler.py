@@ -19,7 +19,11 @@ class RelayHandler:
 
     def _build_client(self, params: dict) -> paramiko.SSHClient:
         client = paramiko.SSHClient()
-        if params.get('strict_host_key_checking') and params.get('known_host_key'):
+        if params.get('strict_host_key_checking'):
+            if not params.get('known_host_key'):
+                raise RelayTransferError(
+                    'CONFIG ERROR — strict_host_key_checking requires known_host_key'
+                )
             with tempfile.NamedTemporaryFile(mode='w', suffix='_known_hosts', delete=False) as f:
                 f.write(params['known_host_key'])
                 tmp_path = f.name

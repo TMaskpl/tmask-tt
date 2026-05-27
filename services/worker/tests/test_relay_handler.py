@@ -129,6 +129,29 @@ class TestRelayHandler:
             mock_unlink.assert_called_once_with('/tmp/relay_test_abc')
 
 
+class TestRelayHandlerStrictMode:
+    def test_strict_mode_without_key_raises_config_error(self, relay_params):
+        source_params, dest_params = relay_params
+        source_params['strict_host_key_checking'] = True
+        source_params['known_host_key'] = None
+        with pytest.raises(RelayTransferError, match='CONFIG ERROR'):
+            RelayHandler(source_params, dest_params).execute(log_callback=lambda l, m: None)
+
+    def test_strict_mode_with_empty_key_raises_config_error(self, relay_params):
+        source_params, dest_params = relay_params
+        source_params['strict_host_key_checking'] = True
+        source_params['known_host_key'] = ''
+        with pytest.raises(RelayTransferError, match='CONFIG ERROR'):
+            RelayHandler(source_params, dest_params).execute(log_callback=lambda l, m: None)
+
+    def test_strict_mode_dest_without_key_raises_config_error(self, relay_params):
+        source_params, dest_params = relay_params
+        dest_params['strict_host_key_checking'] = True
+        dest_params['known_host_key'] = None
+        with pytest.raises(RelayTransferError, match='CONFIG ERROR'):
+            RelayHandler(source_params, dest_params).execute(log_callback=lambda l, m: None)
+
+
 class TestRelayHandlerDirectory:
     def test_directory_transfers_all_files(self, relay_params):
         source_params, dest_params = relay_params

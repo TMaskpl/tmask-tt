@@ -166,6 +166,18 @@ class TestSFTPHandler:
             assert 'pkey' in call_kwargs
             assert 'password' not in call_kwargs
 
+    def test_strict_mode_without_key_raises_config_error(self, sftp_params):
+        sftp_params['strict_host_key_checking'] = True
+        sftp_params['known_host_key'] = None
+        with pytest.raises(SFTPTransferError, match='CONFIG ERROR'):
+            SFTPHandler(sftp_params).execute(log_callback=lambda lvl, msg: None)
+
+    def test_strict_mode_with_empty_key_raises_config_error(self, sftp_params):
+        sftp_params['strict_host_key_checking'] = True
+        sftp_params['known_host_key'] = ''
+        with pytest.raises(SFTPTransferError, match='CONFIG ERROR'):
+            SFTPHandler(sftp_params).execute(log_callback=lambda lvl, msg: None)
+
     def test_gpg_passphrase_never_appears_in_logs(self, sftp_params):
         sftp_params['encrypt'] = True
         sftp_params['gpg_passphrase'] = 'super_secret_passphrase'

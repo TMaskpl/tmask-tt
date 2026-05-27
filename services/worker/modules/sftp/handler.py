@@ -21,7 +21,11 @@ class SFTPHandler:
 
     def _build_client(self) -> paramiko.SSHClient:
         client = paramiko.SSHClient()
-        if self.params.get('strict_host_key_checking') and self.params.get('known_host_key'):
+        if self.params.get('strict_host_key_checking'):
+            if not self.params.get('known_host_key'):
+                raise SFTPTransferError(
+                    'CONFIG ERROR — strict_host_key_checking requires known_host_key'
+                )
             import tempfile
             with tempfile.NamedTemporaryFile(mode='w', suffix='_known_hosts', delete=False) as f:
                 f.write(self.params['known_host_key'])
