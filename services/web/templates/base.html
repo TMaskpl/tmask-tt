@@ -7,6 +7,7 @@
   {% load static %}
   <link rel="stylesheet" href="{% static 'css/crt.css' %}">
   <script src="{% static 'js/htmx.min.js' %}"></script>
+  <script src="{% static 'js/browser.js' %}"></script>
 </head>
 <body>
   {% if user.is_authenticated %}
@@ -49,36 +50,8 @@
     <div id="file-browser-modal">
       <span class="box-title">FILE BROWSER</span>
       <div id="file-browser-content"></div>
-      <button type="button" class="btn btn-danger" onclick="closeBrowser()">[ ZAMKNIJ ]</button>
+      <button type="button" class="btn btn-danger" data-browse-close>[ ZAMKNIJ ]</button>
     </div>
   </div>
-  <script>
-    var _browserTargetField = null;
-
-    function openBrowser(fieldId, connPk, path) {
-      if (!connPk) {
-        alert('Wybierz najpierw połączenie.');
-        return;
-      }
-      path = path || '/';
-      _browserTargetField = fieldId;
-      var url = '/connections/' + connPk + '/browse/?path=' + encodeURIComponent(path)
-              + '&field_id=' + encodeURIComponent(fieldId);
-      var content = document.getElementById('file-browser-content');
-      content.innerHTML = '<p style="color:var(--amber)">[ ŁADOWANIE... ]</p>';
-      document.getElementById('file-browser-overlay').style.display = 'flex';
-      htmx.ajax('GET', url, {target: '#file-browser-content', swap: 'innerHTML'});
-    }
-
-    function selectPath(path) {
-      document.getElementById(_browserTargetField).value = path;
-      closeBrowser();
-    }
-
-    function closeBrowser() {
-      document.getElementById('file-browser-overlay').style.display = 'none';
-      document.getElementById('file-browser-content').innerHTML = '';
-    }
-  </script>
 </body>
 </html>

@@ -26,7 +26,9 @@
           <div class="field-with-btn">
             {{ form.source_path }}
             <button type="button" class="btn btn-small"
-              onclick="openBrowser('id_source_path', document.getElementById('id_source_conn').value)">
+              data-browse-open
+              data-browse-field="id_source_path"
+              data-browse-conn-sel="#id_source_conn">
               [BROWSE]
             </button>
           </div>
@@ -45,7 +47,9 @@
           <div class="field-with-btn">
             {{ form.dest_path }}
             <button type="button" class="btn btn-small"
-              onclick="openBrowser('id_dest_path', document.getElementById('id_dest_conn').value)">
+              data-browse-open
+              data-browse-field="id_dest_path"
+              data-browse-conn-sel="#id_dest_conn">
               [BROWSE]
             </button>
           </div>

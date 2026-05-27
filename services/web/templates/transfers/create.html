@@ -13,7 +13,9 @@
         <div class="field-with-btn">
           {{ field }}
           <button type="button" class="btn btn-small"
-            onclick="openBrowser('{{ field.auto_id }}', document.getElementById('id_connection').value)">
+            data-browse-open
+            data-browse-field="{{ field.auto_id }}"
+            data-browse-conn-sel="#id_connection">
             [BROWSE]
           </button>
         </div>
