@@ -1,4 +1,5 @@
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
 from django.shortcuts import render, redirect, get_object_or_404
 from .models import TransferJob, STATUS_RUNNING
 from .forms import TransferForm
@@ -9,11 +10,14 @@ from .tasks import execute_transfer
 def transfer_create(request):
     form = TransferForm(request.POST or None, user=request.user)
     if request.method == 'POST' and form.is_valid():
-        job = form.save(commit=False)
-        job.owner = request.user
-        job.save()
-        passphrase = (form.cleaned_data.get('gpg_passphrase') or '').strip() or None
-        execute_transfer.delay(job_id=job.pk, gpg_passphrase=passphrase)
+        with transaction.atomic():
+            job = form.save(commit=False)
+            job.owner = request.user
+            job.save()
+            passphrase = (form.cleaned_data.get('gpg_passphrase') or '').strip() or None
+            transaction.on_commit(
+                lambda: execute_transfer.delay(job_id=job.pk, gpg_passphrase=passphrase)
+            )
         return redirect('transfers:detail', pk=job.pk)
     return render(request, 'transfers/create.html', {'form': form})
 

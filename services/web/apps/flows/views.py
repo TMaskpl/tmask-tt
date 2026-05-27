@@ -1,4 +1,5 @@
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
 from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.http import require_POST
 
@@ -6,6 +7,8 @@ from apps.transfers.models import TransferJob
 from apps.transfers.tasks import execute_transfer
 from .forms import FlowForm
 from .models import Flow
+
+_FLOWS_LIST = 'flows:list'
 
 
 @login_required
@@ -21,7 +24,7 @@ def flow_create(request):
         flow = form.save(commit=False)
         flow.owner = request.user
         flow.save()
-        return redirect('flows:list')
+        return redirect(_FLOWS_LIST)
     return render(request, 'flows/form.html', {'form': form, 'action': 'CREATE'})
 
 
@@ -31,7 +34,7 @@ def flow_edit(request, pk):
     form = FlowForm(request.POST or None, instance=flow, user=request.user)
     if request.method == 'POST' and form.is_valid():
         form.save()
-        return redirect('flows:list')
+        return redirect(_FLOWS_LIST)
     return render(request, 'flows/form.html', {'form': form, 'action': 'EDIT', 'flow': flow})
 
 
@@ -40,18 +43,19 @@ def flow_edit(request, pk):
 def flow_delete(request, pk):
     flow = get_object_or_404(Flow, pk=pk, owner=request.user)
     flow.delete()
-    return redirect('flows:list')
+    return redirect(_FLOWS_LIST)
 
 
 @login_required
 @require_POST
 def flow_run(request, pk):
     flow = get_object_or_404(Flow, pk=pk, owner=request.user)
-    job = TransferJob.objects.create(
-        owner=request.user,
-        flow=flow,
-        source_path=flow.source_path,
-        destination_path=flow.dest_path,
-    )
-    execute_transfer.delay(job_id=job.pk)
+    with transaction.atomic():
+        job = TransferJob.objects.create(
+            owner=request.user,
+            flow=flow,
+            source_path=flow.source_path,
+            destination_path=flow.dest_path,
+        )
+        transaction.on_commit(lambda: execute_transfer.delay(job_id=job.pk))
     return redirect('transfers:detail', pk=job.pk)
