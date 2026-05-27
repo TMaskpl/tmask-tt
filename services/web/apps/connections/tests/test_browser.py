@@ -140,3 +140,19 @@ class TestBrowseButtonCSPRegression:
         html = resp.content.decode()
         assert 'data-browse-open' in html or 'data-browse-select' in html
         assert 'onclick' not in html
+
+    def test_browse_fragment_path_with_hyphen_not_unicode_escaped(self, auth_client, regular_user, make_connection, mocker):
+        """Regression: escapejs turned /tmp/srv1/dn-gpg.txt into /tmp/srv1/dn-gpg.txt in data attrs."""
+        conn = make_connection(regular_user)
+        from types import SimpleNamespace
+        entries = [
+            SimpleNamespace(name='dn-gpg.txt', is_dir=False, full_path='/tmp/srv1/dn-gpg.txt', size=10),
+        ]
+        mocker.patch('apps.connections.views.list_directory', return_value=entries)
+        resp = auth_client.get(
+            reverse('connections:browse', args=[conn.pk]) + '?path=/tmp/srv1&field_id=id_source_path'
+        )
+        assert resp.status_code == 200
+        html = resp.content.decode()
+        assert '/tmp/srv1/dn-gpg.txt' in html
+        assert '\\u002D' not in html

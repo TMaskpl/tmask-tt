@@ -4,9 +4,9 @@
 <div class="breadcrumbs">
   {% for crumb in breadcrumbs %}<a href="#"
     data-browse-open
-    data-browse-field="{{ field_id|escapejs }}"
+    data-browse-field="{{ field_id }}"
     data-browse-conn="{{ conn_pk }}"
-    data-browse-path="{{ crumb.path|escapejs }}">{{ crumb.label }}</a>{% if not forloop.last %} / {% endif %}{% endfor %}
+    data-browse-path="{{ crumb.path }}">{{ crumb.label }}</a>{% if not forloop.last %} / {% endif %}{% endfor %}
 </div>
 <ul class="file-list">
   {% for entry in entries %}
@@ -14,11 +14,11 @@
     {% if entry.is_dir %}
     <a href="#"
       data-browse-open
-      data-browse-field="{{ field_id|escapejs }}"
+      data-browse-field="{{ field_id }}"
       data-browse-conn="{{ conn_pk }}"
-      data-browse-path="{{ entry.full_path|escapejs }}">[DIR] {{ entry.name }}</a>
+      data-browse-path="{{ entry.full_path }}">[DIR] {{ entry.name }}</a>
     {% else %}
-    <a href="#" data-browse-select="{{ entry.full_path|escapejs }}">{{ entry.name }}</a>
+    <a href="#" data-browse-select="{{ entry.full_path }}">{{ entry.name }}</a>
     {% endif %}
   </li>
   {% empty %}
