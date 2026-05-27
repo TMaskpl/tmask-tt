@@ -24,7 +24,10 @@ class TransferForm(forms.ModelForm):
 
     class Meta:
         model = TransferJob
-        fields = ['connection', 'source_path', 'destination_path']
+        fields = ['source_path', 'connection', 'destination_path']
+        labels = {
+            'source_path': 'Local ./transfers',
+        }
 
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
