@@ -64,12 +64,10 @@
       _browserTargetField = fieldId;
       var url = '/connections/' + connPk + '/browse/?path=' + encodeURIComponent(path)
               + '&field_id=' + encodeURIComponent(fieldId);
-      htmx.ajax('GET', url, {target: '#file-browser-content', swap: 'innerHTML'})
-        .catch(function () {
-          document.getElementById('file-browser-content').innerHTML =
-            '<p class="msg-error">&gt; BŁĄD: Brak dostępu do połączenia.</p>';
-        });
+      var content = document.getElementById('file-browser-content');
+      content.innerHTML = '<p style="color:var(--amber)">[ ŁADOWANIE... ]</p>';
       document.getElementById('file-browser-overlay').style.display = 'flex';
+      htmx.ajax('GET', url, {target: '#file-browser-content', swap: 'innerHTML'});
     }
 
     function selectPath(path) {
