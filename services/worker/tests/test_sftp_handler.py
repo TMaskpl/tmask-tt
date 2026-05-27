@@ -104,6 +104,47 @@ class TestSFTPHandler:
         params.update(kwargs)
         return params
 
+    def test_passphrase_without_encrypt_flag_still_encrypts(self, sftp_params):
+        """Samo wpisanie hasła w formularzu wystarczy — flaga conn.encrypt nie jest wymagana."""
+        sftp_params['encrypt'] = False
+        sftp_params['gpg_passphrase'] = 'secret123'
+        encrypted_tmp = '/tmp/file_abc.gpg'
+
+        with patch('modules.sftp.handler.encrypt_file', return_value=encrypted_tmp) as mock_encrypt, \
+             patch('modules.sftp.handler.os.path.exists', return_value=True), \
+             patch('modules.sftp.handler.os.unlink'), \
+             patch('modules.sftp.handler.paramiko.SSHClient') as MockSSH:
+            mock_client = MagicMock()
+            MockSSH.return_value = mock_client
+            mock_sftp = MagicMock()
+            mock_client.open_sftp.return_value.__enter__ = MagicMock(return_value=mock_sftp)
+            mock_client.open_sftp.return_value.__exit__ = MagicMock(return_value=False)
+
+            SFTPHandler(sftp_params).execute(log_callback=lambda lvl, msg: None)
+
+            mock_encrypt.assert_called_once()
+            call_args = mock_sftp.put.call_args[0]
+            assert call_args[1] == sftp_params['destination_path'] + '.gpg'
+
+    def test_no_passphrase_skips_encryption(self, sftp_params):
+        """Brak hasła → transfer bez szyfrowania, destination_path bez .gpg."""
+        sftp_params['encrypt'] = True
+        sftp_params['gpg_passphrase'] = None
+
+        with patch('modules.sftp.handler.encrypt_file') as mock_encrypt, \
+             patch('modules.sftp.handler.paramiko.SSHClient') as MockSSH:
+            mock_client = MagicMock()
+            MockSSH.return_value = mock_client
+            mock_sftp = MagicMock()
+            mock_client.open_sftp.return_value.__enter__ = MagicMock(return_value=mock_sftp)
+            mock_client.open_sftp.return_value.__exit__ = MagicMock(return_value=False)
+
+            SFTPHandler(sftp_params).execute(log_callback=lambda lvl, msg: None)
+
+            mock_encrypt.assert_not_called()
+            call_args = mock_sftp.put.call_args[0]
+            assert call_args[1] == sftp_params['destination_path']
+
     def test_execute_with_encrypt_uses_encrypted_paths(self, sftp_params):
         sftp_params['encrypt'] = True
         sftp_params['gpg_passphrase'] = 'secret123'

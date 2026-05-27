@@ -102,7 +102,7 @@ class SFTPHandler:
         if not (self.params.get('strict_host_key_checking') and self.params.get('known_host_key')):
             log_callback('warn', 'Host key verification DISABLED — connection is vulnerable to MITM')
 
-        use_gpg = self.params.get('encrypt') and self.params.get('gpg_passphrase')
+        use_gpg = bool(self.params.get('gpg_passphrase'))
         encrypted_path = None
 
         try:
