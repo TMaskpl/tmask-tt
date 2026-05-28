@@ -11,17 +11,19 @@ class TestTransferCreateView:
         response = auth_client.get(reverse('transfers:create'))
         assert response.status_code == 200
 
-    def test_create_transfer_dispatches_celery_task(self, auth_client, regular_user, make_connection, mocker):
+    def test_create_transfer_dispatches_celery_task(self, auth_client, regular_user, make_connection, mocker, django_capture_on_commit_callbacks):
         mock_delay = mocker.patch('apps.transfers.views.execute_transfer.delay')
         conn = make_connection(regular_user)
-        response = auth_client.post(reverse('transfers:create'), {
-            'connection': conn.pk,
-            'source_path': '/data/file.tar',
-            'destination_path': '/backup/',
-        })
+        with django_capture_on_commit_callbacks(execute=True):
+            response = auth_client.post(reverse('transfers:create'), {
+                'connection': conn.pk,
+                'source_path': 'file.tar',
+                'destination_path': '/backup/',
+            })
         assert response.status_code == 302
         job = TransferJob.objects.get(owner=regular_user)
         assert job.status == STATUS_PENDING
+        assert job.source_path == '/transfers/file.tar'
         mock_delay.assert_called_once_with(job_id=job.pk, gpg_passphrase=None)
 
     def test_log_fragment_returns_logs(self, auth_client, regular_user, make_connection):
