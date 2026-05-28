@@ -1,4 +1,4 @@
-from .base import *
+from .base import *  # NOSONAR
 
 DEBUG = True
 ALLOWED_HOSTS = ['*']

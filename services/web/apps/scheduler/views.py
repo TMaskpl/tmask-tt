@@ -4,6 +4,8 @@ from django.views.decorators.http import require_POST
 from .models import ScheduledTransfer
 from .forms import ScheduledTransferForm
 
+_SCHEDULER_LIST = 'scheduler:list'
+
 
 @login_required
 def schedule_list(request):
@@ -19,7 +21,7 @@ def schedule_create(request):
         sched.owner = request.user
         sched.save()
         _sync_celery_beat(sched)
-        return redirect('scheduler:list')
+        return redirect(_SCHEDULER_LIST)
     return render(request, 'scheduler/form.html', {'form': form, 'action': 'CREATE'})
 
 
@@ -30,7 +32,7 @@ def schedule_edit(request, pk):
     if request.method == 'POST' and form.is_valid():
         form.save()
         _sync_celery_beat(sched)
-        return redirect('scheduler:list')
+        return redirect(_SCHEDULER_LIST)
     return render(request, 'scheduler/form.html', {'form': form, 'action': 'EDIT', 'sched': sched})
 
 
@@ -41,7 +43,7 @@ def schedule_toggle(request, pk):
     sched.enabled = not sched.enabled
     sched.save(update_fields=['enabled'])
     _sync_celery_beat(sched)
-    return redirect('scheduler:list')
+    return redirect(_SCHEDULER_LIST)
 
 
 @login_required
@@ -50,7 +52,7 @@ def schedule_delete(request, pk):
     sched = get_object_or_404(ScheduledTransfer, pk=pk, owner=request.user)
     _delete_celery_beat(sched)
     sched.delete()
-    return redirect('scheduler:list')
+    return redirect(_SCHEDULER_LIST)
 
 
 def _sync_celery_beat(sched: ScheduledTransfer):

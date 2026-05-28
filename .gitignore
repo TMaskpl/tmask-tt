@@ -7,4 +7,6 @@ db.sqlite3
 staticfiles/
 media/
 .DS_Store
-sonar.token sonar-project.properties
+sonar.token
+.claude/**
+CLAUDE.md

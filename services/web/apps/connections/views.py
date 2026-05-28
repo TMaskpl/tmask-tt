@@ -1,4 +1,5 @@
 import io
+import posixpath
 import re
 import socket
 
@@ -8,6 +9,8 @@ from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.http import require_POST
 from .models import Connection
+
+_CONNECTIONS_LIST = 'connections:list'
 from .forms import ConnectionForm
 from .ssh_tester import test_connection as _test_connection
 from .sftp_utils import list_directory, build_breadcrumbs
@@ -24,7 +27,7 @@ def connection_create(request):
         conn = form.save(commit=False)
         conn.owner = request.user
         conn.save()
-        return redirect('connections:list')
+        return redirect(_CONNECTIONS_LIST)
     return render(request, 'connections/form.html', {'form': form, 'action': 'CREATE'})
 
 @login_required
@@ -33,7 +36,7 @@ def connection_edit(request, pk):
     form = ConnectionForm(request.POST or None, instance=conn)
     if request.method == 'POST' and form.is_valid():
         form.save()
-        return redirect('connections:list')
+        return redirect(_CONNECTIONS_LIST)
     return render(request, 'connections/form.html', {'form': form, 'action': 'EDIT', 'conn': conn})
 
 @login_required
@@ -41,7 +44,7 @@ def connection_edit(request, pk):
 def connection_delete(request, pk):
     conn = get_object_or_404(Connection, pk=pk, owner=request.user)
     conn.delete()
-    return redirect('connections:list')
+    return redirect(_CONNECTIONS_LIST)
 
 @login_required
 def connection_test(request, pk):
@@ -92,7 +95,8 @@ def connection_scan_hostkey(request, pk):
 @login_required
 def browse_directory(request, pk):
     connection = get_object_or_404(Connection, pk=pk, owner=request.user)
-    path = request.GET.get('path', '/')
+    raw_path = request.GET.get('path', '/')
+    path = '/' + posixpath.normpath(raw_path).lstrip('/')
     field_id = request.GET.get('field_id', '')
     if not re.match(r'^[A-Za-z0-9_-]{1,64}$', field_id):
         field_id = ''
