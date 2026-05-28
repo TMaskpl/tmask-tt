@@ -82,3 +82,18 @@ class TestEncryptFile:
                     encrypt_file(source, 'secret123')
         finally:
             os.unlink(source)
+
+    def test_passes_homedir_to_avoid_missing_home(self):
+        """Regression: worker user has no home dir (/nonexistent), must use --homedir."""
+        source = self._make_source()
+        try:
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            with patch('modules.gpg.handler.subprocess.run', return_value=mock_result) as mock_run:
+                encrypt_file(source, 'secret123')
+            cmd_args = mock_run.call_args[0][0]
+            assert '--homedir' in cmd_args
+            homedir_idx = cmd_args.index('--homedir')
+            assert cmd_args[homedir_idx + 1]  # non-empty path
+        finally:
+            os.unlink(source)
