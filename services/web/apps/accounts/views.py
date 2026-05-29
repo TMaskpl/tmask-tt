@@ -75,16 +75,19 @@ def test_webhook(request):
     url = request.POST.get('webhook_url', '').strip()
     if not url:
         return JsonResponse({'ok': False, 'error': 'Brak URL'})
-    payload = {
-        'job_id': 0,
-        'status': 'test',
-        'source_path': '/test/source',
-        'destination_path': '/test/destination',
-        'connection': 'TEST',
-        'started_at': None,
-        'finished_at': None,
-        'error': None,
-    }
+    if 'hooks.slack.com' in url:
+        payload = {'text': ':white_check_mark: *TMask Transporter* — test powiadomienia Slack'}
+    else:
+        payload = {
+            'job_id': 0,
+            'status': 'test',
+            'source_path': '/test/source',
+            'destination_path': '/test/destination',
+            'connection': 'TEST',
+            'started_at': None,
+            'finished_at': None,
+            'error': None,
+        }
     try:
         block_private_url(url)
     except ValueError as e:
