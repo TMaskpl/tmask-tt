@@ -10,9 +10,12 @@ class User(AbstractUser):
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default=ROLE_USER)
     notify_on_done   = models.BooleanField(default=False)
     notify_on_failed = models.BooleanField(default=True)
-    webhook_url      = models.URLField(blank=True, default='')
-    webhook_on_done  = models.BooleanField(default=False)
+    webhook_url       = models.URLField(blank=True, default='')
+    webhook_on_done   = models.BooleanField(default=False)
     webhook_on_failed = models.BooleanField(default=True)
+    telegram_chat_id   = models.CharField(max_length=50, blank=True, default='')
+    telegram_on_done   = models.BooleanField(default=False)
+    telegram_on_failed = models.BooleanField(default=True)
 
     @property
     def is_admin(self):

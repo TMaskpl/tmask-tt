@@ -18,14 +18,20 @@ class ProfileForm(forms.ModelForm):
             'webhook_url',
             'webhook_on_done',
             'webhook_on_failed',
+            'telegram_chat_id',
+            'telegram_on_done',
+            'telegram_on_failed',
         ]
         labels = {
-            'email':             'Adres email',
-            'notify_on_done':    'Powiadamiaj o sukcesach transferu',
-            'notify_on_failed':  'Powiadamiaj o błędach transferu',
-            'webhook_url':       'Webhook URL',
-            'webhook_on_done':   'Webhook przy sukcesie transferu',
-            'webhook_on_failed': 'Webhook przy błędzie transferu',
+            'email':              'Adres email',
+            'notify_on_done':     'Powiadamiaj o sukcesach transferu',
+            'notify_on_failed':   'Powiadamiaj o błędach transferu',
+            'webhook_url':        'Webhook URL (Slack)',
+            'webhook_on_done':    'Webhook przy sukcesie transferu',
+            'webhook_on_failed':  'Webhook przy błędzie transferu',
+            'telegram_chat_id':   'Telegram Chat ID',
+            'telegram_on_done':   'Telegram przy sukcesie transferu',
+            'telegram_on_failed': 'Telegram przy błędzie transferu',
         }
 
     def clean_webhook_url(self):

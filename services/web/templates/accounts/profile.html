@@ -65,9 +65,15 @@
           try {
             var data = JSON.parse(evt.detail.xhr.responseText);
             if (data.ok) {
-              el.innerHTML = '<span class="msg-success">&gt; OK &mdash; ' + data.code + '</span>';
+              var span = document.createElement('span');
+              span.className = 'msg-success';
+              span.textContent = '> OK — ' + data.code;
+              el.replaceChildren(span);
             } else {
-              el.innerHTML = '<span class="error">&gt; ERROR &mdash; ' + data.error + '</span>';
+              var span = document.createElement('span');
+              span.className = 'error';
+              span.textContent = '> ERROR — ' + data.error;
+              el.replaceChildren(span);
             }
           } catch(e) {}
         });
@@ -84,10 +90,31 @@
           {{ form.webhook_on_done.label|upper }}
         </label>
       </div>
-      {% if user.webhook_url %}
+
+      <div class="panel-subheader">[ TELEGRAM ]</div>
       <div class="field-row">
-        <span class="label">WEBHOOK STATUS:</span>
-        <span class="value">&gt; AKTYWNY</span>
+        <label class="label" for="{{ form.telegram_chat_id.id_for_label }}">TELEGRAM CHAT ID:</label>
+        {{ form.telegram_chat_id }}
+        {% if form.telegram_chat_id.errors %}
+          <span class="error">{{ form.telegram_chat_id.errors|join:", " }}</span>
+        {% endif %}
+      </div>
+      <div class="field-row checkbox-row">
+        {{ form.telegram_on_failed }}
+        <label for="{{ form.telegram_on_failed.id_for_label }}">
+          {{ form.telegram_on_failed.label|upper }}
+        </label>
+      </div>
+      <div class="field-row checkbox-row">
+        {{ form.telegram_on_done }}
+        <label for="{{ form.telegram_on_done.id_for_label }}">
+          {{ form.telegram_on_done.label|upper }}
+        </label>
+      </div>
+      {% if user.telegram_chat_id %}
+      <div class="field-row">
+        <span class="label">TELEGRAM STATUS:</span>
+        <span class="value">&gt; AKTYWNY (chat_id: {{ user.telegram_chat_id }})</span>
       </div>
       {% endif %}
 

@@ -34,6 +34,36 @@ def send_email_notification(job) -> bool:
     return True
 
 
+def send_telegram_notification(job) -> bool:
+    user = job.owner
+    if not user.telegram_chat_id:
+        return False
+    if job.status == 'done' and not user.telegram_on_done:
+        return False
+    if job.status == 'failed' and not user.telegram_on_failed:
+        return False
+    token = getattr(settings, 'TELEGRAM_BOT_TOKEN', '')
+    if not token:
+        return False
+
+    icon = '✅' if job.status == 'done' else '❌'
+    lines = [
+        f'{icon} <b>Transfer #{job.pk} — {job.status.upper()}</b>',
+        f'Plik: <code>{job.source_path}</code>',
+        f'Cel: <code>{job.destination_path}</code>',
+    ]
+    if job.error_message:
+        lines.append(f'Błąd: {job.error_message}')
+
+    resp = requests.post(
+        f'https://api.telegram.org/bot{token}/sendMessage',
+        json={'chat_id': user.telegram_chat_id, 'text': '\n'.join(lines), 'parse_mode': 'HTML'},
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return True
+
+
 def _build_webhook_payload(job) -> dict:
     if job.connection:
         connection_label = f'{job.connection.name} ({job.connection.protocol.upper()})'
@@ -57,6 +87,18 @@ def _build_webhook_payload(job) -> dict:
     }
 
 
+def _build_slack_payload(job) -> dict:
+    icon = ':white_check_mark:' if job.status == 'done' else ':x:'
+    text = (
+        f'{icon} *Transfer #{job.pk} — {job.status.upper()}*\n'
+        f'Plik: `{job.source_path}`\n'
+        f'Cel: `{job.destination_path}`'
+    )
+    if job.error_message:
+        text += f'\nBłąd: {job.error_message}'
+    return {'text': text}
+
+
 def send_webhook_notification(job) -> bool:
     user = job.owner
     if not user.webhook_url:
@@ -69,7 +111,12 @@ def send_webhook_notification(job) -> bool:
         block_private_url(user.webhook_url)
     except ValueError:
         return False
-    payload = _build_webhook_payload(job)
+
+    if 'hooks.slack.com' in user.webhook_url:
+        payload = _build_slack_payload(job)
+    else:
+        payload = _build_webhook_payload(job)
+
     resp = requests.post(user.webhook_url, json=payload, timeout=10)
     resp.raise_for_status()
     return True

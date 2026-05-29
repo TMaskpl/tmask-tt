@@ -9,7 +9,7 @@ from apps.transfers.models import TransferJob, TransferLog
 from modules.sftp.handler import SFTPHandler, SFTPTransferError
 from modules.rsync.handler import RsyncHandler, RsyncTransferError
 from modules.relay.handler import RelayHandler, RelayTransferError
-from notifications import send_email_notification, send_webhook_notification
+from notifications import send_email_notification, send_webhook_notification, send_telegram_notification
 
 app = Celery('transporter')
 app.config_from_object('django.conf:settings', namespace='CELERY')
@@ -128,6 +128,19 @@ def send_webhook(self, job_id: int):
         raise self.retry(exc=exc)
 
 
+@app.task(bind=True, name='transfers.send_telegram', max_retries=3, default_retry_delay=60)
+def send_telegram(self, job_id: int):
+    try:
+        job = TransferJob.objects.select_related('owner', 'connection', 'flow').get(pk=job_id)
+    except Exception:
+        logger.error(f'TransferJob {job_id} not found — telegram skipped')
+        return
+    try:
+        send_telegram_notification(job)
+    except Exception as exc:
+        raise self.retry(exc=exc)
+
+
 @app.task(bind=True, name='transfers.execute')
 def execute_transfer(self, job_id: int | None = None, scheduled_id: int | None = None, gpg_passphrase: str | None = None):
     job = _resolve_job(job_id, scheduled_id)
@@ -144,16 +157,19 @@ def execute_transfer(self, job_id: int | None = None, scheduled_id: int | None =
         job.mark_done()
         send_notification.delay(job.pk)
         send_webhook.delay(job.pk)
+        send_telegram.delay(job.pk)
     except (SFTPTransferError, RsyncTransferError, RelayTransferError) as e:
         job.mark_failed(str(e))
         send_notification.delay(job.pk)
         send_webhook.delay(job.pk)
+        send_telegram.delay(job.pk)
         log_callback('error', str(e))
         logger.error(f'Transfer job {job.pk} failed: {e}')
     except Exception as e:
         job.mark_failed(f'UNEXPECTED ERROR — {e}')
         send_notification.delay(job.pk)
         send_webhook.delay(job.pk)
+        send_telegram.delay(job.pk)
         log_callback('error', f'UNEXPECTED ERROR — {e}')
         logger.error(f'Transfer job {job.pk} unexpected error: {e}')
         raise
