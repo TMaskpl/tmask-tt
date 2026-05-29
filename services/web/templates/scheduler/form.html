@@ -1,80 +1,313 @@
 {% extends "base.html" %}
-{% block title %}{{ action }} SCHEDULE{% endblock %}
+{% block title %}{{ action }} SCHEDULE — TMASK-TRANSPORTER{% endblock %}
 {% block content %}
-<div class="box" style="max-width:640px;">
-  <span class="box-title">{{ action }} SCHEDULE</span>
+{% load static %}
+
+<style>
+/* ── Scheduler form layout ───────────────────────── */
+.sched-wrap {
+  max-width: 660px;
+}
+
+/* ── Section cards ───────────────────────────────── */
+.sched-card {
+  border: 1px solid var(--border);
+  padding: 1.5rem 1.5rem 1.25rem;
+  margin-bottom: 1.5rem;
+  position: relative;
+}
+
+.sched-card-title {
+  position: absolute;
+  top: -0.6rem;
+  left: 1rem;
+  background: var(--bg);
+  padding: 0 0.5rem;
+  font-size: 0.7rem;
+  letter-spacing: 3px;
+  color: var(--green-bright);
+  text-transform: uppercase;
+}
+
+/* ── Type toggle ─────────────────────────────────── */
+.type-toggle {
+  display: flex;
+  gap: 0;
+  margin-bottom: 1.5rem;
+}
+
+.type-toggle input[type="radio"] { display: none; }
+
+.type-toggle label {
+  flex: 1;
+  text-align: center;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  font-size: 0.8rem;
+  letter-spacing: 2px;
+  color: #446644;
+  margin: 0;
+  transition: all 0.15s;
+  user-select: none;
+}
+
+.type-toggle label:first-of-type { margin-right: -1px; }
+
+.type-toggle input[type="radio"]:checked + label {
+  color: var(--green-bright);
+  border-color: var(--green-bright);
+  background: rgba(0, 255, 65, 0.04);
+  text-shadow: 0 0 6px rgba(0, 255, 65, 0.5);
+  z-index: 1;
+  position: relative;
+}
+
+.type-toggle label:hover { color: var(--green); border-color: #2a6b2a; }
+
+/* ── Form rows ───────────────────────────────────── */
+.sf-row { margin-bottom: 1rem; }
+.sf-row:last-child { margin-bottom: 0; }
+
+.sf-label {
+  font-size: 0.7rem;
+  color: #556655;
+  letter-spacing: 2px;
+  margin-bottom: 0.3rem;
+  display: block;
+}
+
+/* ── CRON helper panel ───────────────────────────── */
+.cron-panel {
+  margin-top: 0.75rem;
+  border: 1px solid #111;
+  padding: 0.75rem 1rem;
+  background: #050505;
+}
+
+.cron-panel-title {
+  font-size: 0.65rem;
+  color: #446644;
+  letter-spacing: 3px;
+  margin-bottom: 0.6rem;
+}
+
+.cron-examples {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.25rem 1.5rem;
+}
+
+.cron-ex {
+  display: flex;
+  gap: 0.75rem;
+  align-items: baseline;
+  cursor: pointer;
+  padding: 0.1rem 0;
+}
+
+.cron-ex:hover .cron-ex-val { color: var(--green-bright); }
+.cron-ex:hover .cron-ex-desc { color: #aaffaa; }
+
+.cron-ex-val {
+  color: var(--amber);
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-width: 110px;
+}
+
+.cron-ex-desc {
+  color: #556655;
+  font-size: 0.7rem;
+  letter-spacing: 1px;
+}
+
+/* ── Enabled toggle ──────────────────────────────── */
+.enabled-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #111;
+}
+
+.enabled-row input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--green-bright);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.enabled-row label {
+  font-size: 0.8rem;
+  color: #aaffaa;
+  letter-spacing: 1px;
+  cursor: pointer;
+  margin: 0;
+}
+
+/* ── Error messages ──────────────────────────────── */
+.sf-error {
+  color: var(--red);
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
+  display: block;
+}
+
+/* ── Action bar ──────────────────────────────────── */
+.sched-actions {
+  display: flex;
+  gap: 1rem;
+  padding-top: 0.25rem;
+}
+</style>
+
+{# ── Page header ──────────────────────────────────── #}
+<div class="sched-wrap">
+  <div style="margin-bottom: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem;">
+    <span style="font-size: 0.7rem; color: #446644; letter-spacing: 3px;">&gt; SCHEDULER /</span>
+    <span style="color: var(--green-bright); letter-spacing: 3px; font-size: 0.85rem; text-shadow: 0 0 6px rgba(0,255,65,0.5);"> {{ action|upper }} SCHEDULE</span>
+  </div>
+
+  {% if form.non_field_errors %}
+  <div class="msg-error" style="margin-bottom: 1.25rem;">
+    {% for e in form.non_field_errors %}&gt; {{ e }}{% endfor %}
+  </div>
+  {% endif %}
+
   <form method="post" id="sched-form">
     {% csrf_token %}
-    {% if form.non_field_errors %}
-    <div class="msg-error">{% for e in form.non_field_errors %}> {{ e }}{% endfor %}</div>
-    {% endif %}
 
-    <div class="field" style="margin-bottom:1rem;">
-      <label>TYPE:</label>
-      <label style="margin-right:1.5rem;">
+    {# ── SEKCJA: CEL TRANSFERU ──────────────────────── #}
+    <div class="sched-card">
+      <div class="sched-card-title">CEL TRANSFERU</div>
+
+      {# Type toggle #}
+      <div class="type-toggle">
         <input type="radio" name="mode" value="connection" id="mode-conn"
-          {% if not form.instance.flow_id %}checked{% endif %}> CONNECTION
-      </label>
-      <label>
+          {% if not form.instance.flow_id %}checked{% endif %}>
+        <label for="mode-conn">[ CONNECTION ]</label>
+
         <input type="radio" name="mode" value="flow" id="mode-flow"
-          {% if form.instance.flow_id %}checked{% endif %}> RELAY FLOW
-      </label>
+          {% if form.instance.flow_id %}checked{% endif %}>
+        <label for="mode-flow">[ RELAY FLOW ]</label>
+      </div>
+
+      {# Connection fields #}
+      <div id="section-conn">
+        <div class="sf-row">
+          <span class="sf-label">CONNECTION</span>
+          {{ form.connection }}
+          {% if form.connection.errors %}<span class="sf-error">{{ form.connection.errors|join:", " }}</span>{% endif %}
+        </div>
+        <div class="sf-row">
+          <span class="sf-label">SOURCE PATH</span>
+          {{ form.source_path }}
+          {% if form.source_path.errors %}<span class="sf-error">{{ form.source_path.errors|join:", " }}</span>{% endif %}
+        </div>
+        <div class="sf-row">
+          <span class="sf-label">DESTINATION PATH</span>
+          {{ form.destination_path }}
+          {% if form.destination_path.errors %}<span class="sf-error">{{ form.destination_path.errors|join:", " }}</span>{% endif %}
+        </div>
+      </div>
+
+      {# Flow field #}
+      <div id="section-flow" style="display:none;">
+        <div class="sf-row">
+          <span class="sf-label">RELAY FLOW</span>
+          {{ form.flow }}
+          {% if form.flow.errors %}<span class="sf-error">{{ form.flow.errors|join:", " }}</span>{% endif %}
+        </div>
+      </div>
     </div>
 
-    <div id="section-conn">
-      <div class="field">
-        <label>CONNECTION:</label>
-        {{ form.connection }}
-        {% if form.connection.errors %}<div style="color:var(--red);font-size:0.8rem;">{{ form.connection.errors }}</div>{% endif %}
+    {# ── SEKCJA: HARMONOGRAM ────────────────────────── #}
+    <div class="sched-card">
+      <div class="sched-card-title">HARMONOGRAM</div>
+
+      <div class="sf-row">
+        <span class="sf-label">WYRAŻENIE CRON</span>
+        {{ form.cron_expr }}
+        {% if form.cron_expr.errors %}<span class="sf-error">{{ form.cron_expr.errors|join:", " }}</span>{% endif %}
       </div>
-      <div class="field">
-        <label>SOURCE PATH:</label>
-        {{ form.source_path }}
-        {% if form.source_path.errors %}<div style="color:var(--red);font-size:0.8rem;">{{ form.source_path.errors }}</div>{% endif %}
+
+      {# CRON quick-reference #}
+      <div class="cron-panel">
+        <div class="cron-panel-title">FORMAT: MIN GODZ DZIEŃ MIESIĄC DZIEŃ_TYG — kliknij aby wstawić</div>
+        <div class="cron-examples">
+          <div class="cron-ex" data-cron="0 3 * * *">
+            <span class="cron-ex-val">0 3 * * *</span>
+            <span class="cron-ex-desc">codziennie 03:00</span>
+          </div>
+          <div class="cron-ex" data-cron="0 */6 * * *">
+            <span class="cron-ex-val">0 */6 * * *</span>
+            <span class="cron-ex-desc">co 6 godzin</span>
+          </div>
+          <div class="cron-ex" data-cron="*/30 * * * *">
+            <span class="cron-ex-val">*/30 * * * *</span>
+            <span class="cron-ex-desc">co 30 minut</span>
+          </div>
+          <div class="cron-ex" data-cron="0 0 * * 1">
+            <span class="cron-ex-val">0 0 * * 1</span>
+            <span class="cron-ex-desc">co poniedziałek 00:00</span>
+          </div>
+          <div class="cron-ex" data-cron="0 8 * * 1-5">
+            <span class="cron-ex-val">0 8 * * 1-5</span>
+            <span class="cron-ex-desc">pon–pt o 08:00</span>
+          </div>
+          <div class="cron-ex" data-cron="0 0 1 * *">
+            <span class="cron-ex-val">0 0 1 * *</span>
+            <span class="cron-ex-desc">1. dnia miesiąca</span>
+          </div>
+        </div>
       </div>
-      <div class="field">
-        <label>DESTINATION PATH:</label>
-        {{ form.destination_path }}
-        {% if form.destination_path.errors %}<div style="color:var(--red);font-size:0.8rem;">{{ form.destination_path.errors }}</div>{% endif %}
+
+      {# Enabled #}
+      <div class="enabled-row">
+        {{ form.enabled }}
+        <label for="{{ form.enabled.id_for_label }}">{{ form.enabled.label|upper }}</label>
       </div>
     </div>
 
-    <div id="section-flow" style="display:none;">
-      <div class="field">
-        <label>FLOW:</label>
-        {{ form.flow }}
-        {% if form.flow.errors %}<div style="color:var(--red);font-size:0.8rem;">{{ form.flow.errors }}</div>{% endif %}
-      </div>
-    </div>
-
-    <div class="field">
-      <label>CRON EXPRESSION:</label>
-      {{ form.cron_expr }}
-      {% if form.cron_expr.errors %}<div style="color:var(--red);font-size:0.8rem;">{{ form.cron_expr.errors }}</div>{% endif %}
-    </div>
-    <div class="field">
-      <label>{{ form.enabled.label|upper }}:</label>
-      {{ form.enabled }}
-    </div>
-    <p style="color:#555; font-size:0.8rem; margin-bottom:1rem;">CRON FORMAT: "min hour day month weekday" — e.g. "0 3 * * *" = daily at 03:00</p>
-    <div style="display:flex;gap:1rem;">
-      <button type="submit" class="btn">[ SAVE ]</button>
-      <a href="{% url 'scheduler:list' %}" class="btn btn-danger">[ CANCEL ]</a>
+    {# ── Przyciski ──────────────────────────────────── #}
+    <div class="sched-actions">
+      <button type="submit" class="btn">[ ZAPISZ ]</button>
+      <a href="{% url 'scheduler:list' %}" class="btn btn-danger">[ ANULUJ ]</a>
     </div>
   </form>
 </div>
+
 <script>
 (function () {
-  var radios = document.querySelectorAll('input[name="mode"]');
+  var radios  = document.querySelectorAll('input[name="mode"]');
   var connSec = document.getElementById('section-conn');
   var flowSec = document.getElementById('section-flow');
+
   function toggle() {
     var isFlow = document.getElementById('mode-flow').checked;
     connSec.style.display = isFlow ? 'none' : '';
     flowSec.style.display = isFlow ? '' : 'none';
   }
+
   radios.forEach(function (r) { r.addEventListener('change', toggle); });
   toggle();
+
+  // Kliknięcie przykładu CRON wstawia wartość do inputa
+  document.querySelectorAll('.cron-ex').forEach(function (el) {
+    el.addEventListener('click', function () {
+      var input = document.getElementById('{{ form.cron_expr.id_for_label }}');
+      if (input) {
+        input.value = el.dataset.cron;
+        input.focus();
+      }
+    });
+  });
 })();
 </script>
+
 {% endblock %}
