@@ -49,7 +49,7 @@ class TestFlowCreateView:
 @pytest.mark.django_db
 class TestFlowRunView:
     def test_run_creates_transfer_job(self, auth_client, regular_user, make_flow, mocker, django_capture_on_commit_callbacks):
-        mock_delay = mocker.patch('apps.flows.views.execute_transfer.delay')
+        mock_delay = mocker.patch('apps.flows.views.current_app.send_task')
         flow = make_flow(regular_user)
         with django_capture_on_commit_callbacks(execute=True):
             response = auth_client.post(reverse('flows:run', args=[flow.pk]))
@@ -58,7 +58,7 @@ class TestFlowRunView:
         assert job.status == STATUS_PENDING
         assert job.source_path == flow.source_path
         assert job.destination_path == flow.dest_path
-        mock_delay.assert_called_once_with(job_id=job.pk)
+        mock_delay.assert_called_once_with('transfers.execute', kwargs={'job_id': job.pk})
 
     def test_run_requires_post(self, auth_client, regular_user, make_flow):
         flow = make_flow(regular_user)

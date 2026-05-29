@@ -8,7 +8,7 @@ from apps.connections.models import Connection
 from apps.flows.models import Flow
 from apps.transfers.forms import _validate_transfer_path
 from apps.transfers.models import TransferJob
-from apps.transfers.tasks import execute_transfer
+from celery import current_app
 from .auth import require_api_token
 
 
@@ -46,7 +46,7 @@ def trigger_connection(request, connection_id):
         source_path=source_path,
         destination_path=destination_path,
     )
-    execute_transfer.delay(job_id=job.pk)
+    current_app.send_task('transfers.execute', kwargs={'job_id': job.pk})
     return JsonResponse({'job_id': job.pk}, status=202)
 
 
@@ -65,7 +65,7 @@ def trigger_flow(request, flow_id):
         source_path=flow.source_path,
         destination_path=flow.dest_path,
     )
-    execute_transfer.delay(job_id=job.pk)
+    current_app.send_task('transfers.execute', kwargs={'job_id': job.pk})
     return JsonResponse({'job_id': job.pk}, status=202)
 
 

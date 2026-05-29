@@ -19,7 +19,7 @@ class TestTriggerConnectionEndpoint:
     def test_valid_trigger_returns_202_with_job_id(
         self, client, regular_user, make_connection, make_api_token, mocker
     ):
-        mocker.patch('apps.api.views.execute_transfer.delay')
+        mocker.patch('apps.api.views.current_app.send_task')
         conn = make_connection(regular_user)
         _, raw_key = make_api_token(regular_user)
         response = self._post(client, conn.pk, raw_key, {
@@ -34,7 +34,7 @@ class TestTriggerConnectionEndpoint:
     def test_valid_trigger_creates_transfer_job(
         self, client, regular_user, make_connection, make_api_token, mocker
     ):
-        mocker.patch('apps.api.views.execute_transfer.delay')
+        mocker.patch('apps.api.views.current_app.send_task')
         conn = make_connection(regular_user)
         _, raw_key = make_api_token(regular_user)
         self._post(client, conn.pk, raw_key, {
@@ -49,7 +49,7 @@ class TestTriggerConnectionEndpoint:
     def test_valid_trigger_calls_celery_task(
         self, client, regular_user, make_connection, make_api_token, mocker
     ):
-        mock_delay = mocker.patch('apps.api.views.execute_transfer.delay')
+        mock_delay = mocker.patch('apps.api.views.current_app.send_task')
         conn = make_connection(regular_user)
         _, raw_key = make_api_token(regular_user)
         response = self._post(client, conn.pk, raw_key, {
@@ -57,12 +57,12 @@ class TestTriggerConnectionEndpoint:
             'destination_path': '/backup/',
         })
         data = response.json()
-        mock_delay.assert_called_once_with(job_id=data['job_id'])
+        mock_delay.assert_called_once_with('transfers.execute', kwargs={'job_id': data['job_id']})
 
     def test_wrong_owner_connection_returns_404(
         self, client, regular_user, admin_user, make_connection, make_api_token, mocker
     ):
-        mocker.patch('apps.api.views.execute_transfer.delay')
+        mocker.patch('apps.api.views.current_app.send_task')
         other_conn = make_connection(admin_user)
         _, raw_key = make_api_token(regular_user)
         response = self._post(client, other_conn.pk, raw_key, {
@@ -128,7 +128,7 @@ class TestTriggerFlowEndpoint:
     def test_valid_trigger_returns_202_with_job_id(
         self, client, regular_user, make_flow, make_api_token, mocker
     ):
-        mocker.patch('apps.api.views.execute_transfer.delay')
+        mocker.patch('apps.api.views.current_app.send_task')
         flow = make_flow(regular_user)
         _, raw_key = make_api_token(regular_user)
         response = self._post(client, flow.pk, raw_key)
@@ -138,7 +138,7 @@ class TestTriggerFlowEndpoint:
     def test_valid_trigger_creates_job_with_flow_paths(
         self, client, regular_user, make_flow, make_api_token, mocker
     ):
-        mocker.patch('apps.api.views.execute_transfer.delay')
+        mocker.patch('apps.api.views.current_app.send_task')
         flow = make_flow(regular_user)
         _, raw_key = make_api_token(regular_user)
         self._post(client, flow.pk, raw_key)
@@ -150,7 +150,7 @@ class TestTriggerFlowEndpoint:
     def test_wrong_owner_flow_returns_404(
         self, client, regular_user, admin_user, make_flow, make_api_token, mocker
     ):
-        mocker.patch('apps.api.views.execute_transfer.delay')
+        mocker.patch('apps.api.views.current_app.send_task')
         other_flow = make_flow(admin_user)
         _, raw_key = make_api_token(regular_user)
         response = self._post(client, other_flow.pk, raw_key)

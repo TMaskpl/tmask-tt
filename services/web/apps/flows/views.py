@@ -4,7 +4,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.http import require_POST
 
 from apps.transfers.models import TransferJob
-from apps.transfers.tasks import execute_transfer
+from celery import current_app
 from .forms import FlowForm
 from .models import Flow
 
@@ -57,5 +57,5 @@ def flow_run(request, pk):
             source_path=flow.source_path,
             destination_path=flow.dest_path,
         )
-        transaction.on_commit(lambda: execute_transfer.delay(job_id=job.pk))
+        transaction.on_commit(lambda: current_app.send_task('transfers.execute', kwargs={'job_id': job.pk}))
     return redirect('transfers:detail', pk=job.pk)

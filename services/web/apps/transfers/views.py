@@ -1,9 +1,9 @@
+from celery import current_app
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.shortcuts import render, redirect, get_object_or_404
 from .models import TransferJob, STATUS_RUNNING
 from .forms import TransferForm
-from .tasks import execute_transfer
 
 
 @login_required
@@ -16,7 +16,7 @@ def transfer_create(request):
             job.save()
             passphrase = (form.cleaned_data.get('gpg_passphrase') or '').strip() or None
             transaction.on_commit(
-                lambda: execute_transfer.delay(job_id=job.pk, gpg_passphrase=passphrase)
+                lambda: current_app.send_task('transfers.execute', kwargs={'job_id': job.pk, 'gpg_passphrase': passphrase})
             )
         return redirect('transfers:detail', pk=job.pk)
     return render(request, 'transfers/create.html', {'form': form})

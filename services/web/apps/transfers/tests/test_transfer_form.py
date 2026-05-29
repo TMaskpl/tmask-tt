@@ -95,7 +95,7 @@ class TestTransferCreateWithGPG:
     """Tests verifying GPG passphrase is wired through the form to Celery dispatch."""
 
     def test_gpg_passphrase_passed_to_delay(self, auth_client, regular_user, make_connection, mocker, django_capture_on_commit_callbacks):
-        mock_delay = mocker.patch('apps.transfers.views.execute_transfer.delay')
+        mock_delay = mocker.patch('apps.transfers.views.current_app.send_task')
         conn = make_connection(regular_user)
         with django_capture_on_commit_callbacks(execute=True):
             auth_client.post(reverse('transfers:create'), {
@@ -105,10 +105,10 @@ class TestTransferCreateWithGPG:
                 'gpg_passphrase': 'mypassword123',
             })
         job = TransferJob.objects.get(owner=regular_user)
-        mock_delay.assert_called_once_with(job_id=job.pk, gpg_passphrase='mypassword123')
+        mock_delay.assert_called_once_with('transfers.execute', kwargs={'job_id': job.pk, 'gpg_passphrase': 'mypassword123'})
 
     def test_empty_passphrase_passed_as_none(self, auth_client, regular_user, make_connection, mocker, django_capture_on_commit_callbacks):
-        mock_delay = mocker.patch('apps.transfers.views.execute_transfer.delay')
+        mock_delay = mocker.patch('apps.transfers.views.current_app.send_task')
         conn = make_connection(regular_user)
         with django_capture_on_commit_callbacks(execute=True):
             auth_client.post(reverse('transfers:create'), {
@@ -118,10 +118,10 @@ class TestTransferCreateWithGPG:
                 'gpg_passphrase': '',
             })
         job = TransferJob.objects.get(owner=regular_user)
-        mock_delay.assert_called_once_with(job_id=job.pk, gpg_passphrase=None)
+        mock_delay.assert_called_once_with('transfers.execute', kwargs={'job_id': job.pk, 'gpg_passphrase': None})
 
     def test_whitespace_passphrase_treated_as_none(self, auth_client, regular_user, make_connection, mocker, django_capture_on_commit_callbacks):
-        mock_delay = mocker.patch('apps.transfers.views.execute_transfer.delay')
+        mock_delay = mocker.patch('apps.transfers.views.current_app.send_task')
         conn = make_connection(regular_user)
         with django_capture_on_commit_callbacks(execute=True):
             auth_client.post(reverse('transfers:create'), {
@@ -131,10 +131,10 @@ class TestTransferCreateWithGPG:
                 'gpg_passphrase': '   ',
             })
         job = TransferJob.objects.get(owner=regular_user)
-        mock_delay.assert_called_once_with(job_id=job.pk, gpg_passphrase=None)
+        mock_delay.assert_called_once_with('transfers.execute', kwargs={'job_id': job.pk, 'gpg_passphrase': None})
 
     def test_source_path_stored_with_transfers_prefix(self, auth_client, regular_user, make_connection, mocker, django_capture_on_commit_callbacks):
-        mock_delay = mocker.patch('apps.transfers.views.execute_transfer.delay')
+        mock_delay = mocker.patch('apps.transfers.views.current_app.send_task')
         conn = make_connection(regular_user)
         with django_capture_on_commit_callbacks(execute=True):
             auth_client.post(reverse('transfers:create'), {
