@@ -9,7 +9,7 @@ _SCHEDULER_LIST = 'scheduler:list'
 
 @login_required
 def schedule_list(request):
-    schedules = ScheduledTransfer.objects.filter(owner=request.user).select_related('connection', 'flow')
+    schedules = ScheduledTransfer.objects.filter(owner=request.user).select_related('flow', 'flow__source_conn', 'flow__dest_conn')
     return render(request, 'scheduler/list.html', {'schedules': schedules})
 
 

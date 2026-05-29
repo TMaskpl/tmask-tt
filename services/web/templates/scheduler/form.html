@@ -29,42 +29,6 @@
   text-transform: uppercase;
 }
 
-/* ── Type toggle ─────────────────────────────────── */
-.type-toggle {
-  display: flex;
-  gap: 0;
-  margin-bottom: 1.5rem;
-}
-
-.type-toggle input[type="radio"] { display: none; }
-
-.type-toggle label {
-  flex: 1;
-  text-align: center;
-  padding: 0.5rem 1rem;
-  border: 1px solid var(--border);
-  cursor: pointer;
-  font-size: 0.8rem;
-  letter-spacing: 2px;
-  color: #446644;
-  margin: 0;
-  transition: all 0.15s;
-  user-select: none;
-}
-
-.type-toggle label:first-of-type { margin-right: -1px; }
-
-.type-toggle input[type="radio"]:checked + label {
-  color: var(--green-bright);
-  border-color: var(--green-bright);
-  background: rgba(0, 255, 65, 0.04);
-  text-shadow: 0 0 6px rgba(0, 255, 65, 0.5);
-  z-index: 1;
-  position: relative;
-}
-
-.type-toggle label:hover { color: var(--green); border-color: #2a6b2a; }
-
 /* ── Form rows ───────────────────────────────────── */
 .sf-row { margin-bottom: 1rem; }
 .sf-row:last-child { margin-bottom: 0; }
@@ -75,6 +39,22 @@
   letter-spacing: 2px;
   margin-bottom: 0.3rem;
   display: block;
+}
+
+/* ── Flow info bar ───────────────────────────────── */
+.flow-info {
+  margin-top: 0.6rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #1a3a1a;
+  background: #030803;
+  font-size: 0.72rem;
+  color: #446644;
+  letter-spacing: 1px;
+}
+
+.flow-info .fi-arrow {
+  color: var(--amber);
+  margin: 0 0.4rem;
 }
 
 /* ── CRON helper panel ───────────────────────────── */
@@ -186,44 +166,19 @@
     <div class="sched-card">
       <div class="sched-card-title">CEL TRANSFERU</div>
 
-      {# Type toggle #}
-      <div class="type-toggle">
-        <input type="radio" name="mode" value="connection" id="mode-conn"
-          {% if not form.instance.flow_id %}checked{% endif %}>
-        <label for="mode-conn">[ CONNECTION ]</label>
-
-        <input type="radio" name="mode" value="flow" id="mode-flow"
-          {% if form.instance.flow_id %}checked{% endif %}>
-        <label for="mode-flow">[ RELAY FLOW ]</label>
+      <div class="sf-row">
+        <span class="sf-label">FLOW</span>
+        {{ form.flow }}
+        {% if form.flow.errors %}<span class="sf-error">{{ form.flow.errors|join:", " }}</span>{% endif %}
       </div>
 
-      {# Connection fields #}
-      <div id="section-conn">
-        <div class="sf-row">
-          <span class="sf-label">CONNECTION</span>
-          {{ form.connection }}
-          {% if form.connection.errors %}<span class="sf-error">{{ form.connection.errors|join:", " }}</span>{% endif %}
-        </div>
-        <div class="sf-row">
-          <span class="sf-label">SOURCE PATH</span>
-          {{ form.source_path }}
-          {% if form.source_path.errors %}<span class="sf-error">{{ form.source_path.errors|join:", " }}</span>{% endif %}
-        </div>
-        <div class="sf-row">
-          <span class="sf-label">DESTINATION PATH</span>
-          {{ form.destination_path }}
-          {% if form.destination_path.errors %}<span class="sf-error">{{ form.destination_path.errors|join:", " }}</span>{% endif %}
-        </div>
+      {% if form.instance.flow_id %}
+      <div class="flow-info">
+        <span>{{ form.instance.flow.source_conn.name }}: {{ form.instance.flow.source_path }}</span>
+        <span class="fi-arrow">→</span>
+        <span>{{ form.instance.flow.dest_conn.name }}: {{ form.instance.flow.dest_path }}</span>
       </div>
-
-      {# Flow field #}
-      <div id="section-flow" style="display:none;">
-        <div class="sf-row">
-          <span class="sf-label">RELAY FLOW</span>
-          {{ form.flow }}
-          {% if form.flow.errors %}<span class="sf-error">{{ form.flow.errors|join:", " }}</span>{% endif %}
-        </div>
-      </div>
+      {% endif %}
     </div>
 
     {# ── SEKCJA: HARMONOGRAM ────────────────────────── #}
@@ -284,19 +239,6 @@
 
 <script>
 (function () {
-  var radios  = document.querySelectorAll('input[name="mode"]');
-  var connSec = document.getElementById('section-conn');
-  var flowSec = document.getElementById('section-flow');
-
-  function toggle() {
-    var isFlow = document.getElementById('mode-flow').checked;
-    connSec.style.display = isFlow ? 'none' : '';
-    flowSec.style.display = isFlow ? '' : 'none';
-  }
-
-  radios.forEach(function (r) { r.addEventListener('change', toggle); });
-  toggle();
-
   // Kliknięcie przykładu CRON wstawia wartość do inputa
   document.querySelectorAll('.cron-ex').forEach(function (el) {
     el.addEventListener('click', function () {

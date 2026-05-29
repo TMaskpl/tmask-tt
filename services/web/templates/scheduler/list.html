@@ -9,16 +9,14 @@
   {% if schedules %}
   <table>
     <thead>
-      <tr><th>TYPE</th><th>SOURCE</th><th>DESTINATION</th><th>CRON</th><th>LAST RUN</th><th>STATUS</th><th>ACTIONS</th></tr>
+      <tr><th>FLOW</th><th>ŹRÓDŁO</th><th>CEL</th><th>CRON</th><th>LAST RUN</th><th>STATUS</th><th>ACTIONS</th></tr>
     </thead>
     <tbody>
       {% for s in schedules %}
       <tr>
-        <td class="glow">
-          {% if s.flow %}RELAY: {{ s.flow.name }}{% else %}{{ s.connection.name }}{% endif %}
-        </td>
-        <td>{% if s.flow %}{{ s.flow.source_conn.name }}: {{ s.flow.source_path }}{% else %}{{ s.source_path }}{% endif %}</td>
-        <td>{% if s.flow %}{{ s.flow.dest_conn.name }}: {{ s.flow.dest_path }}{% else %}{{ s.destination_path }}{% endif %}</td>
+        <td class="glow">{{ s.flow.name|default:"—" }}</td>
+        <td>{% if s.flow %}{{ s.flow.source_conn.name }}: {{ s.flow.source_path }}{% else %}—{% endif %}</td>
+        <td>{% if s.flow %}{{ s.flow.dest_conn.name }}: {{ s.flow.dest_path }}{% else %}—{% endif %}</td>
         <td>{{ s.cron_expr }}</td>
         <td>{{ s.last_run|date:"Y-m-d H:i"|default:"—" }}</td>
         <td>{% if s.enabled %}<span style="color:var(--green-bright);">● ACTIVE</span>{% else %}<span style="color:#555;">○ PAUSED</span>{% endif %}</td>
