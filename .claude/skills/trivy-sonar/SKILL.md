@@ -10,7 +10,7 @@ jako external issues.
 
 ## Konfiguracja — dostosuj przed użyciem
 
-> Zamień `{{CODE_DIR}}` na bezwzględną ścieżkę do katalogu projektu
+> Zamień `/Users/dniemczok/Desktop/TMaskPL/tmask-tt` na bezwzględną ścieżkę do katalogu projektu
 
 | Zmienna | Opis | Przykład |
 |---------|------|---------|
@@ -62,7 +62,7 @@ Dodaj do `~/.claude/settings.json`:
 ## Krok 1 — Sprawdź token SonarQube
 
 ```bash
-grep "^sonar.token" {{CODE_DIR}}/sonar-project.properties
+grep "^sonar.token" /Users/dniemczok/Desktop/TMaskPL/tmask-tt/sonar-project.properties
 ```
 
 Jeśli wartość to `REPLACE_WITH_YOUR_SONARQUBE_TOKEN` → **zatrzymaj się i poproś użytkownika o token**.
@@ -76,7 +76,7 @@ Token przekazuj **wyłącznie przez zmienną środowiskową** `SONAR_TOKEN` — 
 Trivy nie potrzebuje tokenu SonarQube:
 
 ```bash
-cd {{CODE_DIR}}
+cd /Users/dniemczok/Desktop/TMaskPL/tmask-tt
 bash Trivy/scan-trivy-sonar.sh --trivy-only
 ```
 
@@ -86,7 +86,7 @@ Skrypt skanuje 6 obrazów i generuje pliki w `Trivy/`:
 
 Zbierz CVE per serwis:
 ```bash
-cd {{CODE_DIR}}
+cd /Users/dniemczok/Desktop/TMaskPL/tmask-tt
 for f in Trivy/sonar-trivy-tmask-tt-*.json; do
   svc=$(basename $f | sed 's/sonar-trivy-tmask-tt-//;s/\.json//')
   count=$(python3 -c "import json; print(len(json.load(open('$f')).get('issues',[])))")
@@ -99,7 +99,7 @@ done
 ## Krok 3 — Uruchom SonarQube scan (etap 2)
 
 ```bash
-cd {{CODE_DIR}}
+cd /Users/dniemczok/Desktop/TMaskPL/tmask-tt
 SONAR_TOKEN=<token_od_użytkownika> bash Trivy/scan-trivy-sonar.sh --sonar-only
 ```
 

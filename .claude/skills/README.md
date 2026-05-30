@@ -49,13 +49,13 @@ Skille są częścią repozytorium — katalog `.claude/skills/` jest wersjonowa
 
 ### 3. Dostosuj ścieżki w skillach
 
-Skille zawierają placeholder `{{CODE_DIR}}` — zastąp go bezwzględną ścieżką do projektu:
+Skille zawierają placeholder `/Users/dniemczok/Desktop/TMaskPL/tmask-tt` — zastąp go bezwzględną ścieżką do projektu:
 
 ```bash
-# Zamień {{CODE_DIR}} we wszystkich SKILL.md na aktualną ścieżkę
+# Zamień /Users/dniemczok/Desktop/TMaskPL/tmask-tt we wszystkich SKILL.md na aktualną ścieżkę
 CODE_DIR="$(pwd)"
 find .claude/skills -name "SKILL.md" -exec \
-  sed -i "s|{{CODE_DIR}}|${CODE_DIR}|g" {} \;
+  sed -i "s|/Users/dniemczok/Desktop/TMaskPL/tmask-tt|${CODE_DIR}|g" {} \;
 ```
 
 > **Uwaga:** Po tym kroku pliki SKILL.md będą zawierać hardcoded ścieżki.

@@ -10,7 +10,7 @@ Przeprowadza statyczny skan bezpieczeństwa kodu źródłowego projektu przez Se
 
 ## Konfiguracja — dostosuj przed użyciem
 
-> Zamień `{{CODE_DIR}}` na bezwzględną ścieżkę do katalogu projektu
+> Zamień `/Users/dniemczok/Desktop/TMaskPL/tmask-tt` na bezwzględną ścieżkę do katalogu projektu
 
 | Zmienna | Opis | Przykład |
 |---------|------|---------|
@@ -46,7 +46,7 @@ pip install semgrep
 ## Krok 2 — Uruchom skan
 
 ```bash
-cd {{CODE_DIR}} && \
+cd /Users/dniemczok/Desktop/TMaskPL/tmask-tt && \
 semgrep scan \
   --config "p/python" \
   --config "p/django" \

@@ -51,7 +51,7 @@ Pełny audyt bezpieczeństwa: **SonarQube (SAST) → OWASP ZAP (DAST) → Codex 
 ### Krok 1 — Odczytaj konfigurację
 
 ```bash
-SONAR_PROPS="{{CODE_DIR}}/sonar-project.properties"
+SONAR_PROPS="/Users/dniemczok/Desktop/TMaskPL/tmask-tt/sonar-project.properties"
 SONAR_KEY=$(grep "^sonar.projectKey" "${SONAR_PROPS}" | cut -d= -f2)
 SONAR_HOST=$(grep "^sonar.host.url" "${SONAR_PROPS}" | cut -d= -f2)
 echo "Projekt: ${SONAR_KEY} @ ${SONAR_HOST}"
@@ -63,7 +63,7 @@ echo "Projekt: ${SONAR_KEY} @ ${SONAR_HOST}"
 SONAR_TOKEN=<token> docker run --rm \
   -e SONAR_HOST_URL="${SONAR_HOST}" \
   -e SONAR_TOKEN="${SONAR_TOKEN}" \
-  -v "{{CODE_DIR}}:/usr/src" \
+  -v "/Users/dniemczok/Desktop/TMaskPL/tmask-tt:/usr/src" \
   sonarsource/sonar-scanner-cli
 ```
 
@@ -104,7 +104,7 @@ Uruchom subagenta Codex do code review:
 Agent({
   subagent_type: "codex:codex-rescue",
   description: "Security code review — tmask-transporter",
-  prompt: "Przeprowadź security-focused code review projektu w {{CODE_DIR}}.
+  prompt: "Przeprowadź security-focused code review projektu w /Users/dniemczok/Desktop/TMaskPL/tmask-tt.
   
   TYLKO analiza — nie modyfikuj plików.
   

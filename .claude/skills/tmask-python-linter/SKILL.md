@@ -10,7 +10,7 @@ Uruchamia statyczną analizę kodu Python projektu tmask-transporter za pomocą 
 
 ## Konfiguracja — dostosuj przed użyciem
 
-> Zamień `{{CODE_DIR}}` na bezwzględną ścieżkę do katalogu projektu, np. `/home/user/tmask-tt`
+> Zamień `/Users/dniemczok/Desktop/TMaskPL/tmask-tt` na bezwzględną ścieżkę do katalogu projektu, np. `/home/user/tmask-tt`
 
 | Zmienna | Opis | Przykład |
 |---------|------|---------|
@@ -48,7 +48,7 @@ docker build -t tmask-python-linter:latest ruff_bandit/
 Ruff sprawdza styl i jakość kodu Python. Entrypoint kontenera to bandit — dla ruff nadpisz przez `--entrypoint ruff`.
 
 ```bash
-cd {{CODE_DIR}} && \
+cd /Users/dniemczok/Desktop/TMaskPL/tmask-tt && \
 docker run --rm --entrypoint ruff \
   -v "$(pwd):/code" \
   tmask-python-linter:latest \
@@ -98,7 +98,7 @@ Bandit wykrywa podatności bezpieczeństwa w kodzie Python.
 Konfiguracja w `bandit.yaml` wyklucza uzasadnione false positives (B101, B105, B106, B108).
 
 ```bash
-cd {{CODE_DIR}} && \
+cd /Users/dniemczok/Desktop/TMaskPL/tmask-tt && \
 docker run --rm \
   -v "$(pwd):/code" \
   tmask-python-linter:latest \
