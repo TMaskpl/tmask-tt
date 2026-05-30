@@ -14,3 +14,5 @@ Trivy/*json
 **/coverage.xml
 .coverage
 **/.coverage
+backup-pg16/*
+transfers/*
