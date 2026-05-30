@@ -10,10 +10,10 @@ from django.views.decorators.http import require_POST
 import requests
 
 from .forms import LoginForm, ProfileForm
-
-PROFILE_URL = 'accounts:profile'
 from utils.url_validator import block_private_url
 from apps.api.models import ApiToken, MAX_TOKENS_PER_USER
+
+PROFILE_URL = 'accounts:profile'
 
 
 def login_view(request):
