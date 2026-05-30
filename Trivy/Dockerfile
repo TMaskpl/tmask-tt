@@ -1,3 +1,6 @@
+### docker run --rm -v "$PWD:/src" aquasec/trivy:latest fs --scanners vuln,secret /src
+### docker build -t trivy-sonar:0.70.0 .
+
 # Przypnij wersję zamiast :latest dla powtarzalnych buildów
 FROM aquasec/trivy:0.70.0
 
