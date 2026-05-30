@@ -121,7 +121,10 @@ class TestExecuteTransferTask:
         with patch('tasks.SFTPHandler') as MockSFTP, \
              patch('tasks.TransferJob') as _, \
              patch('tasks.TransferLog') as MockLog, \
-             patch('tasks._create_job_from_schedule') as MockCreate:
+             patch('tasks._create_job_from_schedule') as MockCreate, \
+             patch('tasks.send_notification'), \
+             patch('tasks.send_webhook'), \
+             patch('tasks.send_telegram'):
             mock_job = MagicMock()
             mock_job.flow_id = None
             mock_job.connection.protocol = 'sftp'

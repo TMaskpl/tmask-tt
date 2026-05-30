@@ -99,6 +99,8 @@ def _run_transfer(job, gpg_passphrase: str | None, log_callback) -> None:
         source_params, dest_params = _build_relay_params(job.flow)
         RelayHandler(source_params, dest_params).execute(log_callback=log_callback)
     else:
+        if job.connection.encrypt and gpg_passphrase is None:
+            log_callback('warn', 'GPG encryption enabled but no passphrase provided — file will not be encrypted')
         params = _build_params(job, gpg_passphrase=gpg_passphrase)
         handler_cls = SFTPHandler if job.connection.protocol == 'sftp' else RsyncHandler
         handler_cls(params).execute(log_callback=log_callback)
