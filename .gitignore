@@ -9,6 +9,8 @@ media/
 .DS_Store
 sonar.token
 .claude/**
+!.claude/skills/
+!.claude/skills/**
 CLAUDE.mdtransfers/
 Trivy/*json
 **/coverage.xml
