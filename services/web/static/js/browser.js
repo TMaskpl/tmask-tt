@@ -1,4 +1,4 @@
-var _browserTargetField = null;
+let _browserTargetField = null;
 
 function openBrowser(fieldId, connPk, path) {
   if (!connPk) {
@@ -7,9 +7,9 @@ function openBrowser(fieldId, connPk, path) {
   }
   path = path || '/';
   _browserTargetField = fieldId;
-  var url = '/connections/' + connPk + '/browse/?path=' + encodeURIComponent(path)
+  const url = '/connections/' + connPk + '/browse/?path=' + encodeURIComponent(path)
           + '&field_id=' + encodeURIComponent(fieldId);
-  var content = document.getElementById('file-browser-content');
+  const content = document.getElementById('file-browser-content');
   content.innerHTML = '<p style="color:var(--amber)">[ ŁADOWANIE... ]</p>';
   document.getElementById('file-browser-overlay').style.display = 'flex';
   htmx.ajax('GET', url, {target: '#file-browser-content', swap: 'innerHTML'});
@@ -26,10 +26,10 @@ function closeBrowser() {
 }
 
 document.addEventListener('click', function (e) {
-  var el = e.target.closest('[data-browse-open]');
+  let el = e.target.closest('[data-browse-open]');
   if (el) {
     e.preventDefault();
-    var connPk = el.dataset.browseConnSel
+    const connPk = el.dataset.browseConnSel
       ? document.querySelector(el.dataset.browseConnSel).value
       : el.dataset.browseConn;
     openBrowser(el.dataset.browseField, connPk, el.dataset.browsePath || '/');

@@ -10,6 +10,8 @@ from django.views.decorators.http import require_POST
 import requests
 
 from .forms import LoginForm, ProfileForm
+
+PROFILE_URL = 'accounts:profile'
 from utils.url_validator import block_private_url
 from apps.api.models import ApiToken, MAX_TOKENS_PER_USER
 
@@ -56,7 +58,7 @@ def profile_view(request):
         if form.is_valid():
             form.save()
             messages.success(request, 'Ustawienia zapisane.')
-            return redirect('accounts:profile')
+            return redirect(PROFILE_URL)
         new_token = None
     else:
         form = ProfileForm(instance=request.user)
@@ -105,15 +107,15 @@ def test_webhook(request):
 def generate_api_token(request):
     if request.user.api_tokens.count() >= MAX_TOKENS_PER_USER:
         messages.error(request, f'Limit {MAX_TOKENS_PER_USER} tokenów osiągnięty. Usuń token aby dodać nowy.')
-        return redirect('accounts:profile')
+        return redirect(PROFILE_URL)
     label = request.POST.get('label', '').strip()[:100]
     if not label:
         messages.error(request, 'Etykieta tokenu jest wymagana.')
-        return redirect('accounts:profile')
+        return redirect(PROFILE_URL)
     _, raw_key = ApiToken.generate(request.user, label)
     request.session['new_api_token'] = raw_key
     messages.success(request, 'Token wygenerowany. Zapisz go — nie zostanie pokazany ponownie.')
-    return redirect('accounts:profile')
+    return redirect(PROFILE_URL)
 
 
 @login_required
@@ -122,4 +124,4 @@ def revoke_api_token(request, token_id):
     token = get_object_or_404(ApiToken, pk=token_id, user=request.user)
     token.delete()
     messages.success(request, 'Token usunięty.')
-    return redirect('accounts:profile')
+    return redirect(PROFILE_URL)

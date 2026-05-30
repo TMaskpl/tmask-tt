@@ -11,6 +11,8 @@ from apps.transfers.models import TransferJob
 from celery import current_app
 from .auth import require_api_token
 
+_NOT_FOUND = 'Not found'
+
 
 @csrf_exempt
 @require_POST
@@ -19,7 +21,7 @@ def trigger_connection(request, connection_id):
     try:
         connection = Connection.objects.get(pk=connection_id, owner=request.api_user)
     except Connection.DoesNotExist:
-        return JsonResponse({'error': 'Not found'}, status=404)
+        return JsonResponse({'error': _NOT_FOUND}, status=404)
 
     try:
         data = json.loads(request.body)
@@ -57,7 +59,7 @@ def trigger_flow(request, flow_id):
     try:
         flow = Flow.objects.get(pk=flow_id, owner=request.api_user)
     except Flow.DoesNotExist:
-        return JsonResponse({'error': 'Not found'}, status=404)
+        return JsonResponse({'error': _NOT_FOUND}, status=404)
 
     job = TransferJob.objects.create(
         owner=request.api_user,
@@ -74,7 +76,7 @@ def job_status(request, job_id):
     try:
         job = TransferJob.objects.get(pk=job_id, owner=request.api_user)
     except TransferJob.DoesNotExist:
-        return JsonResponse({'error': 'Not found'}, status=404)
+        return JsonResponse({'error': _NOT_FOUND}, status=404)
 
     return JsonResponse({
         'job_id': job.pk,

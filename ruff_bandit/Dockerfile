@@ -3,7 +3,7 @@
 # docker run --rm --entrypoint ruff -v "$(pwd):/code" tmask-python-linter:latest check /code
 # docker run --rm -v "$(pwd):/code" tmask-python-linter:latest -r /code
 
-FROM ghcr.io/pycqa/bandit/bandit:latest
+FROM ghcr.io/pycqa/bandit/bandit:1.8.0
 
 USER root
 
