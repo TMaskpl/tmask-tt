@@ -38,6 +38,80 @@ class TestTransferCreateView:
         assert b'Transfer started' in response.content
 
 
+@pytest.mark.django_db
+class TestTransferDetailView:
+    def test_detail_renders(self, auth_client, regular_user, make_connection):
+        job = TransferJob.objects.create(
+            owner=regular_user,
+            connection=make_connection(regular_user),
+            source_path='/src/file.tar',
+            destination_path='/dst/',
+        )
+        response = auth_client.get(reverse('transfers:detail', args=[job.pk]))
+        assert response.status_code == 200
+
+    def test_detail_404_for_other_users_job(self, auth_client, admin_user, make_connection):
+        job = TransferJob.objects.create(
+            owner=admin_user,
+            connection=make_connection(admin_user),
+            source_path='/src/file.tar',
+            destination_path='/dst/',
+        )
+        response = auth_client.get(reverse('transfers:detail', args=[job.pk]))
+        assert response.status_code == 404
+
+    def test_detail_requires_login(self, client, regular_user, make_connection):
+        job = TransferJob.objects.create(
+            owner=regular_user,
+            connection=make_connection(regular_user),
+            source_path='/src/file.tar',
+            destination_path='/dst/',
+        )
+        response = client.get(reverse('transfers:detail', args=[job.pk]))
+        assert response.status_code == 302
+        assert '/accounts/login/' in response['Location']
+
+
+@pytest.mark.django_db
+class TestTransferLogsView:
+    def test_logs_requires_login(self, client):
+        response = client.get(reverse('transfers:logs'))
+        assert response.status_code == 302
+        assert '/accounts/login/' in response['Location']
+
+    def test_logs_shows_only_own_jobs(self, auth_client, regular_user, admin_user, make_connection):
+        own_job = TransferJob.objects.create(
+            owner=regular_user,
+            connection=make_connection(regular_user),
+            source_path='/own/file.tar',
+            destination_path='/dst/',
+        )
+        TransferJob.objects.create(
+            owner=admin_user,
+            connection=make_connection(admin_user),
+            source_path='/other/file.tar',
+            destination_path='/dst/',
+        )
+        response = auth_client.get(reverse('transfers:logs'))
+        assert response.status_code == 200
+        jobs = list(response.context['jobs'])
+        assert all(j.owner == regular_user for j in jobs)
+        assert own_job in jobs
+
+    def test_logs_renders_when_no_transfers(self, auth_client):
+        response = auth_client.get(reverse('transfers:logs'))
+        assert response.status_code == 200
+
+    def test_log_fragment_404_for_other_users_job(self, auth_client, admin_user, make_connection):
+        job = TransferJob.objects.create(
+            owner=admin_user,
+            connection=make_connection(admin_user),
+            source_path='/x', destination_path='/y',
+        )
+        response = auth_client.get(reverse('transfers:log_fragment', args=[job.pk]))
+        assert response.status_code == 404
+
+
 class TestValidateTransferPath:
     def test_accepts_normal_absolute_path(self):
         _validate_transfer_path('/data/backups/file.tar')

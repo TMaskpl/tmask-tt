@@ -121,6 +121,101 @@ class TestConnectionScanHostkey:
 
 
 @pytest.mark.django_db
+class TestConnectionEdit:
+    def test_edit_form_renders_with_existing_data(self, auth_client, regular_user, make_connection):
+        conn = make_connection(regular_user, name='EditMe', host='10.1.1.1')
+        response = auth_client.get(reverse('connections:edit', args=[conn.pk]))
+        assert response.status_code == 200
+        assert b'EditMe' in response.content
+
+    def test_edit_saves_changes(self, auth_client, regular_user, make_connection):
+        conn = make_connection(regular_user, name='Old Name')
+        response = auth_client.post(reverse('connections:edit', args=[conn.pk]), {
+            'name': 'New Name', 'host': '10.0.0.1', 'port': 22,
+            'username': 'root', 'password': 'pass', 'protocol': 'sftp',
+            'compress': False, 'encrypt': False, 'strict_host_key_checking': True,
+        })
+        assert response.status_code == 302
+        conn.refresh_from_db()
+        assert conn.name == 'New Name'
+
+    def test_edit_404_for_other_users_connection(self, auth_client, admin_user, make_connection):
+        conn = make_connection(admin_user, name='AdminConn')
+        response = auth_client.get(reverse('connections:edit', args=[conn.pk]))
+        assert response.status_code == 404
+
+
+@pytest.mark.django_db
+class TestConnectionTest:
+    def test_returns_success_json(self, auth_client, regular_user, make_connection):
+        from apps.connections.ssh_tester import SSHTestResult
+        conn = make_connection(regular_user)
+        with patch('apps.connections.views._test_connection',
+                   return_value=SSHTestResult(success=True, message='CONNECTION OK')):
+            response = auth_client.get(reverse('connections:test', args=[conn.pk]))
+        assert response.status_code == 200
+        data = response.json()
+        assert data['success'] is True
+        assert 'CONNECTION OK' in data['message']
+
+    def test_returns_failure_json(self, auth_client, regular_user, make_connection):
+        from apps.connections.ssh_tester import SSHTestResult
+        conn = make_connection(regular_user)
+        with patch('apps.connections.views._test_connection',
+                   return_value=SSHTestResult(success=False, message='AUTH FAILED')):
+            response = auth_client.get(reverse('connections:test', args=[conn.pk]))
+        assert response.status_code == 200
+        data = response.json()
+        assert data['success'] is False
+        assert 'AUTH FAILED' in data['message']
+
+    def test_404_for_other_users_connection(self, auth_client, admin_user, make_connection):
+        conn = make_connection(admin_user)
+        response = auth_client.get(reverse('connections:test', args=[conn.pk]))
+        assert response.status_code == 404
+
+
+@pytest.mark.django_db
+class TestBrowseDirectory:
+    def test_returns_directory_entries(self, auth_client, regular_user, make_connection):
+        conn = make_connection(regular_user)
+        mock_entries = [{'name': 'file.tar', 'is_dir': False, 'size': 1024}]
+        with patch('apps.connections.views.list_directory', return_value=mock_entries):
+            response = auth_client.get(
+                reverse('connections:browse', args=[conn.pk]),
+                {'path': '/data/'},
+            )
+        assert response.status_code == 200
+        assert b'file.tar' in response.content
+
+    def test_returns_error_on_sftp_failure(self, auth_client, regular_user, make_connection):
+        conn = make_connection(regular_user)
+        with patch('apps.connections.views.list_directory',
+                   side_effect=Exception('Permission denied')):
+            response = auth_client.get(
+                reverse('connections:browse', args=[conn.pk]),
+                {'path': '/restricted/'},
+            )
+        assert response.status_code == 200
+        assert b'Permission denied' in response.content
+
+    def test_404_for_other_users_connection(self, auth_client, admin_user, make_connection):
+        conn = make_connection(admin_user)
+        response = auth_client.get(reverse('connections:browse', args=[conn.pk]))
+        assert response.status_code == 404
+
+    def test_invalid_field_id_is_sanitized(self, auth_client, regular_user, make_connection):
+        conn = make_connection(regular_user)
+        with patch('apps.connections.views.list_directory', return_value=[]):
+            response = auth_client.get(
+                reverse('connections:browse', args=[conn.pk]),
+                {'path': '/', 'field_id': '../../etc/passwd'},
+            )
+        assert response.status_code == 200
+        assert response.context['field_id'] == ''
+
+
+@pytest.mark.django_db
 class TestConnectionDelete:
     def test_delete_own_connection(self, auth_client, regular_user, make_connection):
         conn = make_connection(regular_user)

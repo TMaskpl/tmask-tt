@@ -39,6 +39,17 @@ class TestLoginView:
         response = auth_client.get(url)
         assert response.status_code == 403
 
+    def test_admin_can_access_users_list(self, admin_client, regular_user, admin_user):
+        url = reverse('accounts:users')
+        response = admin_client.get(url)
+        assert response.status_code == 200
+        assert b'user_test' in response.content
+
+    def test_logout_get_returns_405(self, auth_client):
+        url = reverse('accounts:logout')
+        response = auth_client.get(url)
+        assert response.status_code == 405
+
 
 @pytest.mark.django_db
 class TestProfileView:
