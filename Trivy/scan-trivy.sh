@@ -3,6 +3,23 @@
 #   -Dsonar.externalIssuesReportPaths=sonar-trivy-tmask-transporter-nginx-1.json,sonar-trivy-tmask-transporter-web-1.json,sonar-trivy-tmask-transporter-beat-1.json,sonar-trivy-tmask-transporter-worker-1.json,sonar-trivy-tmask-transporter-postgres-1.json,sonar-trivy-tmask-transporter-redis-1.json
 
 
+# propertiessonar.projectKey=tmask-transporter
+# sonar.externalIssuesReportPaths=\
+#   sonar-trivy-tmask-transporter-nginx-1.json,\
+#   sonar-trivy-tmask-transporter-web-1.json,\
+#   sonar-trivy-tmask-transporter-beat-1.json,\
+#   sonar-trivy-tmask-transporter-worker-1.json,\
+#   sonar-trivy-tmask-transporter-postgres-1.json,\
+#   sonar-trivy-tmask-transporter-redis-1.json
+# Skoro lista jest dynamiczna (sześć usług, może więcej w przyszłości), w skrypcie wygodniej złożyć ją automatycznie, zamiast wpisywać ręcznie:
+# bashREPORTS=$(ls sonar-trivy-*.json | paste -sd, -)
+# sonar-scanner \
+#   -Dsonar.projectKey=tmask-transporter \
+#   -Dsonar.externalIssuesReportPaths="$REPORTS"
+
+
+
+
 # tmask-transporter-nginx-1
 
 # 1) Skan obrazu -> raport JSON
