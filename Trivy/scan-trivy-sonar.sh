@@ -80,6 +80,22 @@ if [[ "${TRIVY_ONLY}" == "false" ]]; then
   echo ""
   echo "=== ETAP 2: SONARQUBE SCAN ==="
 
+  # Popraw ścieżki coverage.xml z Docker-wewnętrznych (/app/) na ścieżki projektu
+  WEB_COV="${PROJECT_ROOT}/services/web/coverage.xml"
+  WORKER_COV="${PROJECT_ROOT}/services/worker/coverage.xml"
+  if [[ -f "${WEB_COV}" ]]; then
+    sed -e 's|/app/|services/web/|g' \
+        -e 's|<source>/app</source>|<source>services/web</source>|g' \
+        "${WEB_COV}" > "${WEB_COV}.fixed" && mv "${WEB_COV}.fixed" "${WEB_COV}"
+    echo "  coverage.xml (web): ścieżki poprawione"
+  fi
+  if [[ -f "${WORKER_COV}" ]]; then
+    sed -e 's|/app/|services/worker/|g' \
+        -e 's|<source>/app</source>|<source>services/worker</source>|g' \
+        "${WORKER_COV}" > "${WORKER_COV}.fixed" && mv "${WORKER_COV}.fixed" "${WORKER_COV}"
+    echo "  coverage.xml (worker): ścieżki poprawione"
+  fi
+
   REPORTS=$(cd "${SCRIPT_DIR}" && ls sonar-trivy-tmask-tt-*.json 2>/dev/null \
     | sed "s|^|Trivy/|" | tr '\n' ',' | sed 's/,$//')
 
