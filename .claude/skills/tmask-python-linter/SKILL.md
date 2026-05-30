@@ -112,10 +112,14 @@ docker run --rm \
 
 Przeanalizuj wyniki:
 
+> **Uwaga:** Bandit wypisuje spinner postępu na stdout razem z JSON — użyj `find('{')` by pominąć prefix.
+
 ```bash
 python3 -c "
-import json
-data = json.load(open('/tmp/bandit-tmask-$(date +%Y-%m-%d).json'))
+import sys, json
+raw = open('/tmp/bandit-tmask-$(date +%Y-%m-%d).json').read()
+idx = raw.find('{')
+data = json.loads(raw[idx:]) if idx >= 0 else {}
 results = data.get('results', [])
 totals = data.get('metrics', {}).get('_totals', {})
 print(f'Bandit issues: {len(results)}')
