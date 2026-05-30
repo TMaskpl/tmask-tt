@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     env_file: .env
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -90,7 +90,7 @@ services:
     restart: unless-stopped
 
   nginx:
-    image: nginx:1.25-alpine
+    image: nginx:stable-alpine
     ports:
       - "80:80"
     volumes:
