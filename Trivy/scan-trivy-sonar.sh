@@ -32,11 +32,11 @@ fi
 
 # --- Obrazy do skanowania: "serwis:obraz:ścieżka_dockerfile_w_projekcie" ---
 # filePath musi wskazywać na plik zaindeksowany przez SonarQube
-SCANS="nginx:nginx:1.25-alpine:Trivy/Dockerfile.nginx
+SCANS="nginx:nginx:stable-alpine:Trivy/Dockerfile.nginx
 web:tmask-tt-web:latest:services/web/Dockerfile
 beat:tmask-tt-beat:latest:services/web/Dockerfile
 worker:tmask-tt-worker:latest:services/worker/Dockerfile
-postgres:postgres:16-alpine:Trivy/Dockerfile.postgres
+postgres:postgres:17-alpine:Trivy/Dockerfile.postgres
 redis:redis:7-alpine:Trivy/Dockerfile.redis"
 
 # ============================================================
