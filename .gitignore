@@ -10,3 +10,4 @@ media/
 sonar.token
 .claude/**
 CLAUDE.mdtransfers/
+Trivy/*json
