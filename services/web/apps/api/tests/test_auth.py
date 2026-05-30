@@ -1,6 +1,9 @@
 import hashlib
+import json
 import pytest
+from django.http import JsonResponse
 from apps.api.models import ApiToken, MAX_TOKENS_PER_USER
+from apps.api.auth import require_api_token
 
 
 @pytest.mark.django_db
@@ -27,12 +30,6 @@ class TestApiTokenModel:
         tokens = list(ApiToken.objects.filter(user=regular_user))
         assert tokens[0] == t2
         assert tokens[1] == t1
-
-
-import json
-from django.test import RequestFactory
-from django.http import JsonResponse
-from apps.api.auth import require_api_token, get_user_from_token
 
 
 @pytest.mark.django_db

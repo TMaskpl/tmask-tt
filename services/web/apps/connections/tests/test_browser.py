@@ -1,7 +1,6 @@
 import pytest
 from django.urls import reverse
 from types import SimpleNamespace
-from django.test import override_settings
 
 
 @pytest.mark.django_db

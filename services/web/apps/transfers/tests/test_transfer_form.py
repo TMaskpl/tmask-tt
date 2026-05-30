@@ -1,7 +1,7 @@
 import pytest
 from django.urls import reverse
 from apps.transfers.forms import TransferForm, _validate_source_filename, TRANSFERS_MOUNT
-from apps.transfers.models import TransferJob, STATUS_PENDING
+from apps.transfers.models import TransferJob
 from django.core.exceptions import ValidationError
 
 
@@ -56,7 +56,7 @@ class TestTransferFormSourcePath:
         assert 'source_path' in form.errors
 
     def test_widget_has_placeholder(self, regular_user, make_connection):
-        conn = make_connection(regular_user)
+        _ = make_connection(regular_user)
         form = TransferForm(user=regular_user)
         widget_attrs = form.fields['source_path'].widget.attrs
         assert 'placeholder' in widget_attrs

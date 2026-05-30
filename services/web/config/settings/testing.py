@@ -2,7 +2,6 @@
 Settings for running tests without a real database server.
 Uses SQLite in-memory database and stubs out external services.
 """
-import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent

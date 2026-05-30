@@ -6,7 +6,7 @@ class TestExecuteTransferTask:
     def test_dispatches_to_sftp_module(self):
         with patch('tasks.SFTPHandler') as MockSFTP, \
              patch('tasks.TransferJob') as MockJob, \
-             patch('tasks.TransferLog') as MockLog:
+             patch('tasks.TransferLog') as _:
             mock_job = MagicMock()
             MockJob.objects.get.return_value = mock_job
             mock_job.flow_id = None
@@ -22,7 +22,7 @@ class TestExecuteTransferTask:
     def test_marks_job_failed_on_sftp_error(self):
         with patch('tasks.SFTPHandler') as MockSFTP, \
              patch('tasks.TransferJob') as MockJob, \
-             patch('tasks.TransferLog') as MockLog:
+             patch('tasks.TransferLog') as _:
             mock_job = MagicMock()
             MockJob.objects.get.return_value = mock_job
             mock_job.flow_id = None
@@ -37,7 +37,7 @@ class TestExecuteTransferTask:
     def test_dispatches_to_rsync_module(self):
         with patch('tasks.RsyncHandler') as MockRsync, \
              patch('tasks.TransferJob') as MockJob, \
-             patch('tasks.TransferLog') as MockLog:
+             patch('tasks.TransferLog') as _:
             mock_job = MagicMock()
             MockJob.objects.get.return_value = mock_job
             mock_job.flow_id = None
@@ -52,7 +52,7 @@ class TestExecuteTransferTask:
     def test_unexpected_exception_marks_failed_and_reraises(self):
         with patch('tasks.SFTPHandler') as MockSFTP, \
              patch('tasks.TransferJob') as MockJob, \
-             patch('tasks.TransferLog') as MockLog:
+             patch('tasks.TransferLog') as _:
             mock_job = MagicMock()
             MockJob.objects.get.return_value = mock_job
             mock_job.flow_id = None
@@ -67,7 +67,7 @@ class TestExecuteTransferTask:
     def test_dispatches_relay_handler_when_flow_set(self):
         with patch('tasks.RelayHandler') as MockRelay, \
              patch('tasks.TransferJob') as MockJob, \
-             patch('tasks.TransferLog') as MockLog:
+             patch('tasks.TransferLog') as _:
             mock_job = MagicMock()
             MockJob.objects.get.return_value = mock_job
             mock_job.flow_id = 99
@@ -82,7 +82,7 @@ class TestExecuteTransferTask:
     def test_relay_error_marks_job_failed(self):
         with patch('tasks.RelayHandler') as MockRelay, \
              patch('tasks.TransferJob') as MockJob, \
-             patch('tasks.TransferLog') as MockLog:
+             patch('tasks.TransferLog') as _:
             mock_job = MagicMock()
             MockJob.objects.get.return_value = mock_job
             mock_job.flow_id = 99
@@ -95,8 +95,8 @@ class TestExecuteTransferTask:
 
     def test_scheduled_id_creates_job_and_executes(self):
         with patch('tasks.SFTPHandler') as MockSFTP, \
-             patch('tasks.TransferJob') as MockJob, \
-             patch('tasks.TransferLog') as MockLog, \
+             patch('tasks.TransferJob') as _, \
+             patch('tasks.TransferLog') as __, \
              patch('tasks._create_job_from_schedule') as MockCreate:
             mock_job = MagicMock()
             mock_job.flow_id = None
@@ -119,7 +119,7 @@ class TestExecuteTransferTask:
 
     def test_scheduled_transfer_logs_warn_when_encrypt_true_but_no_passphrase(self):
         with patch('tasks.SFTPHandler') as MockSFTP, \
-             patch('tasks.TransferJob') as MockJob, \
+             patch('tasks.TransferJob') as _, \
              patch('tasks.TransferLog') as MockLog, \
              patch('tasks._create_job_from_schedule') as MockCreate:
             mock_job = MagicMock()

@@ -1,4 +1,3 @@
-import io
 import stat as stat_module
 import pytest
 import paramiko
@@ -67,7 +66,7 @@ class TestRelayHandler:
             mock_src_sftp.getfo.side_effect = fake_getfo
 
             logs = []
-            RelayHandler(source_params, dest_params).execute(log_callback=lambda l, m: logs.append((l, m)))
+            RelayHandler(source_params, dest_params).execute(log_callback=lambda level, m: logs.append((level, m)))
 
             mock_src_sftp.getfo.assert_called_once()
             mock_dst_sftp.putfo.assert_called_once()
@@ -80,7 +79,7 @@ class TestRelayHandler:
             MockSSH.return_value = mock_src_client
             mock_src_client.connect.side_effect = paramiko.AuthenticationException()
             with pytest.raises(RelayTransferError, match='SOURCE ERROR'):
-                RelayHandler(source_params, dest_params).execute(log_callback=lambda l, m: None)
+                RelayHandler(source_params, dest_params).execute(log_callback=lambda level, m: None)
 
     def test_dest_auth_failure_raises_dest_error(self, relay_params):
         source_params, dest_params = relay_params
@@ -90,7 +89,7 @@ class TestRelayHandler:
             MockSSH.side_effect = [mock_src_client, mock_dst_client]
             mock_dst_client.connect.side_effect = paramiko.AuthenticationException()
             with pytest.raises(RelayTransferError, match='DEST ERROR'):
-                RelayHandler(source_params, dest_params).execute(log_callback=lambda l, m: None)
+                RelayHandler(source_params, dest_params).execute(log_callback=lambda level, m: None)
 
     def test_source_file_not_found_raises_error(self, relay_params):
         source_params, dest_params = relay_params
@@ -102,7 +101,7 @@ class TestRelayHandler:
             mock_src_client.open_sftp.return_value.__exit__ = MagicMock(return_value=False)
             mock_src_sftp.stat.side_effect = FileNotFoundError('/data/file.tar')
             with pytest.raises(RelayTransferError, match='SOURCE ERROR — FILE NOT FOUND'):
-                RelayHandler(source_params, dest_params).execute(log_callback=lambda l, m: None)
+                RelayHandler(source_params, dest_params).execute(log_callback=lambda level, m: None)
 
     def test_tempfile_cleaned_up_on_dest_error(self, relay_params):
         source_params, dest_params = relay_params
@@ -124,7 +123,7 @@ class TestRelayHandler:
             mock_dst_sftp.put.side_effect = OSError('No space left on device')
 
             with pytest.raises(RelayTransferError):
-                RelayHandler(source_params, dest_params).execute(log_callback=lambda l, m: None)
+                RelayHandler(source_params, dest_params).execute(log_callback=lambda level, m: None)
 
             mock_unlink.assert_called_once_with('/tmp/relay_test_abc')
 
@@ -135,21 +134,21 @@ class TestRelayHandlerStrictMode:
         source_params['strict_host_key_checking'] = True
         source_params['known_host_key'] = None
         with pytest.raises(RelayTransferError, match='CONFIG ERROR'):
-            RelayHandler(source_params, dest_params).execute(log_callback=lambda l, m: None)
+            RelayHandler(source_params, dest_params).execute(log_callback=lambda level, m: None)
 
     def test_strict_mode_with_empty_key_raises_config_error(self, relay_params):
         source_params, dest_params = relay_params
         source_params['strict_host_key_checking'] = True
         source_params['known_host_key'] = ''
         with pytest.raises(RelayTransferError, match='CONFIG ERROR'):
-            RelayHandler(source_params, dest_params).execute(log_callback=lambda l, m: None)
+            RelayHandler(source_params, dest_params).execute(log_callback=lambda level, m: None)
 
     def test_strict_mode_dest_without_key_raises_config_error(self, relay_params):
         source_params, dest_params = relay_params
         dest_params['strict_host_key_checking'] = True
         dest_params['known_host_key'] = None
         with pytest.raises(RelayTransferError, match='CONFIG ERROR'):
-            RelayHandler(source_params, dest_params).execute(log_callback=lambda l, m: None)
+            RelayHandler(source_params, dest_params).execute(log_callback=lambda level, m: None)
 
 
 class TestRelayHandlerDirectory:
@@ -177,7 +176,7 @@ class TestRelayHandlerDirectory:
             mock_src_sftp.getfo.side_effect = lambda path, buf: buf.write(b'x')
 
             logs = []
-            RelayHandler(source_params, dest_params).execute(log_callback=lambda l, m: logs.append((l, m)))
+            RelayHandler(source_params, dest_params).execute(log_callback=lambda level, m: logs.append((level, m)))
 
             assert mock_src_sftp.getfo.call_count == 2
             assert mock_dst_sftp.putfo.call_count == 2
@@ -209,7 +208,7 @@ class TestRelayHandlerDirectory:
             mock_src_sftp.getfo.side_effect = lambda path, buf: buf.write(b'x')
 
             logs = []
-            RelayHandler(source_params, dest_params).execute(log_callback=lambda l, m: logs.append((l, m)))
+            RelayHandler(source_params, dest_params).execute(log_callback=lambda level, m: logs.append((level, m)))
 
             assert mock_src_sftp.getfo.call_count == 1
             assert mock_dst_sftp.putfo.call_count == 1
@@ -226,7 +225,7 @@ class TestRelayHandlerDirectory:
             mock_src_sftp.listdir_attr.return_value = []
 
             logs = []
-            RelayHandler(source_params, dest_params).execute(log_callback=lambda l, m: logs.append((l, m)))
+            RelayHandler(source_params, dest_params).execute(log_callback=lambda level, m: logs.append((level, m)))
 
             mock_src_sftp.getfo.assert_not_called()
             mock_dst_sftp.putfo.assert_not_called()
@@ -243,4 +242,4 @@ class TestRelayHandlerDirectory:
             mock_src_sftp.listdir_attr.side_effect = IOError('Permission denied')
 
             with pytest.raises(RelayTransferError, match='SOURCE ERROR'):
-                RelayHandler(source_params, dest_params).execute(log_callback=lambda l, m: None)
+                RelayHandler(source_params, dest_params).execute(log_callback=lambda level, m: None)

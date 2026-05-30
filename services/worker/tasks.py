@@ -1,15 +1,17 @@
 import os
 import django
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings.production')
-django.setup()
 
 from celery import Celery
 from celery.utils.log import get_task_logger
-from apps.transfers.models import TransferJob, TransferLog
-from modules.sftp.handler import SFTPHandler, SFTPTransferError
-from modules.rsync.handler import RsyncHandler, RsyncTransferError
-from modules.relay.handler import RelayHandler, RelayTransferError
-from notifications import send_email_notification, send_webhook_notification, send_telegram_notification
+
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings.production')
+django.setup()
+
+from apps.transfers.models import TransferJob, TransferLog  # noqa: E402
+from modules.sftp.handler import SFTPHandler, SFTPTransferError  # noqa: E402
+from modules.rsync.handler import RsyncHandler, RsyncTransferError  # noqa: E402
+from modules.relay.handler import RelayHandler, RelayTransferError  # noqa: E402
+from notifications import send_email_notification, send_webhook_notification, send_telegram_notification  # noqa: E402
 
 app = Celery('transporter')
 app.config_from_object('django.conf:settings', namespace='CELERY')

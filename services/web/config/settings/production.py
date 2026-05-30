@@ -1,4 +1,4 @@
-from .base import *  # NOSONAR
+from .base import *  # NOSONAR  # noqa: F403
 
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True

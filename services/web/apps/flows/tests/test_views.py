@@ -40,7 +40,7 @@ class TestFlowCreateView:
         assert Flow.objects.filter(owner=regular_user, name='New Flow').exists()
 
     def test_cannot_see_other_users_connections(self, auth_client, admin_user, make_connection):
-        admin_conn = make_connection(admin_user, name='AdminConn')
+        _ = make_connection(admin_user, name='AdminConn')
         response = auth_client.get(reverse('flows:create'))
         assert response.status_code == 200
         assert b'AdminConn' not in response.content

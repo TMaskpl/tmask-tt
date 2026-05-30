@@ -10,7 +10,6 @@ from .config import (
     RSYNC_COMPRESS_FLAG,
     RSYNC_MAX_RETRIES,
     RSYNC_RETRY_DELAY,
-    RSYNC_TIMEOUT,
 )
 from modules.gpg.handler import encrypt_file, GPGEncryptError
 from modules.checksum.handler import verify_rsync, ChecksumVerificationError

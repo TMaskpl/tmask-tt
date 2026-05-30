@@ -8,12 +8,12 @@ from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.http import require_POST
+from .forms import ConnectionForm
 from .models import Connection
+from .sftp_utils import list_directory, build_breadcrumbs
+from .ssh_tester import test_connection as _test_connection
 
 _CONNECTIONS_LIST = 'connections:list'
-from .forms import ConnectionForm
-from .ssh_tester import test_connection as _test_connection
-from .sftp_utils import list_directory, build_breadcrumbs
 
 @login_required
 def connection_list(request):

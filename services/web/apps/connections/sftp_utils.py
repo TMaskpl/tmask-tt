@@ -1,6 +1,5 @@
 import io
 import os
-import posixpath
 import stat
 import tempfile
 from types import SimpleNamespace

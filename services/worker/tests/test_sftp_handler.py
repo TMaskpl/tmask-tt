@@ -1,6 +1,6 @@
 import pytest
 import paramiko
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 from unittest import mock
 
 from modules.sftp.handler import SFTPHandler, SFTPTransferError
@@ -199,7 +199,7 @@ class TestSFTPHandler:
             mock_sftp = MagicMock()
             mock_client.open_sftp.return_value.__enter__ = MagicMock(return_value=mock_sftp)
             mock_client.open_sftp.return_value.__exit__ = MagicMock(return_value=False)
-            with patch('modules.sftp.handler.paramiko.PKey') as MockPKey:
+            with patch('modules.sftp.handler.paramiko.PKey') as _:
                 handler = SFTPHandler(self._make_params(ssh_key='-----BEGIN RSA PRIVATE KEY-----\ntest\n-----END RSA PRIVATE KEY-----', password=None))
                 handler.execute(log_callback=lambda lvl, msg: None)
             # connect was called with pkey kwarg (not password)
