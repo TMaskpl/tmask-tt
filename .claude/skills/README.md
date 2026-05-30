@@ -13,6 +13,14 @@ Skille zastępują wielokrotne opisywanie tych samych procedur — wystarczy wpi
 | [zap-scan](#zap-scan) | `/zap-scan` | DAST — spider + active scan | OWASP ZAP, app uruchomiona |
 | [audyt-devsecops](#audyt-devsecops) | `/audyt-devsecops` | Pełny audyt: SonarQube + ZAP + Codex | Docker, SonarQube, opcjonalnie ZAP |
 
+Pluginy (instalacja jednorazowa przez `claude plugins install`):
+
+| Plugin | Instalacja | Co dostarcza | Wymaga |
+|--------|-----------|-------------|--------|
+| [superpowers](#superpowers) | `superpowers@claude-plugins-official` | TDD, debugging, planowanie, review, worktrees | — |
+| [codex](#codex) | `codex@openai-codex` | Delegowanie zadań do Codex/GPT, rescue subagent | `OPENAI_API_KEY` |
+| [frontend-design](#frontend-design) | `frontend-design@claude-plugins-official` | Generowanie wyróżniającego się UI | — |
+
 Skille z projektu (istniejące):
 
 | Skill | Komenda | Co robi |
@@ -144,13 +152,35 @@ brew install --cask owasp-zap
 
 Klucz API: ZAP GUI → Tools → Options → API → skopiuj lub ustaw własny.
 
-### 8. Zainstaluj Semgrep plugin Claude Code (opcjonalne — MCP)
+### 8. Zainstaluj pluginy Claude Code
 
 ```bash
+# Semgrep MCP (opcjonalne — rozszerza tmask-semgrep o tryb MCP)
 claude plugins install semgrep@claude-plugins-official
+
+# Superpowers — TDD, debugging, planowanie (zalecane)
+claude plugins install superpowers@claude-plugins-official
+
+# Codex — rescue subagent, delegowanie do GPT (wymaga OPENAI_API_KEY)
+claude plugins install codex@openai-codex
+
+# Frontend design — generowanie UI (opcjonalne)
+claude plugins install frontend-design@claude-plugins-official
 ```
 
-### 9. Uruchom aplikację
+Weryfikacja:
+```bash
+claude plugins list
+```
+
+### 9. Skonfiguruj Codex (jeśli zainstalowany)
+
+```bash
+export OPENAI_API_KEY="sk-..."
+# Dodaj do ~/.zshrc lub ~/.bashrc dla trwałości
+```
+
+### 10. Uruchom aplikację
 
 ```bash
 cp .env.example .env
@@ -239,6 +269,38 @@ docker compose up -d
 - ZAP + uruchomiona aplikacja (etap 2 — opcjonalny)
 - Codex CLI lub subagent (etap 3 — opcjonalny)
 - MCP SonarQube do odczytu wyników
+
+---
+
+### superpowers
+
+**Co robi:** Biblioteka skilli dla Claude Code — TDD, debugging, planowanie implementacji, code review, git worktrees, równoległe agenty. Aktywuje się automatycznie na początku każdej sesji.
+
+**Kiedy używać:** Zawsze — instaluj raz globalnie. Kluczowe skille: `/brainstorming` przed nową funkcją, `/systematic-debugging` przy bugach, `/writing-plans` przy planowaniu.
+
+**Wymaga:** Tylko instalacja pluginu — bez zewnętrznych zależności.
+
+**Repozytorium:** https://github.com/obra/superpowers
+
+---
+
+### codex
+
+**Co robi:** Deleguje zadania kodowania i code review do modelu Codex/GPT przez OpenAI API. Główny use case: `/codex rescue` gdy Claude utknął lub potrzebna jest niezależna analiza.
+
+**Kiedy używać:** Gdy Claude powtarza te same błędy, przy głębokiej analizie buggów, jako druga opinia przed mergem.
+
+**Wymaga:** `OPENAI_API_KEY` — konto na platform.openai.com.
+
+---
+
+### frontend-design
+
+**Co robi:** Generuje produkcyjny kod UI z wyróżniającą się estetyką. Unika generycznych wzorców — wymusza bold, charakterystyczny design.
+
+**Kiedy używać:** Nowe widoki Django, redesign istniejących stron, komponenty HTMX wymagające własnego stylu.
+
+**Kontekst tmask-tt:** Zawsze podawaj `— zachowaj styl CRT/retro terminalowy z crt.css` w argumencie.
 
 ---
 
