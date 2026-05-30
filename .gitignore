@@ -11,3 +11,6 @@ sonar.token
 .claude/**
 CLAUDE.mdtransfers/
 Trivy/*json
+**/coverage.xml
+.coverage
+**/.coverage
