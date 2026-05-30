@@ -74,14 +74,12 @@ services:
       start_period: 20s
 
   beat:
-    build:
-      context: .
-      dockerfile: services/worker/Dockerfile
+    build: ./services/web
     env_file: .env
     environment:
       - DJANGO_SETTINGS_MODULE=config.settings.production
       - TZ=Europe/Warsaw
-    command: celery -A tasks beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    command: celery -A config beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
     depends_on:
       postgres:
         condition: service_healthy
