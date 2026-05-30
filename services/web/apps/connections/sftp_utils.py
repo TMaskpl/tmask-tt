@@ -21,7 +21,7 @@ def _build_client(connection):
             os.unlink(tmp_path)
         client.set_missing_host_key_policy(paramiko.RejectPolicy())
     else:
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())  # nosec B507 — user disabled strict_host_key_checking
     return client
 
 

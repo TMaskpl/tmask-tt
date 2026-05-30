@@ -16,15 +16,15 @@ def create_cleanup_task(apps, schema_editor):
                 'enabled': True,
             }
         )
-    except Exception:
-        pass  # django_celery_beat tables may not exist yet on first migrate
+    except Exception:  # nosec B110 — django_celery_beat tables may not exist yet on first migrate
+        pass
 
 
 def remove_cleanup_task(apps, schema_editor):
     try:
         PeriodicTask = apps.get_model('django_celery_beat', 'PeriodicTask')
         PeriodicTask.objects.filter(name='cleanup-orphan-jobs').delete()
-    except Exception:
+    except Exception:  # nosec B110 — safe: only deletes if table exists
         pass
 
 

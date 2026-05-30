@@ -1,6 +1,6 @@
 # services/worker/tests/test_gpg_handler.py
 import os
-import subprocess
+import subprocess  # nosec B404
 import tempfile
 import pytest
 from unittest.mock import patch, MagicMock

@@ -1,5 +1,5 @@
 import os
-import subprocess
+import subprocess  # nosec B404
 import tempfile
 from pathlib import Path
 
@@ -17,7 +17,7 @@ def encrypt_file(source_path: str, passphrase: str) -> str:
     success = False
     try:
         with tempfile.TemporaryDirectory() as gnupg_home:
-            result = subprocess.run(
+            result = subprocess.run(  # nosec B603 B607 — gpg called with fixed args; passphrase via stdin fd, no shell
                 [
                     'gpg', '--batch', '--yes', '--symmetric',
                     '--homedir', gnupg_home,

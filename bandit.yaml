@@ -1,0 +1,5 @@
+skips:
+  - B101  # assert_used: false positive — pytest tests use assert by design
+  - B105  # hardcoded_password_string: false positive — test fixture credentials
+  - B106  # hardcoded_password_funcarg: false positive — test fixture credentials
+  - B108  # hardcoded_tmp_directory: false positive — /tmp only in test files; production uses tempfile module

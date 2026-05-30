@@ -56,7 +56,7 @@ def connection_test(request, pk):
 def connection_scan_hostkey(request, pk):
     conn = get_object_or_404(Connection, pk=pk, owner=request.user)
     client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())  # nosec B507 — scan_hostkey view is designed to discover unknown host keys
     host_key = None
     try:
         connect_kwargs = {

@@ -33,7 +33,7 @@ class RelayHandler:
                 os.unlink(tmp_path)
             client.set_missing_host_key_policy(paramiko.RejectPolicy())
         else:
-            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())  # nosec B507 — user disabled strict_host_key_checking
         return client
 
     def _connect(self, client: paramiko.SSHClient, params: dict) -> None:

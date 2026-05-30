@@ -1,6 +1,6 @@
 import os
 import shlex
-import subprocess
+import subprocess  # nosec B404
 import tempfile
 import time
 from typing import Callable
@@ -69,7 +69,7 @@ class RsyncHandler:
         return cmd
 
     def _run_attempt(self, cmd: list, log_callback: Callable[[str, str], None]) -> tuple[int, str]:
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)  # nosec B603 — cmd built from validated SSH/rsync params + shlex.quote
         output_lines = []
         try:
             for line in proc.stdout:
