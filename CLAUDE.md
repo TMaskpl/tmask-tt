@@ -11,14 +11,16 @@ Browser → Nginx(:80) → web (Django+Gunicorn) → Postgres
                                                       → beat (Celery Beat)
 ```
 
-| Serwis   | Rola                                              |
-|----------|---------------------------------------------------|
-| `web`    | Django 5.x + Gunicorn — UI, auth, API             |
-| `worker` | Celery worker — moduły SFTP/rsync/relay           |
-| `beat`   | Celery Beat — harmonogram cron                    |
-| `redis`  | Broker Celery (jedyny pośrednik)                  |
-| `postgres` | PostgreSQL 16                                   |
-| `nginx`  | Reverse proxy — jedyny port zewnętrzny (:80)      |
+| Serwis   | Rola                                              | Dockerfile            |
+|----------|---------------------------------------------------|-----------------------|
+| `web`    | Django 5.x + Gunicorn — UI, auth, API             | `services/web/`       |
+| `beat`   | Celery Beat — harmonogram cron (`-A config`)      | `services/web/` ← tak samo jak web |
+| `worker` | Celery worker — moduły SFTP/rsync/relay           | `services/worker/`    |
+| `redis`  | Broker Celery (jedyny pośrednik)                  | `redis:7-alpine`      |
+| `postgres` | PostgreSQL 16                                   | `postgres:16-alpine`  |
+| `nginx`  | Reverse proxy — jedyny port zewnętrzny (:80)      | `nginx:1.25-alpine`   |
+
+> `beat` używa `services/web/Dockerfile` (brak rsync/openssh/gnupg) i uruchamia `celery -A config beat` przez `config/celery.py`. Worker używa osobnego `services/worker/Dockerfile` z narzędziami SSH/rsync.
 
 ## Struktura projektu
 
@@ -109,6 +111,8 @@ SONAR_TOKEN=<token> bash Trivy/scan-trivy-sonar.sh --sonar-only
 | `sonar-project.properties` | Konfiguracja SonarQube (`sonar.token=REPLACE_WITH_YOUR_SONARQUBE_TOKEN`) |
 
 Obrazy do skanowania: `nginx:1.25-alpine`, `tmask-tt-web`, `tmask-tt-beat`, `tmask-tt-worker`, `postgres:16-alpine`, `redis:7-alpine`.
+
+> `tmask-tt-beat` builduje z `services/web/Dockerfile` — te same CVE co web. `tmask-tt-worker` builduje z `services/worker/Dockerfile` — dodatkowe pakiety rsync/openssh/gnupg.
 
 ## Kluczowe konwencje
 
