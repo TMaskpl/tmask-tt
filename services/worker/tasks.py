@@ -54,6 +54,7 @@ def _build_relay_params(flow) -> tuple:
         }
     source_params = _conn_params(flow.source_conn, flow.source_path, flow.source_path)
     dest_params = _conn_params(flow.dest_conn, flow.source_path, flow.dest_path)
+    source_params['verify_checksum'] = flow.verify_checksum
     return source_params, dest_params
 
 
