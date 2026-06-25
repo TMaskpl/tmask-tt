@@ -23,6 +23,7 @@ INSTALLED_APPS = [
     'apps.scheduler',
     'apps.flows',
     'apps.api',
+    'apps.dashboard',
 ]
 
 MIDDLEWARE = [
