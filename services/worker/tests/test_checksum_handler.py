@@ -182,3 +182,42 @@ class TestVerifyRelay:
         with pytest.raises(ChecksumVerificationError, match="sha256sum failed"):
             verify_relay(src_client, "/src/file.bin", dst_client, "/dst/file.bin",
                          lambda lvl, msg: None)
+
+
+class TestRemoteSha256Contract:
+    """Regresja: paramiko exec_command zwraca (stdin, stdout, stderr). Exit status
+    MUSI pochodzić z stdout.channel.recv_exit_status() — czytanie go z 1. elementu
+    (stdin/ChannelStdinFile) wywalało AttributeError na każdym realnym transferze."""
+
+    def _client(self, stdin, exit_status=0, stdout_content=b"a" * 64 + b"  /f\n", stderr_content=b""):
+        client = MagicMock()
+        stdout = MagicMock()
+        stdout.read.return_value = stdout_content
+        stdout.channel.recv_exit_status.return_value = exit_status
+        stderr = MagicMock()
+        stderr.read.return_value = stderr_content
+        client.exec_command.return_value = (stdin, stdout, stderr)
+        return client
+
+    def test_reads_exit_status_from_stdout_channel(self):
+        from modules.checksum.handler import _remote_sha256
+        stdin = MagicMock(spec=[])  # ChannelStdinFile nie ma recv_exit_status
+        client = self._client(stdin)
+        result = _remote_sha256(client, "/f")
+        assert result == "a" * 64
+        client.exec_command.return_value[1].channel.recv_exit_status.assert_called_once()
+
+    def test_does_not_read_exit_status_from_stdin(self):
+        # stdin Z metodą recv_exit_status — stary, błędny kod by ją wywołał.
+        from modules.checksum.handler import _remote_sha256
+        stdin = MagicMock()
+        client = self._client(stdin)
+        _remote_sha256(client, "/f")
+        stdin.recv_exit_status.assert_not_called()
+
+    def test_nonzero_exit_from_channel_raises(self):
+        from modules.checksum.handler import _remote_sha256
+        stdin = MagicMock(spec=[])
+        client = self._client(stdin, exit_status=1, stdout_content=b"", stderr_content=b"sha256sum: not found")
+        with pytest.raises(ChecksumVerificationError, match="sha256sum failed"):
+            _remote_sha256(client, "/f")
