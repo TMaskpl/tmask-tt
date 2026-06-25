@@ -283,7 +283,7 @@ label { display: block; margin-bottom: 0.25rem; color: #aaffaa; font-size: 0.85r
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 1rem;
-  margin-bottom: 1.5rem;
+  margin-bottom: 2.6rem;
 }
 
 .stat-tile {
@@ -294,6 +294,7 @@ label { display: block; margin-bottom: 0.25rem; color: #aaffaa; font-size: 0.85r
   flex-direction: column;
   gap: 0.35rem;
   position: relative;
+  min-width: 0;
   overflow: hidden;
   transition: border-color 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
   animation: tile-rise 0.5s ease both;
@@ -352,15 +353,22 @@ label { display: block; margin-bottom: 0.25rem; color: #aaffaa; font-size: 0.85r
 .chart-grid {
   display: grid;
   grid-template-columns: 2fr 1fr;
-  gap: 1rem;
+  gap: 1.5rem;
   align-items: stretch;
+  margin-top: 0.5rem;
 }
 
-.chart-box { margin-bottom: 0; animation: tile-rise 0.5s ease 0.24s both; }
+.chart-box {
+  margin-bottom: 0;
+  min-width: 0;
+  padding-top: 1.3rem;
+  animation: tile-rise 0.5s ease 0.24s both;
+}
 .chart-box.chart-full { grid-column: 1 / -1; }
 
 .chart-canvas {
   position: relative;
+  min-width: 0;
   height: 280px;
   margin-top: 0.4rem;
 }
