@@ -127,6 +127,60 @@ class TestRelayHandler:
 
             mock_unlink.assert_called_once_with('/tmp/relay_test_abc')
 
+    def test_verify_called_when_enabled(self, relay_params):
+        relay_params[0]['verify_checksum'] = True
+        sha = "a" * 64
+        with patch('modules.relay.handler.paramiko.SSHClient') as MockSSH, \
+             patch('modules.relay.handler.verify_relay') as mock_verify:
+            mock_src_client, mock_dst_client, mock_src_sftp, mock_dst_sftp = _setup_two_clients(MockSSH)
+            mock_src_sftp.stat.return_value = _file_stat(size=10)
+            from modules.relay.handler import RelayHandler
+            RelayHandler(*relay_params).execute(log_callback=lambda lvl, msg: None)
+            mock_verify.assert_called_once()
+
+    def test_verify_skipped_when_disabled(self, relay_params):
+        relay_params[0]['verify_checksum'] = False
+        with patch('modules.relay.handler.paramiko.SSHClient') as MockSSH, \
+             patch('modules.relay.handler.verify_relay') as mock_verify:
+            mock_src_client, mock_dst_client, mock_src_sftp, mock_dst_sftp = _setup_two_clients(MockSSH)
+            mock_src_sftp.stat.return_value = _file_stat(size=10)
+            from modules.relay.handler import RelayHandler
+            RelayHandler(*relay_params).execute(log_callback=lambda lvl, msg: None)
+            mock_verify.assert_not_called()
+
+    def test_mismatch_raises_relay_error_single_file(self, relay_params):
+        relay_params[0]['verify_checksum'] = True
+        from modules.checksum.handler import ChecksumVerificationError
+        with patch('modules.relay.handler.paramiko.SSHClient') as MockSSH, \
+             patch('modules.relay.handler.verify_relay',
+                   side_effect=ChecksumVerificationError('SHA-256 MISMATCH: ...')):
+            mock_src_client, mock_dst_client, mock_src_sftp, mock_dst_sftp = _setup_two_clients(MockSSH)
+            mock_src_sftp.stat.return_value = _file_stat(size=10)
+            from modules.relay.handler import RelayHandler, RelayTransferError
+            with pytest.raises(RelayTransferError, match="MISMATCH"):
+                RelayHandler(*relay_params).execute(log_callback=lambda lvl, msg: None)
+
+    def test_mismatch_directory_fail_fast(self, relay_params):
+        relay_params[0]['verify_checksum'] = True
+        from modules.checksum.handler import ChecksumVerificationError
+        with patch('modules.relay.handler.paramiko.SSHClient') as MockSSH, \
+             patch('modules.relay.handler.verify_relay',
+                   side_effect=ChecksumVerificationError('SHA-256 MISMATCH: ...')):
+            mock_src_client, mock_dst_client, mock_src_sftp, mock_dst_sftp = _setup_two_clients(MockSSH)
+            # źródło to katalog z 3 plikami
+            mock_src_sftp.stat.return_value = _dir_stat()
+            entries = []
+            for i in range(3):
+                e = _file_stat(size=10)
+                e.filename = f'file{i}.bin'
+                entries.append(e)
+            mock_src_sftp.listdir_attr.return_value = entries
+            from modules.relay.handler import RelayHandler, RelayTransferError
+            with pytest.raises(RelayTransferError, match="MISMATCH"):
+                RelayHandler(*relay_params).execute(log_callback=lambda lvl, msg: None)
+            # fail-fast: tylko pierwszy plik przesłany przed przerwaniem
+            assert mock_dst_sftp.putfo.call_count + mock_dst_sftp.put.call_count == 1
+
 
 class TestRelayHandlerStrictMode:
     def test_strict_mode_without_key_raises_config_error(self, relay_params):

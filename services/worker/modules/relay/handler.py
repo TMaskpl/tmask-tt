@@ -5,6 +5,8 @@ import tempfile
 
 import paramiko
 
+from modules.checksum.handler import verify_relay, ChecksumVerificationError
+
 from .config import RELAY_STREAM_THRESHOLD, RELAY_TEMP_DIR
 
 
@@ -79,6 +81,12 @@ class RelayHandler:
                 buf.seek(0)
                 log_callback('info', f'{os.path.basename(src_path)}: {buf.getbuffer().nbytes} bytes')
                 dst_sftp.putfo(buf, dst_path)
+
+            if getattr(self, '_verify', False):
+                try:
+                    verify_relay(self._src_client, src_path, self._dst_client, dst_path, log_callback)
+                except ChecksumVerificationError as e:
+                    raise RelayTransferError(str(e))
         except RelayTransferError:
             raise
         except OSError as e:
@@ -114,8 +122,11 @@ class RelayHandler:
         return len(files)
 
     def execute(self, log_callback) -> None:
+        self._verify = bool(self.source_params.get('verify_checksum'))
         source_client = self._build_client(self.source_params)
         dest_client = self._build_client(self.dest_params)
+        self._src_client = source_client
+        self._dst_client = dest_client
 
         try:
             log_callback('info', f'SOURCE: Connecting to {self.source_params["host"]}:{self.source_params["port"]}')

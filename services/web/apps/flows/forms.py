@@ -7,7 +7,7 @@ from .models import Flow
 class FlowForm(forms.ModelForm):
     class Meta:
         model = Flow
-        fields = ['name', 'source_conn', 'source_path', 'dest_conn', 'dest_path']
+        fields = ['name', 'source_conn', 'source_path', 'dest_conn', 'dest_path', 'verify_checksum']
 
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)

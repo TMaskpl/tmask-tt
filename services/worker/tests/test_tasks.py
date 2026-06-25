@@ -282,3 +282,19 @@ class TestExecuteTransferDispatchesWebhook:
             with pytest.raises(RuntimeError):
                 execute_transfer(job_id=99)
             mock_webhook.delay.assert_called_once_with(99)
+
+
+class TestBuildRelayParamsVerifyChecksum:
+    def test_verify_checksum_passed_to_source_params(self):
+        from unittest.mock import MagicMock
+        from tasks import _build_relay_params
+        flow = MagicMock()
+        flow.verify_checksum = True
+        flow.source_path = '/src/a'
+        flow.dest_path = '/dst/b'
+        for conn in (flow.source_conn, flow.dest_conn):
+            conn.port = 22
+            conn.strict_host_key_checking = False
+            conn.known_host_key = ''
+        source_params, dest_params = _build_relay_params(flow)
+        assert source_params['verify_checksum'] is True
