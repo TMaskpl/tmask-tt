@@ -1,0 +1,15 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}DASHBOARD — TMASK-TRANSPORTER{% endblock %}
+{% block content %}
+<div class="box">
+  <div class="box-title">[ DASHBOARD ] — ostatnie 30 dni</div>
+  {{ data|json_script:"dashboard-data" }}
+  <div id="dashboard-empty" style="display:none;color:var(--green);opacity:0.6;padding:1rem;">BRAK DANYCH — wykonaj pierwszy transfer</div>
+  <div style="display:grid;grid-template-columns:2fr 1fr;gap:1rem;margin-top:1rem;">
+    <div><canvas id="chart-per-day"></canvas></div>
+    <div><canvas id="chart-success"></canvas></div>
+  </div>
+  <div style="margin-top:1rem;"><canvas id="chart-top"></canvas></div>
+</div>
+{% endblock %}
