@@ -127,3 +127,58 @@ class TestVerifyRsync:
                     str(src), ["ssh", "user@host"], "/dest/file.bin",
                     lambda lvl, msg: None,
                 )
+
+
+class TestVerifyRelay:
+    def _make_client(self, stdout_content: bytes, stderr_content: bytes = b"", exit_status: int = 0):
+        mock_client = MagicMock()
+        mock_chan = MagicMock()
+        mock_chan.recv_exit_status.return_value = exit_status
+        mock_stdout = MagicMock()
+        mock_stdout.read.return_value = stdout_content
+        mock_stderr = MagicMock()
+        mock_stderr.read.return_value = stderr_content
+        mock_client.exec_command.return_value = (mock_chan, mock_stdout, mock_stderr)
+        return mock_client
+
+    def test_ok_when_hashes_match(self):
+        sha = "a" * 64
+        src_client = self._make_client(f"{sha}  /src/file.bin\n".encode())
+        dst_client = self._make_client(f"{sha}  /dst/file.bin\n".encode())
+        logs = []
+        from modules.checksum.handler import verify_relay
+        verify_relay(src_client, "/src/file.bin", dst_client, "/dst/file.bin",
+                     lambda lvl, msg: logs.append(msg))
+        assert any("SHA-256 OK" in m for m in logs)
+
+    def test_raises_on_mismatch(self):
+        src_client = self._make_client(f"{'a' * 64}  /src/file.bin\n".encode())
+        dst_client = self._make_client(f"{'b' * 64}  /dst/file.bin\n".encode())
+        from modules.checksum.handler import verify_relay
+        with pytest.raises(ChecksumVerificationError, match="MISMATCH"):
+            verify_relay(src_client, "/src/file.bin", dst_client, "/dst/file.bin",
+                         lambda lvl, msg: None)
+
+    def test_raises_when_source_sha256sum_fails(self):
+        src_client = self._make_client(b"", b"sha256sum: not found", exit_status=1)
+        dst_client = self._make_client(f"{'a' * 64}  /dst/file.bin\n".encode())
+        from modules.checksum.handler import verify_relay
+        with pytest.raises(ChecksumVerificationError, match="sha256sum failed"):
+            verify_relay(src_client, "/src/file.bin", dst_client, "/dst/file.bin",
+                         lambda lvl, msg: None)
+
+    def test_raises_when_dest_sha256sum_fails(self):
+        src_client = self._make_client(f"{'a' * 64}  /src/file.bin\n".encode())
+        dst_client = self._make_client(b"", b"read error", exit_status=1)
+        from modules.checksum.handler import verify_relay
+        with pytest.raises(ChecksumVerificationError, match="sha256sum failed"):
+            verify_relay(src_client, "/src/file.bin", dst_client, "/dst/file.bin",
+                         lambda lvl, msg: None)
+
+    def test_raises_on_empty_output(self):
+        src_client = self._make_client(b"", exit_status=0)
+        dst_client = self._make_client(f"{'a' * 64}  /dst/file.bin\n".encode())
+        from modules.checksum.handler import verify_relay
+        with pytest.raises(ChecksumVerificationError, match="sha256sum failed"):
+            verify_relay(src_client, "/src/file.bin", dst_client, "/dst/file.bin",
+                         lambda lvl, msg: None)
