@@ -2,16 +2,50 @@
 {% load static %}
 {% block title %}DASHBOARD — TMASK-TRANSPORTER{% endblock %}
 {% block content %}
-<div class="box">
-  <div class="box-title">[ DASHBOARD ] — ostatnie 30 dni</div>
-  {{ data|json_script:"dashboard-data" }}
-  <div id="dashboard-empty" style="display:none;color:var(--green);opacity:0.6;padding:1rem;">BRAK DANYCH — wykonaj pierwszy transfer</div>
-  <div style="display:grid;grid-template-columns:2fr 1fr;gap:1rem;margin-top:1rem;">
-    <div><canvas id="chart-per-day"></canvas></div>
-    <div><canvas id="chart-success"></canvas></div>
-  </div>
-  <div style="margin-top:1rem;"><canvas id="chart-top"></canvas></div>
+<div class="dash-header">
+  <h1 class="glow">DASHBOARD</h1>
+  <span class="dash-sub">// ostatnie 30 dni</span>
 </div>
+
+{{ data|json_script:"dashboard-data" }}
+
+{% if data.success.total %}
+<section class="stat-grid">
+  <div class="stat-tile">
+    <span class="stat-value">{{ data.success.total }}</span>
+    <span class="stat-label">Transfery</span>
+  </div>
+  <div class="stat-tile accent-done">
+    <span class="stat-value">{{ data.success.done }}</span>
+    <span class="stat-label">Udane</span>
+  </div>
+  <div class="stat-tile accent-failed">
+    <span class="stat-value">{{ data.success.failed }}</span>
+    <span class="stat-label">Błędy</span>
+  </div>
+  <div class="stat-tile accent-rate">
+    <span class="stat-value">{{ data.success.rate_pct }}%</span>
+    <span class="stat-label">Success rate</span>
+  </div>
+</section>
+
+<div class="chart-grid">
+  <div class="box chart-box">
+    <span class="box-title">Transfery / dzień</span>
+    <div class="chart-canvas"><canvas id="chart-per-day"></canvas></div>
+  </div>
+  <div class="box chart-box">
+    <span class="box-title">Success rate</span>
+    <div class="chart-canvas"><canvas id="chart-success"></canvas></div>
+  </div>
+  <div class="box chart-box chart-full">
+    <span class="box-title">Top źródła</span>
+    <div class="chart-canvas"><canvas id="chart-top"></canvas></div>
+  </div>
+</div>
+{% else %}
+<div class="dash-empty">BRAK DANYCH — wykonaj pierwszy transfer</div>
+{% endif %}
 {% endblock %}
 {% block scripts %}
 <script src="{% static 'js/chart.min.js' %}"></script>

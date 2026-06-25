@@ -12,13 +12,12 @@
 <body>
   {% if user.is_authenticated %}
   <nav>
-    <span class="logo">[ TMASK-TRANSPORTER ]</span>
+    <a href="{% url 'dashboard:index' %}" class="logo {% if request.resolver_match.app_name == 'dashboard' %}active{% endif %}" title="Dashboard">[ TMASK-TRANSPORTER ]</a>
     <a href="{% url 'transfers:create' %}" class="{% if request.resolver_match.app_name == 'transfers' %}active{% endif %}">TRANSFERS</a>
     <a href="{% url 'connections:list' %}" class="{% if request.resolver_match.app_name == 'connections' %}active{% endif %}">CONNECTIONS</a>
     <a href="{% url 'flows:list' %}" class="{% if request.resolver_match.app_name == 'flows' %}active{% endif %}">FLOWS</a>
     <a href="{% url 'scheduler:list' %}" class="{% if request.resolver_match.app_name == 'scheduler' %}active{% endif %}">SCHEDULER</a>
     <a href="{% url 'transfers:logs' %}">LOGS</a>
-    <a href="{% url 'dashboard:index' %}" class="{% if request.resolver_match.app_name == 'dashboard' %}active{% endif %}">DASHBOARD</a>
     {% if user.is_admin %}
     <a href="{% url 'accounts:users' %}">USERS</a>
     {% endif %}
