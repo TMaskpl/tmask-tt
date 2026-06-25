@@ -57,6 +57,12 @@
         </div>
       </div>
     </div>
+    <div class="field" style="margin-top:1.2rem;">
+      <label>WERYFIKACJA SHA-256:</label>
+      {{ form.verify_checksum }}
+      <span style="font-size:0.75rem;color:var(--dim);">Po transferze porównuje sha256sum na hoście źródłowym i docelowym. Transfer = błąd przy rozbieżności.</span>
+      {% if form.verify_checksum.errors %}<div style="color:var(--red);font-size:0.8rem;">{{ form.verify_checksum.errors }}</div>{% endif %}
+    </div>
     <div style="display:flex;gap:1rem;margin-top:1.5rem;">
       <button type="submit" class="btn">[ SAVE FLOW ]</button>
       <a href="{% url 'flows:list' %}" class="btn btn-danger">[ CANCEL ]</a>

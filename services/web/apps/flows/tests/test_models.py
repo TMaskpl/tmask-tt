@@ -53,3 +53,13 @@ class TestFlowModel:
             dest_conn=dst, dest_path='/y',
         )
         assert Flow.objects.filter(owner=regular_user).count() == 0
+
+    def test_verify_checksum_defaults_false(self, regular_user, make_connection):
+        src = make_connection(regular_user, name='S', host='10.0.0.1')
+        dst = make_connection(regular_user, name='D', host='10.0.0.2')
+        flow = Flow.objects.create(
+            owner=regular_user, name='Flow',
+            source_conn=src, source_path='/a',
+            dest_conn=dst, dest_path='/b',
+        )
+        assert flow.verify_checksum is False

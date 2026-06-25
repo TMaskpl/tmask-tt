@@ -12,6 +12,7 @@ class Flow(models.Model):
     source_path = models.CharField(max_length=2000)
     dest_conn   = models.ForeignKey(Connection, on_delete=models.CASCADE, related_name='dest_flows')
     dest_path   = models.CharField(max_length=2000)
+    verify_checksum = models.BooleanField(default=False)
     created_at  = models.DateTimeField(auto_now_add=True)
 
     def clean(self):
