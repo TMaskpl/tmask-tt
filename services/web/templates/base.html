@@ -18,6 +18,7 @@
     <a href="{% url 'flows:list' %}" class="{% if request.resolver_match.app_name == 'flows' %}active{% endif %}">FLOWS</a>
     <a href="{% url 'scheduler:list' %}" class="{% if request.resolver_match.app_name == 'scheduler' %}active{% endif %}">SCHEDULER</a>
     <a href="{% url 'transfers:logs' %}">LOGS</a>
+    <a href="{% url 'dashboard:index' %}" class="{% if request.resolver_match.app_name == 'dashboard' %}active{% endif %}">DASHBOARD</a>
     {% if user.is_admin %}
     <a href="{% url 'accounts:users' %}">USERS</a>
     {% endif %}
@@ -53,5 +54,6 @@
       <button type="button" class="btn btn-danger" data-browse-close>[ ZAMKNIJ ]</button>
     </div>
   </div>
+  {% block scripts %}{% endblock %}
 </body>
 </html>
