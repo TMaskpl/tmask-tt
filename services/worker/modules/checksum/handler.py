@@ -19,9 +19,9 @@ def _local_sha256(path: str) -> str:
 
 
 def _remote_sha256(ssh_client, remote_path: str) -> str:
-    chan, stdout, stderr = ssh_client.exec_command(f'sha256sum {shlex.quote(remote_path)}')
+    _stdin, stdout, stderr = ssh_client.exec_command(f'sha256sum {shlex.quote(remote_path)}')
     output = stdout.read().decode().strip()
-    exit_status = chan.recv_exit_status()
+    exit_status = stdout.channel.recv_exit_status()
     if exit_status != 0 or not output:
         raise ChecksumVerificationError(f'sha256sum failed: {stderr.read().decode().strip()}')
     return output.split()[0]

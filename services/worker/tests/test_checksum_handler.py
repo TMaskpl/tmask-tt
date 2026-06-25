@@ -29,13 +29,13 @@ class TestLocalSha256:
 class TestVerifySftp:
     def _make_client(self, stdout_content: bytes, stderr_content: bytes = b"", exit_status: int = 0):
         mock_client = MagicMock()
-        mock_chan = MagicMock()
-        mock_chan.recv_exit_status.return_value = exit_status
+        mock_stdin = MagicMock(spec=[])  # ChannelStdinFile — kontrakt paramiko: bez recv_exit_status
         mock_stdout = MagicMock()
         mock_stdout.read.return_value = stdout_content
+        mock_stdout.channel.recv_exit_status.return_value = exit_status
         mock_stderr = MagicMock()
         mock_stderr.read.return_value = stderr_content
-        mock_client.exec_command.return_value = (mock_chan, mock_stdout, mock_stderr)
+        mock_client.exec_command.return_value = (mock_stdin, mock_stdout, mock_stderr)
         return mock_client
 
     def test_ok_when_hashes_match(self, tmp_path):
@@ -132,13 +132,13 @@ class TestVerifyRsync:
 class TestVerifyRelay:
     def _make_client(self, stdout_content: bytes, stderr_content: bytes = b"", exit_status: int = 0):
         mock_client = MagicMock()
-        mock_chan = MagicMock()
-        mock_chan.recv_exit_status.return_value = exit_status
+        mock_stdin = MagicMock(spec=[])  # ChannelStdinFile — kontrakt paramiko: bez recv_exit_status
         mock_stdout = MagicMock()
         mock_stdout.read.return_value = stdout_content
+        mock_stdout.channel.recv_exit_status.return_value = exit_status
         mock_stderr = MagicMock()
         mock_stderr.read.return_value = stderr_content
-        mock_client.exec_command.return_value = (mock_chan, mock_stdout, mock_stderr)
+        mock_client.exec_command.return_value = (mock_stdin, mock_stdout, mock_stderr)
         return mock_client
 
     def test_ok_when_hashes_match(self):
