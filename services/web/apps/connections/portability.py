@@ -6,6 +6,8 @@ from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives.hashes import SHA256
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
+from django.db import transaction
+
 from apps.flows.models import Flow
 from .models import Connection
 
@@ -82,3 +84,56 @@ def export_config(user, passphrase: str) -> dict:
         'connections': connections,
         'flows': flows,
     }
+
+
+def import_config(user, data: dict, passphrase: str) -> ImportResult:
+    if data.get('format') != FORMAT or data.get('version') != VERSION:
+        raise ValueError('Nieprawidłowy format pliku')
+    salt = base64.b64decode(data['kdf']['salt'])
+    iterations = data['kdf'].get('iterations', KDF_ITERATIONS)
+    fernet = Fernet(_derive_key(passphrase, salt, iterations))
+    try:
+        fernet.decrypt(data['check'].encode())
+    except InvalidToken:
+        raise PassphraseError('Błędne hasło lub uszkodzony plik')
+
+    result = ImportResult()
+    with transaction.atomic():
+        existing = set(
+            Connection.objects.filter(owner=user).values_list('name', flat=True)
+        )
+        for row in data.get('connections', []):
+            if row['name'] in existing:
+                result.conn_skipped += 1
+                continue
+            conn = Connection(owner=user)
+            for f in CONNECTION_FIELDS:
+                setattr(conn, f, row.get(f))
+            conn.password = _decrypt_secret(row.get('password_enc'), fernet)
+            conn.ssh_key = _decrypt_secret(row.get('ssh_key_enc'), fernet)
+            conn.save()
+            existing.add(row['name'])
+            result.conn_added += 1
+
+        conn_map = {c.name: c for c in Connection.objects.filter(owner=user)}
+        existing_flows = set(
+            Flow.objects.filter(owner=user).values_list('name', flat=True)
+        )
+        for row in data.get('flows', []):
+            if row['name'] in existing_flows:
+                result.flow_skipped += 1
+                continue
+            src = conn_map.get(row['source_conn'])
+            dst = conn_map.get(row['dest_conn'])
+            if src is None or dst is None:
+                result.flow_unresolved += 1
+                continue
+            Flow.objects.create(
+                owner=user, name=row['name'],
+                source_conn=src, source_path=row['source_path'],
+                dest_conn=dst, dest_path=row['dest_path'],
+                verify_checksum=row.get('verify_checksum', False),
+            )
+            existing_flows.add(row['name'])
+            result.flow_added += 1
+    return result
