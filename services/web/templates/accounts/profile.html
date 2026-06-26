@@ -367,6 +367,38 @@
 
 </div>
 
+{# ── Backup / Restore ─────────────────────────────── #}
+<div class="tokens-panel" style="margin-top:1.5rem;">
+  <div class="tokens-title">BACKUP / RESTORE</div>
+  <div class="backup-row">
+    <div class="backup-meta">
+      <span class="backup-label">EKSPORT</span>
+      <span class="backup-hint">Pobiera całą konfigurację (połączenia + flows) do pliku JSON. Sekrety szyfrowane hasłem — zapamiętaj je.</span>
+    </div>
+    <form method="post" action="{% url 'connections:export' %}" class="backup-form">
+      {% csrf_token %}
+      <label class="inline-label">HASŁO
+        <input type="password" name="passphrase" required autocomplete="off">
+      </label>
+      <button type="submit" class="btn">[ EXPORT ]</button>
+    </form>
+  </div>
+  <div class="backup-row">
+    <div class="backup-meta">
+      <span class="backup-label">IMPORT</span>
+      <span class="backup-hint">Wczytuje połączenia i flows z pliku. Istniejące (po nazwie) są pomijane — nic nie nadpisuje.</span>
+    </div>
+    <form method="post" action="{% url 'connections:import' %}" enctype="multipart/form-data" class="backup-form">
+      {% csrf_token %}
+      <input type="file" name="file" accept="application/json,.json" required class="file-input">
+      <label class="inline-label">HASŁO
+        <input type="password" name="passphrase" required autocomplete="off">
+      </label>
+      <button type="submit" class="btn">[ IMPORT ]</button>
+    </form>
+  </div>
+</div>
+
 {# ── Webhook JS ───────────────────────────────────── #}
 <script>
   document.body.addEventListener('htmx:afterRequest', function(evt) {
