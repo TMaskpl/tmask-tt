@@ -3,26 +3,15 @@
 {% block content %}
 <div class="box">
   <span class="box-title">CONNECTIONS</span>
-  <div style="margin-bottom:1rem;display:flex;gap:1rem;flex-wrap:wrap;align-items:center;">
+  <div class="toolbar">
     <a href="{% url 'connections:create' %}" class="btn">[ + NEW CONNECTION ]</a>
-    <form method="post" action="{% url 'connections:export' %}" style="display:inline-flex;gap:0.4rem;align-items:center;">
-      {% csrf_token %}
-      <input type="password" name="passphrase" placeholder="hasło eksportu" required style="width:auto;">
-      <button type="submit" class="btn">[ EXPORT ]</button>
-    </form>
-    <form method="post" action="{% url 'connections:import' %}" enctype="multipart/form-data" style="display:inline-flex;gap:0.4rem;align-items:center;">
-      {% csrf_token %}
-      <input type="file" name="file" accept="application/json,.json" required style="width:auto;">
-      <input type="password" name="passphrase" placeholder="hasło importu" required style="width:auto;">
-      <button type="submit" class="btn">[ IMPORT ]</button>
-    </form>
   </div>
   {% if connections %}
   <table>
     <thead>
       <tr>
         <th>NAME</th><th>HOST</th><th>PORT</th><th>PROTO</th>
-        <th>COMPRESS</th><th>ENCRYPT</th><th>ACTIONS</th>
+        <th>COMPRESS</th><th>ENCRYPT</th><th class="col-actions">ACTIONS</th>
       </tr>
     </thead>
     <tbody>
@@ -34,25 +23,58 @@
         <td>{{ conn.protocol|upper }}</td>
         <td>{% if conn.compress %}YES{% else %}—{% endif %}</td>
         <td>{% if conn.encrypt %}YES{% else %}—{% endif %}</td>
-        <td>
-          <button class="btn btn-warn"
-            hx-get="{% url 'connections:test' conn.pk %}"
-            hx-target="#test-result-{{ conn.pk }}"
-            hx-swap="innerHTML">[TEST]</button>
-          <a href="{% url 'connections:edit' conn.pk %}" class="btn">[EDIT]</a>
-          <form method="post" action="{% url 'connections:delete' conn.pk %}" style="display:inline"
-            onsubmit="return confirm('DELETE {{ conn.name }}?')">
-            {% csrf_token %}
-            <button type="submit" class="btn btn-danger">[DEL]</button>
-          </form>
-          <span id="test-result-{{ conn.pk }}" style="font-size:0.8rem; margin-left:0.5rem;"></span>
+        <td class="col-actions">
+          <div class="row-actions">
+            <button class="btn btn-small btn-warn"
+              hx-get="{% url 'connections:test' conn.pk %}"
+              hx-target="#test-result-{{ conn.pk }}"
+              hx-swap="innerHTML">[TEST]</button>
+            <a href="{% url 'connections:edit' conn.pk %}" class="btn btn-small">[EDIT]</a>
+            <form method="post" action="{% url 'connections:delete' conn.pk %}" style="display:inline"
+              onsubmit="return confirm('DELETE {{ conn.name }}?')">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-small btn-danger">[DEL]</button>
+            </form>
+            <span id="test-result-{{ conn.pk }}" class="test-result"></span>
+          </div>
         </td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
   {% else %}
-  <p style="color:#555;">NO CONNECTIONS CONFIGURED — ADD ONE ABOVE</p>
+  <p style="color:#6a8a6a;">NO CONNECTIONS CONFIGURED — ADD ONE ABOVE</p>
   {% endif %}
+</div>
+
+<div class="box backup-box">
+  <span class="box-title">BACKUP / RESTORE</span>
+  <div class="backup-row">
+    <div class="backup-meta">
+      <span class="backup-label">EKSPORT</span>
+      <span class="backup-hint">Pobiera całą konfigurację (połączenia + flows) do pliku JSON. Sekrety szyfrowane hasłem — zapamiętaj je.</span>
+    </div>
+    <form method="post" action="{% url 'connections:export' %}" class="backup-form">
+      {% csrf_token %}
+      <label class="inline-label">HASŁO
+        <input type="password" name="passphrase" required autocomplete="off">
+      </label>
+      <button type="submit" class="btn">[ EXPORT ]</button>
+    </form>
+  </div>
+  <div class="backup-row">
+    <div class="backup-meta">
+      <span class="backup-label">IMPORT</span>
+      <span class="backup-hint">Wczytuje połączenia i flows z pliku. Istniejące (po nazwie) są pomijane — nic nie nadpisuje.</span>
+    </div>
+    <form method="post" action="{% url 'connections:import' %}" enctype="multipart/form-data" class="backup-form">
+      {% csrf_token %}
+      <input type="file" name="file" accept="application/json,.json" required class="file-input">
+      <label class="inline-label">HASŁO
+        <input type="password" name="passphrase" required autocomplete="off">
+      </label>
+      <button type="submit" class="btn">[ IMPORT ]</button>
+    </form>
+  </div>
 </div>
 {% endblock %}
