@@ -3,8 +3,19 @@
 {% block content %}
 <div class="box">
   <span class="box-title">CONNECTIONS</span>
-  <div style="margin-bottom:1rem;">
+  <div style="margin-bottom:1rem;display:flex;gap:1rem;flex-wrap:wrap;align-items:center;">
     <a href="{% url 'connections:create' %}" class="btn">[ + NEW CONNECTION ]</a>
+    <form method="post" action="{% url 'connections:export' %}" style="display:inline-flex;gap:0.4rem;align-items:center;">
+      {% csrf_token %}
+      <input type="password" name="passphrase" placeholder="hasło eksportu" required style="width:auto;">
+      <button type="submit" class="btn">[ EXPORT ]</button>
+    </form>
+    <form method="post" action="{% url 'connections:import' %}" enctype="multipart/form-data" style="display:inline-flex;gap:0.4rem;align-items:center;">
+      {% csrf_token %}
+      <input type="file" name="file" accept="application/json,.json" required style="width:auto;">
+      <input type="password" name="passphrase" placeholder="hasło importu" required style="width:auto;">
+      <button type="submit" class="btn">[ IMPORT ]</button>
+    </form>
   </div>
   {% if connections %}
   <table>
