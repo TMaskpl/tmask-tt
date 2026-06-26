@@ -18,3 +18,4 @@ Trivy/*json
 **/.coverage
 backup-pg16/*
 transfers/*
+graphify-out/
