@@ -1,16 +1,16 @@
 import io
+import json
 import posixpath
 import re
 import socket
+from datetime import date
 
 import paramiko
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.http import require_POST
-import json
-from datetime import date
-from django.contrib import messages
 from .portability import export_config, import_config, PassphraseError
 from .forms import ConnectionForm
 from .models import Connection

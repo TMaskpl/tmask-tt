@@ -76,3 +76,12 @@ class TestImportConfig:
         result = portability.import_config(admin_user, data, 'pw')
         assert result.flow_added == 0
         assert result.flow_unresolved == 1
+
+    def test_import_corrupt_secret_token_raises(self, regular_user, admin_user, make_connection):
+        # check przechodzi (poprawne hasło), ale token sekretu uszkodzony → PassphraseError, brak zapisu
+        make_connection(regular_user, name='C', password='secret')
+        data = portability.export_config(regular_user, 'pw')
+        data['connections'][0]['password_enc'] = data['check'][:-4] + 'XXXX'
+        with pytest.raises(portability.PassphraseError):
+            portability.import_config(admin_user, data, 'pw')
+        assert Connection.objects.filter(owner=admin_user).count() == 0

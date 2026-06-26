@@ -109,8 +109,11 @@ def import_config(user, data: dict, passphrase: str) -> ImportResult:
             conn = Connection(owner=user)
             for f in CONNECTION_FIELDS:
                 setattr(conn, f, row.get(f))
-            conn.password = _decrypt_secret(row.get('password_enc'), fernet)
-            conn.ssh_key = _decrypt_secret(row.get('ssh_key_enc'), fernet)
+            try:
+                conn.password = _decrypt_secret(row.get('password_enc'), fernet)
+                conn.ssh_key = _decrypt_secret(row.get('ssh_key_enc'), fernet)
+            except InvalidToken:
+                raise PassphraseError('Błędne hasło lub uszkodzony plik')
             conn.save()
             existing.add(row['name'])
             result.conn_added += 1
