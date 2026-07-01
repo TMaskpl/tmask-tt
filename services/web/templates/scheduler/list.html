@@ -4,7 +4,9 @@
 <div class="box">
   <span class="box-title">SCHEDULED TRANSFERS</span>
   <div style="margin-bottom:1rem;">
+    {% if user.is_admin %}
     <a href="{% url 'scheduler:create' %}" class="btn">[ + NEW SCHEDULE ]</a>
+    {% endif %}
   </div>
   {% if schedules %}
   <table>
@@ -21,6 +23,7 @@
         <td>{{ s.last_run|date:"Y-m-d H:i"|default:"—" }}</td>
         <td>{% if s.enabled %}<span style="color:var(--green-bright);">● ACTIVE</span>{% else %}<span style="color:#555;">○ PAUSED</span>{% endif %}</td>
         <td>
+          {% if user.is_admin %}
           <form method="post" action="{% url 'scheduler:toggle' s.pk %}" style="display:inline">{% csrf_token %}
             <button type="submit" class="btn btn-warn">{% if s.enabled %}[PAUSE]{% else %}[RESUME]{% endif %}</button>
           </form>
@@ -29,6 +32,9 @@
             onsubmit="return confirm('DELETE schedule?')">{% csrf_token %}
             <button type="submit" class="btn btn-danger">[DEL]</button>
           </form>
+          {% else %}
+          <span style="color:#555;">—</span>
+          {% endif %}
         </td>
       </tr>
       {% endfor %}

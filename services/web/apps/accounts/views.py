@@ -2,18 +2,21 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import login, logout, authenticate, get_user_model
 from django.contrib.auth.decorators import login_required
-from django.core.exceptions import PermissionDenied
 from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 import requests
 
-from .forms import LoginForm, ProfileForm
+from .forms import LoginForm, ProfileForm, UserCreateForm
+from .permissions import require_role
+from .models import ROLE_ADMIN, ROLE_CHOICES
 from utils.url_validator import block_private_url
 from apps.api.models import ApiToken, MAX_TOKENS_PER_USER
+from apps.organization.models import get_organization
 
 PROFILE_URL = 'accounts:profile'
+USERS_LIST = 'accounts:users'
 
 
 def login_view(request):
@@ -42,13 +45,46 @@ def logout_view(request):
     return redirect('accounts:login')
 
 
-@login_required
+@require_role(ROLE_ADMIN)
 def users_list(request):
-    if not request.user.is_admin:
-        raise PermissionDenied
     User = get_user_model()
     users = User.objects.all().order_by('username')
-    return render(request, 'users/list.html', {'users': users})
+    return render(request, 'users/list.html', {
+        'users': users,
+        'role_choices': ROLE_CHOICES,
+        'organization': get_organization(),
+    })
+
+
+@require_role(ROLE_ADMIN)
+@require_POST
+def change_user_role(request, pk):
+    User = get_user_model()
+    target = get_object_or_404(User, pk=pk)
+    new_role = request.POST.get('role', '')
+    valid_roles = dict(ROLE_CHOICES)
+    if new_role not in valid_roles:
+        messages.error(request, 'Nieprawidłowa rola.')
+        return redirect(USERS_LIST)
+    if target.role == ROLE_ADMIN and new_role != ROLE_ADMIN:
+        remaining_admins = User.objects.filter(role=ROLE_ADMIN).exclude(pk=target.pk).count()
+        if remaining_admins == 0:
+            messages.error(request, 'Nie można odebrać roli Admin ostatniemu administratorowi.')
+            return redirect(USERS_LIST)
+    target.role = new_role
+    target.save(update_fields=['role'])
+    messages.success(request, f'Rola {target.username} zmieniona na {valid_roles[new_role]}.')
+    return redirect(USERS_LIST)
+
+
+@require_role(ROLE_ADMIN)
+def user_create(request):
+    form = UserCreateForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        user = form.save()
+        messages.success(request, f'Użytkownik {user.username} utworzony z rolą {user.get_role_display()}.')
+        return redirect(USERS_LIST)
+    return render(request, 'users/create.html', {'form': form})
 
 
 @login_required

@@ -29,10 +29,11 @@ class TestBrowseDirectory:
         assert 'docs' in content
         assert 'file.txt' in content
 
-    def test_returns_404_for_other_users_connection(self, auth_client, admin_user, make_connection):
+    def test_returns_200_for_other_users_connection(self, auth_client, admin_user, make_connection, mocker):
         conn = make_connection(admin_user)
+        mocker.patch('apps.connections.views.list_directory', return_value=[])
         resp = auth_client.get(self._url(conn.pk))
-        assert resp.status_code == 404
+        assert resp.status_code == 200
 
     def test_renders_error_message_on_ssh_failure(self, auth_client, regular_user, make_connection, mocker):
         conn = make_connection(regular_user)
@@ -127,9 +128,9 @@ class TestBrowseButtonCSPRegression:
         assert 'browser.js' in html
         assert 'function openBrowser' not in html
 
-    def test_flows_form_browse_button_uses_data_attribute(self, auth_client, regular_user, make_connection):
+    def test_flows_form_browse_button_uses_data_attribute(self, admin_client, regular_user, make_connection):
         make_connection(regular_user)
-        resp = auth_client.get(reverse('flows:create'))
+        resp = admin_client.get(reverse('flows:create'))
         assert resp.status_code == 200
         html = resp.content.decode()
         assert 'data-browse-open' in html

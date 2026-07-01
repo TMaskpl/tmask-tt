@@ -275,3 +275,96 @@ class TestProfileFormSSRF:
         })
         assert response.status_code == 200
         assert 'webhook_url' in response.context['form'].errors
+
+
+@pytest.mark.django_db
+class TestChangeUserRole:
+    def test_admin_can_change_operator_to_readonly(self, admin_client, regular_user):
+        resp = admin_client.post(f'/accounts/users/{regular_user.pk}/role/', {'role': 'readonly'})
+        assert resp.status_code == 302
+        regular_user.refresh_from_db()
+        assert regular_user.role == 'readonly'
+
+    def test_operator_cannot_change_roles(self, auth_client, regular_user):
+        resp = auth_client.post(f'/accounts/users/{regular_user.pk}/role/', {'role': 'admin'})
+        assert resp.status_code == 403
+
+    def test_admin_cannot_demote_last_admin(self, admin_client, admin_user):
+        resp = admin_client.post(f'/accounts/users/{admin_user.pk}/role/', {'role': 'operator'})
+        admin_user.refresh_from_db()
+        assert admin_user.role == 'admin'
+
+    def test_admin_can_demote_self_if_another_admin_exists(self, admin_client, admin_user, django_user_model):
+        django_user_model.objects.create_user(username='second_admin', password='p', role='admin')
+        resp = admin_client.post(f'/accounts/users/{admin_user.pk}/role/', {'role': 'operator'})
+        admin_user.refresh_from_db()
+        assert admin_user.role == 'operator'
+
+    def test_invalid_role_value_rejected(self, admin_client, regular_user):
+        resp = admin_client.post(f'/accounts/users/{regular_user.pk}/role/', {'role': 'superuser'})
+        regular_user.refresh_from_db()
+        assert regular_user.role == 'operator'
+
+
+@pytest.mark.django_db
+class TestUsersListShowsOrganization:
+    def test_page_shows_organization_name_and_links(self, admin_client):
+        from apps.organization.models import get_organization
+        org = get_organization()
+        org.name = 'Acme Corp'
+        org.save()
+        resp = admin_client.get('/accounts/users/')
+        assert resp.status_code == 200
+        content = resp.content.decode()
+        assert 'Acme Corp' in content
+        assert '/organization/' in content
+        assert '/accounts/users/new/' in content
+
+
+@pytest.mark.django_db
+class TestUserCreate:
+    def test_admin_can_create_user(self, admin_client, django_user_model):
+        resp = admin_client.post('/accounts/users/new/', {
+            'username': 'newoperator',
+            'email': 'newoperator@example.com',
+            'role': 'operator',
+            'password1': 'a-decent-password-1',
+            'password2': 'a-decent-password-1',
+        })
+        assert resp.status_code == 302
+        user = django_user_model.objects.get(username='newoperator')
+        assert user.role == 'operator'
+        assert user.email == 'newoperator@example.com'
+        assert user.check_password('a-decent-password-1')
+
+    def test_operator_cannot_create_user(self, auth_client):
+        resp = auth_client.get('/accounts/users/new/')
+        assert resp.status_code == 403
+
+    def test_readonly_cannot_create_user(self, readonly_client):
+        resp = readonly_client.post('/accounts/users/new/', {
+            'username': 'x', 'password1': 'a-decent-password-1', 'password2': 'a-decent-password-1', 'role': 'operator',
+        })
+        assert resp.status_code == 403
+
+    def test_duplicate_username_rejected(self, admin_client, regular_user):
+        resp = admin_client.post('/accounts/users/new/', {
+            'username': regular_user.username,
+            'email': 'dup@example.com',
+            'role': 'operator',
+            'password1': 'a-decent-password-1',
+            'password2': 'a-decent-password-1',
+        })
+        assert resp.status_code == 200
+        assert resp.context['form'].errors
+
+    def test_mismatched_passwords_rejected(self, admin_client, django_user_model):
+        resp = admin_client.post('/accounts/users/new/', {
+            'username': 'mismatched',
+            'email': 'mismatched@example.com',
+            'role': 'operator',
+            'password1': 'a-decent-password-1',
+            'password2': 'a-different-password-2',
+        })
+        assert resp.status_code == 200
+        assert not django_user_model.objects.filter(username='mismatched').exists()

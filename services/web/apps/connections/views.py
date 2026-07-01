@@ -7,10 +7,11 @@ from datetime import date
 
 import paramiko
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.http import require_POST
+from apps.accounts.permissions import require_role
+from apps.accounts.models import ROLE_ADMIN, ROLE_READONLY
 from .portability import export_config, import_config, PassphraseError
 from .forms import ConnectionForm
 from .models import Connection
@@ -20,12 +21,12 @@ from .ssh_tester import test_connection as _test_connection
 _CONNECTIONS_LIST = 'connections:list'
 _MAX_IMPORT_BYTES = 1024 * 1024
 
-@login_required
+@require_role(ROLE_READONLY)
 def connection_list(request):
-    connections = Connection.objects.filter(owner=request.user)
+    connections = Connection.objects.all()
     return render(request, 'connections/list.html', {'connections': connections})
 
-@login_required
+@require_role(ROLE_ADMIN)
 def connection_create(request):
     form = ConnectionForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
@@ -35,31 +36,31 @@ def connection_create(request):
         return redirect(_CONNECTIONS_LIST)
     return render(request, 'connections/form.html', {'form': form, 'action': 'CREATE'})
 
-@login_required
+@require_role(ROLE_ADMIN)
 def connection_edit(request, pk):
-    conn = get_object_or_404(Connection, pk=pk, owner=request.user)
+    conn = get_object_or_404(Connection, pk=pk)
     form = ConnectionForm(request.POST or None, instance=conn)
     if request.method == 'POST' and form.is_valid():
         form.save()
         return redirect(_CONNECTIONS_LIST)
     return render(request, 'connections/form.html', {'form': form, 'action': 'EDIT', 'conn': conn})
 
-@login_required
+@require_role(ROLE_ADMIN)
 @require_POST
 def connection_delete(request, pk):
-    conn = get_object_or_404(Connection, pk=pk, owner=request.user)
+    conn = get_object_or_404(Connection, pk=pk)
     conn.delete()
     return redirect(_CONNECTIONS_LIST)
 
-@login_required
+@require_role(ROLE_READONLY)
 def connection_test(request, pk):
-    conn = get_object_or_404(Connection, pk=pk, owner=request.user)
+    conn = get_object_or_404(Connection, pk=pk)
     result = _test_connection(conn)
     return JsonResponse({'success': result.success, 'message': result.message})
 
-@login_required
+@require_role(ROLE_ADMIN)
 def connection_scan_hostkey(request, pk):
-    conn = get_object_or_404(Connection, pk=pk, owner=request.user)
+    conn = get_object_or_404(Connection, pk=pk)
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())  # nosec B507 — scan_hostkey view is designed to discover unknown host keys
     host_key = None
@@ -79,7 +80,7 @@ def connection_scan_hostkey(request, pk):
         try:
             client.connect(**connect_kwargs)
         except paramiko.AuthenticationException:
-            pass  # transport already has the host key from SSH handshake
+            pass
         transport = client.get_transport()
         if transport:
             host_key = transport.get_remote_server_key()
@@ -97,9 +98,9 @@ def connection_scan_hostkey(request, pk):
     return JsonResponse({'success': True, 'known_host_key': known_host_entry})
 
 
-@login_required
+@require_role(ROLE_READONLY)
 def browse_directory(request, pk):
-    connection = get_object_or_404(Connection, pk=pk, owner=request.user)
+    connection = get_object_or_404(Connection, pk=pk)
     raw_path = request.GET.get('path', '/')
     path = '/' + posixpath.normpath(raw_path).lstrip('/')
     field_id = request.GET.get('field_id', '')
@@ -121,7 +122,7 @@ def browse_directory(request, pk):
     })
 
 
-@login_required
+@require_role(ROLE_ADMIN)
 @require_POST
 def connection_export(request):
     passphrase = request.POST.get('passphrase', '')
@@ -136,7 +137,7 @@ def connection_export(request):
     return response
 
 
-@login_required
+@require_role(ROLE_ADMIN)
 @require_POST
 def connection_import(request):
     passphrase = request.POST.get('passphrase', '')

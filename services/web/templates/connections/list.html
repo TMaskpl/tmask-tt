@@ -4,14 +4,16 @@
 <div class="box">
   <span class="box-title">CONNECTIONS</span>
   <div class="toolbar">
+    {% if user.is_admin %}
     <a href="{% url 'connections:create' %}" class="btn">[ + NEW CONNECTION ]</a>
+    {% endif %}
   </div>
   {% if connections %}
   <table>
     <thead>
       <tr>
         <th>NAME</th><th>HOST</th><th>PORT</th><th>PROTO</th>
-        <th>COMPRESS</th><th>ENCRYPT</th><th class="col-actions">ACTIONS</th>
+        <th>COMPRESS</th><th>ENCRYPT</th><th>UTWORZYŁ</th><th class="col-actions">ACTIONS</th>
       </tr>
     </thead>
     <tbody>
@@ -23,18 +25,21 @@
         <td>{{ conn.protocol|upper }}</td>
         <td>{% if conn.compress %}YES{% else %}—{% endif %}</td>
         <td>{% if conn.encrypt %}YES{% else %}—{% endif %}</td>
+        <td>{{ conn.owner.username }}</td>
         <td class="col-actions">
           <div class="row-actions">
             <button class="btn btn-small btn-warn"
               hx-get="{% url 'connections:test' conn.pk %}"
               hx-target="#test-result-{{ conn.pk }}"
               hx-swap="innerHTML">[TEST]</button>
+            {% if user.is_admin %}
             <a href="{% url 'connections:edit' conn.pk %}" class="btn btn-small">[EDIT]</a>
             <form method="post" action="{% url 'connections:delete' conn.pk %}" style="display:inline"
               onsubmit="return confirm('DELETE {{ conn.name }}?')">
               {% csrf_token %}
               <button type="submit" class="btn btn-small btn-danger">[DEL]</button>
             </form>
+            {% endif %}
             <span id="test-result-{{ conn.pk }}" class="test-result"></span>
           </div>
         </td>

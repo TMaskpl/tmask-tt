@@ -4,7 +4,9 @@
 <div class="box">
   <span class="box-title">RELAY FLOWS</span>
   <div style="margin-bottom:1rem;">
+    {% if user.is_admin %}
     <a href="{% url 'flows:create' %}" class="btn">[ + NEW FLOW ]</a>
+    {% endif %}
   </div>
   {% if flows %}
   <table>
@@ -23,16 +25,20 @@
         <td>{{ flow.dest_conn.name }}</td>
         <td>{{ flow.dest_path }}</td>
         <td>
+          {% if user.can_operate %}
           <form method="post" action="{% url 'flows:run' flow.pk %}" style="display:inline">
             {% csrf_token %}
             <button type="submit" class="btn btn-warn">[ RUN ]</button>
           </form>
+          {% endif %}
+          {% if user.is_admin %}
           <a href="{% url 'flows:edit' flow.pk %}" class="btn">[ EDIT ]</a>
           <form method="post" action="{% url 'flows:delete' flow.pk %}" style="display:inline"
             onsubmit="return confirm('DELETE {{ flow.name }}?')">
             {% csrf_token %}
             <button type="submit" class="btn btn-danger">[ DEL ]</button>
           </form>
+          {% endif %}
         </td>
       </tr>
       {% endfor %}

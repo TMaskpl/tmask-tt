@@ -58,7 +58,15 @@ funkcjonalność w ramach tego samego spec.
 6. **Stop transferu**: znane ograniczenie — `SIGTERM` może przerwać transfer
    w połowie pliku (analogiczne ryzyko do awarii sieci w trakcie transferu,
    już zaakceptowane jako dług przy funkcji uploadu). Nie wprowadzamy nowej
-   klasy ryzyka, tylko nowy sposób jego wywołania.
+   klasy ryzyka, tylko nowy sposób jego wywołania. Dodatkowo: `revoke(...,
+   terminate=True)` teoretycznie może trafić w niewłaściwy proces, jeśli
+   docelowe zadanie zdąży się zakończyć, a slot workera Celery zdąży
+   podjąć nowe zadanie w wąskim oknie czasowym przed doręczeniem sygnału
+   SIGTERM — to nieodłączne ograniczenie mechanizmu przerywania zadań przez
+   sygnały systemowe w architekturze wieloprocesowej (niemożliwe do
+   naprawienia z poziomu warstwy widoków Django bez ingerencji w workera,
+   co jest poza zakresem tego spec). Akceptujemy to jako tę samą klasę
+   ryzyka co już udokumentowane ryzyko częściowego pliku.
 
 ## Architektura zmian
 

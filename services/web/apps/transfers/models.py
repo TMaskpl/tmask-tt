@@ -6,11 +6,13 @@ STATUS_PENDING = 'pending'
 STATUS_RUNNING = 'running'
 STATUS_DONE = 'done'
 STATUS_FAILED = 'failed'
+STATUS_CANCELLED = 'cancelled'
 STATUS_CHOICES = [
     (STATUS_PENDING, 'PENDING'),
     (STATUS_RUNNING, 'RUNNING'),
     (STATUS_DONE, 'DONE'),
     (STATUS_FAILED, 'FAILED'),
+    (STATUS_CANCELLED, 'CANCELLED'),
 ]
 
 LOG_INFO = 'info'
@@ -39,6 +41,10 @@ class TransferJob(models.Model):
     started_at       = models.DateTimeField(null=True, blank=True)
     finished_at      = models.DateTimeField(null=True, blank=True)
     error_message    = models.TextField(null=True, blank=True)
+    cancelled_by     = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='cancelled_jobs',
+    )
 
     def clean(self):
         from django.core.exceptions import ValidationError
@@ -63,6 +69,12 @@ class TransferJob(models.Model):
         self.error_message = message
         self.finished_at = timezone.now()
         self.save(update_fields=['status', 'error_message', 'finished_at'])
+
+    def mark_cancelled(self, by) -> None:
+        self.status = STATUS_CANCELLED
+        self.cancelled_by = by
+        self.finished_at = timezone.now()
+        self.save(update_fields=['status', 'cancelled_by', 'finished_at'])
 
     def __str__(self) -> str:
         return f'Job #{self.pk} [{self.status}] {self.source_path}'

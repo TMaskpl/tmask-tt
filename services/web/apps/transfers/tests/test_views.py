@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 import pytest
 from django.urls import reverse
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -23,7 +24,10 @@ class TestTransferCreateView:
         django_capture_on_commit_callbacks, settings, tmp_path,
     ):
         settings.TRANSFERS_DIR = str(tmp_path)
-        mock_delay = mocker.patch('apps.transfers.views.current_app.send_task')
+        mock_delay = mocker.patch(
+            'apps.transfers.views.current_app.send_task',
+            return_value=SimpleNamespace(id='fake-task-id'),
+        )
         conn = make_connection(regular_user)
         upload = SimpleUploadedFile('file.tar', b'payload-bytes')
         with django_capture_on_commit_callbacks(execute=True):
@@ -39,6 +43,28 @@ class TestTransferCreateView:
         assert (tmp_path / 'file.tar').read_bytes() == b'payload-bytes'
         mock_delay.assert_called_once_with(
             'transfers.execute', kwargs={'job_id': job.pk, 'gpg_passphrase': None})
+
+    def test_create_transfer_persists_celery_task_id(
+        self, auth_client, regular_user, make_connection, mocker,
+        django_capture_on_commit_callbacks, settings, tmp_path,
+    ):
+        from types import SimpleNamespace
+        settings.TRANSFERS_DIR = str(tmp_path)
+        mocker.patch(
+            'apps.transfers.views.current_app.send_task',
+            return_value=SimpleNamespace(id='fake-transfer-task-id'),
+        )
+        conn = make_connection(regular_user)
+        upload = SimpleUploadedFile('file3.tar', b'payload-bytes')
+        with django_capture_on_commit_callbacks(execute=True):
+            response = auth_client.post(reverse('transfers:create'), {
+                'connection': conn.pk,
+                'destination_path': '/backup/',
+                'upload': upload,
+            })
+        assert response.status_code == 302
+        job = TransferJob.objects.get(owner=regular_user)
+        assert job.celery_task_id == 'fake-transfer-task-id'
 
     def test_create_transfer_write_failure_shows_error_no_dispatch(
         self, auth_client, regular_user, make_connection, mocker,
@@ -67,7 +93,10 @@ class TestTransferCreateView:
     ):
         settings.TRANSFERS_DIR = str(tmp_path)
         (tmp_path / 'file.tar').write_bytes(b'old-content')
-        mocker.patch('apps.transfers.views.current_app.send_task')
+        mocker.patch(
+            'apps.transfers.views.current_app.send_task',
+            return_value=SimpleNamespace(id='fake-task-id'),
+        )
         conn = make_connection(regular_user)
         upload = SimpleUploadedFile('file.tar', b'new-content')
         with django_capture_on_commit_callbacks(execute=True):
@@ -102,7 +131,7 @@ class TestTransferDetailView:
         response = auth_client.get(reverse('transfers:detail', args=[job.pk]))
         assert response.status_code == 200
 
-    def test_detail_404_for_other_users_job(self, auth_client, admin_user, make_connection):
+    def test_detail_returns_200_for_other_users_job(self, auth_client, admin_user, make_connection):
         job = TransferJob.objects.create(
             owner=admin_user,
             connection=make_connection(admin_user),
@@ -110,7 +139,7 @@ class TestTransferDetailView:
             destination_path='/dst/',
         )
         response = auth_client.get(reverse('transfers:detail', args=[job.pk]))
-        assert response.status_code == 404
+        assert response.status_code == 200
 
     def test_detail_requires_login(self, client, regular_user, make_connection):
         job = TransferJob.objects.create(
@@ -131,14 +160,14 @@ class TestTransferLogsView:
         assert response.status_code == 302
         assert '/accounts/login/' in response['Location']
 
-    def test_logs_shows_only_own_jobs(self, auth_client, regular_user, admin_user, make_connection):
+    def test_logs_shows_jobs_from_all_users(self, auth_client, regular_user, admin_user, make_connection):
         own_job = TransferJob.objects.create(
             owner=regular_user,
             connection=make_connection(regular_user),
             source_path='/own/file.tar',
             destination_path='/dst/',
         )
-        TransferJob.objects.create(
+        other_job = TransferJob.objects.create(
             owner=admin_user,
             connection=make_connection(admin_user),
             source_path='/other/file.tar',
@@ -147,21 +176,97 @@ class TestTransferLogsView:
         response = auth_client.get(reverse('transfers:logs'))
         assert response.status_code == 200
         jobs = list(response.context['jobs'])
-        assert all(j.owner == regular_user for j in jobs)
         assert own_job in jobs
+        assert other_job in jobs
 
     def test_logs_renders_when_no_transfers(self, auth_client):
         response = auth_client.get(reverse('transfers:logs'))
         assert response.status_code == 200
 
-    def test_log_fragment_404_for_other_users_job(self, auth_client, admin_user, make_connection):
+    def test_log_fragment_returns_200_for_other_users_job(self, auth_client, admin_user, make_connection):
         job = TransferJob.objects.create(
             owner=admin_user,
             connection=make_connection(admin_user),
             source_path='/x', destination_path='/y',
         )
         response = auth_client.get(reverse('transfers:log_fragment', args=[job.pk]))
-        assert response.status_code == 404
+        assert response.status_code == 200
+
+
+@pytest.mark.django_db
+class TestOrgWideVisibility:
+    def test_operator_sees_job_created_by_another_user_in_history(self, auth_client, django_user_model, make_connection):
+        from apps.transfers.models import TransferJob
+        other = django_user_model.objects.create_user(username='tother1', password='p', role='admin')
+        conn = make_connection(other)
+        TransferJob.objects.create(owner=other, connection=conn, source_path='/a', destination_path='/b')
+        resp = auth_client.get('/transfers/logs/')
+        assert resp.status_code == 200
+
+    def test_operator_can_view_job_detail_created_by_another_user(self, auth_client, django_user_model, make_connection):
+        from apps.transfers.models import TransferJob
+        other = django_user_model.objects.create_user(username='tother2', password='p', role='admin')
+        conn = make_connection(other)
+        job = TransferJob.objects.create(owner=other, connection=conn, source_path='/a', destination_path='/b')
+        resp = auth_client.get(f'/transfers/{job.pk}/')
+        assert resp.status_code == 200
+
+    def test_transfer_form_offers_connections_from_other_users(self, django_user_model, make_connection):
+        from apps.transfers.forms import TransferForm
+        owner = django_user_model.objects.create_user(username='tconnowner', password='p')
+        conn = make_connection(owner, name='OtherUsersConn2')
+        requester = django_user_model.objects.create_user(username='trequester', password='p', role='admin')
+        form = TransferForm(user=requester)
+        assert conn in form.fields['connection'].queryset
+
+
+@pytest.mark.django_db
+class TestTransferStop:
+    def test_operator_can_stop_running_job(self, auth_client, django_user_model, make_connection, monkeypatch):
+        from celery import current_app
+        from apps.transfers.models import TransferJob, STATUS_RUNNING, STATUS_CANCELLED
+        other = django_user_model.objects.create_user(username='sother1', password='p', role='admin')
+        conn = make_connection(other)
+        job = TransferJob.objects.create(
+            owner=other, connection=conn, source_path='/a', destination_path='/b',
+            status=STATUS_RUNNING, celery_task_id='abc-123',
+        )
+        calls = {}
+        monkeypatch.setattr(
+            current_app.control, 'revoke',
+            lambda task_id, **kw: calls.update(task_id=task_id, kw=kw),
+        )
+        resp = auth_client.post(f'/transfers/{job.pk}/stop/')
+        assert resp.status_code == 302
+        job.refresh_from_db()
+        assert job.status == STATUS_CANCELLED
+        assert job.cancelled_by_id is not None
+        assert calls['task_id'] == 'abc-123'
+        assert calls['kw']['terminate'] is True
+
+    def test_readonly_cannot_stop_job(self, readonly_client, django_user_model, make_connection):
+        from apps.transfers.models import TransferJob, STATUS_RUNNING
+        other = django_user_model.objects.create_user(username='sother2', password='p', role='admin')
+        conn = make_connection(other)
+        job = TransferJob.objects.create(
+            owner=other, connection=conn, source_path='/a', destination_path='/b',
+            status=STATUS_RUNNING, celery_task_id='abc-456',
+        )
+        resp = readonly_client.post(f'/transfers/{job.pk}/stop/')
+        assert resp.status_code == 403
+
+    def test_stop_on_finished_job_is_noop(self, auth_client, django_user_model, make_connection):
+        from apps.transfers.models import TransferJob, STATUS_DONE
+        other = django_user_model.objects.create_user(username='sother3', password='p', role='admin')
+        conn = make_connection(other)
+        job = TransferJob.objects.create(
+            owner=other, connection=conn, source_path='/a', destination_path='/b',
+            status=STATUS_DONE,
+        )
+        resp = auth_client.post(f'/transfers/{job.pk}/stop/')
+        assert resp.status_code == 302
+        job.refresh_from_db()
+        assert job.status == STATUS_DONE
 
 
 class TestValidateTransferPath:
