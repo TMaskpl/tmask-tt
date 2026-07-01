@@ -29,9 +29,11 @@ def transfer_create(request):
             job.source_path = form.cleaned_data['source_path']
             job.save()
             passphrase = (form.cleaned_data.get('gpg_passphrase') or '').strip() or None
-            transaction.on_commit(
-                lambda: current_app.send_task('transfers.execute', kwargs={'job_id': job.pk, 'gpg_passphrase': passphrase})
-            )
+
+            def _dispatch():
+                result = current_app.send_task('transfers.execute', kwargs={'job_id': job.pk, 'gpg_passphrase': passphrase})
+                TransferJob.objects.filter(pk=job.pk).update(celery_task_id=result.id)
+            transaction.on_commit(_dispatch)
         return redirect('transfers:detail', pk=job.pk)
     return render(request, 'transfers/create.html', {'form': form})
 
@@ -64,12 +66,13 @@ def transfer_logs(request):
 @require_role(ROLE_OPERATOR)
 @require_POST
 def transfer_stop(request, pk):
-    job = get_object_or_404(TransferJob, pk=pk)
-    if job.status not in (STATUS_PENDING, STATUS_RUNNING):
-        messages.error(request, 'Transfer nie jest aktywny.')
-        return redirect('transfers:detail', pk=job.pk)
-    if job.celery_task_id:
-        current_app.control.revoke(job.celery_task_id, terminate=True, signal='SIGTERM')
-    job.mark_cancelled(by=request.user)
+    with transaction.atomic():
+        job = get_object_or_404(TransferJob.objects.select_for_update(), pk=pk)
+        if job.status not in (STATUS_PENDING, STATUS_RUNNING):
+            messages.error(request, 'Transfer nie jest aktywny.')
+            return redirect('transfers:detail', pk=job.pk)
+        if job.celery_task_id:
+            current_app.control.revoke(job.celery_task_id, terminate=True, signal='SIGTERM')
+        job.mark_cancelled(by=request.user)
     messages.success(request, 'Transfer zatrzymany.')
     return redirect('transfers:detail', pk=job.pk)

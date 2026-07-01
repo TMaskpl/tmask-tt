@@ -1,4 +1,5 @@
 import json
+from types import SimpleNamespace
 import pytest
 from django.urls import reverse
 
@@ -19,7 +20,10 @@ class TestTriggerConnectionEndpoint:
     def test_valid_trigger_returns_202_with_job_id(
         self, client, regular_user, make_connection, make_api_token, mocker
     ):
-        mocker.patch('apps.api.views.current_app.send_task')
+        mocker.patch(
+            'apps.api.views.current_app.send_task',
+            return_value=SimpleNamespace(id='fake-task-id'),
+        )
         conn = make_connection(regular_user)
         _, raw_key = make_api_token(regular_user)
         response = self._post(client, conn.pk, raw_key, {
@@ -34,7 +38,10 @@ class TestTriggerConnectionEndpoint:
     def test_valid_trigger_creates_transfer_job(
         self, client, regular_user, make_connection, make_api_token, mocker
     ):
-        mocker.patch('apps.api.views.current_app.send_task')
+        mocker.patch(
+            'apps.api.views.current_app.send_task',
+            return_value=SimpleNamespace(id='fake-task-id'),
+        )
         conn = make_connection(regular_user)
         _, raw_key = make_api_token(regular_user)
         self._post(client, conn.pk, raw_key, {
@@ -49,7 +56,10 @@ class TestTriggerConnectionEndpoint:
     def test_valid_trigger_calls_celery_task(
         self, client, regular_user, make_connection, make_api_token, mocker
     ):
-        mock_delay = mocker.patch('apps.api.views.current_app.send_task')
+        mock_delay = mocker.patch(
+            'apps.api.views.current_app.send_task',
+            return_value=SimpleNamespace(id='fake-task-id'),
+        )
         conn = make_connection(regular_user)
         _, raw_key = make_api_token(regular_user)
         response = self._post(client, conn.pk, raw_key, {
@@ -59,10 +69,31 @@ class TestTriggerConnectionEndpoint:
         data = response.json()
         mock_delay.assert_called_once_with('transfers.execute', kwargs={'job_id': data['job_id']})
 
+    def test_valid_trigger_persists_celery_task_id(
+        self, client, regular_user, make_connection, make_api_token, mocker
+    ):
+        from types import SimpleNamespace
+        mocker.patch(
+            'apps.api.views.current_app.send_task',
+            return_value=SimpleNamespace(id='fake-api-conn-task-id'),
+        )
+        conn = make_connection(regular_user)
+        _, raw_key = make_api_token(regular_user)
+        response = self._post(client, conn.pk, raw_key, {
+            'source_path': '/data/file.tar',
+            'destination_path': '/backup/',
+        })
+        from apps.transfers.models import TransferJob
+        job = TransferJob.objects.get(pk=response.json()['job_id'])
+        assert job.celery_task_id == 'fake-api-conn-task-id'
+
     def test_other_users_connection_returns_202(
         self, client, regular_user, admin_user, make_connection, make_api_token, mocker
     ):
-        mocker.patch('apps.api.views.current_app.send_task')
+        mocker.patch(
+            'apps.api.views.current_app.send_task',
+            return_value=SimpleNamespace(id='fake-task-id'),
+        )
         other_conn = make_connection(admin_user)
         _, raw_key = make_api_token(regular_user)
         response = self._post(client, other_conn.pk, raw_key, {
@@ -128,7 +159,10 @@ class TestTriggerFlowEndpoint:
     def test_valid_trigger_returns_202_with_job_id(
         self, client, regular_user, make_flow, make_api_token, mocker
     ):
-        mocker.patch('apps.api.views.current_app.send_task')
+        mocker.patch(
+            'apps.api.views.current_app.send_task',
+            return_value=SimpleNamespace(id='fake-task-id'),
+        )
         flow = make_flow(regular_user)
         _, raw_key = make_api_token(regular_user)
         response = self._post(client, flow.pk, raw_key)
@@ -138,7 +172,10 @@ class TestTriggerFlowEndpoint:
     def test_valid_trigger_creates_job_with_flow_paths(
         self, client, regular_user, make_flow, make_api_token, mocker
     ):
-        mocker.patch('apps.api.views.current_app.send_task')
+        mocker.patch(
+            'apps.api.views.current_app.send_task',
+            return_value=SimpleNamespace(id='fake-task-id'),
+        )
         flow = make_flow(regular_user)
         _, raw_key = make_api_token(regular_user)
         self._post(client, flow.pk, raw_key)
@@ -147,10 +184,28 @@ class TestTriggerFlowEndpoint:
         assert job.source_path == flow.source_path
         assert job.destination_path == flow.dest_path
 
+    def test_valid_trigger_persists_celery_task_id(
+        self, client, regular_user, make_flow, make_api_token, mocker
+    ):
+        from types import SimpleNamespace
+        mocker.patch(
+            'apps.api.views.current_app.send_task',
+            return_value=SimpleNamespace(id='fake-api-flow-task-id'),
+        )
+        flow = make_flow(regular_user)
+        _, raw_key = make_api_token(regular_user)
+        response = self._post(client, flow.pk, raw_key)
+        from apps.transfers.models import TransferJob
+        job = TransferJob.objects.get(pk=response.json()['job_id'])
+        assert job.celery_task_id == 'fake-api-flow-task-id'
+
     def test_other_users_flow_returns_202(
         self, client, regular_user, admin_user, make_flow, make_api_token, mocker
     ):
-        mocker.patch('apps.api.views.current_app.send_task')
+        mocker.patch(
+            'apps.api.views.current_app.send_task',
+            return_value=SimpleNamespace(id='fake-task-id'),
+        )
         other_flow = make_flow(admin_user)
         _, raw_key = make_api_token(regular_user)
         response = self._post(client, other_flow.pk, raw_key)
@@ -175,12 +230,13 @@ class TestTriggerFlowEndpoint:
 @pytest.mark.django_db
 class TestOrgWideAndRoleGating:
     def test_operator_token_can_trigger_connection_owned_by_another_user(self, client, django_user_model, make_connection, make_api_token, monkeypatch):
+        from types import SimpleNamespace
         from celery import current_app
         owner = django_user_model.objects.create_user(username='apiowner1', password='p', role='admin')
         conn = make_connection(owner)
         operator = django_user_model.objects.create_user(username='apioperator1', password='p', role='operator')
         _, raw_key = make_api_token(operator)
-        monkeypatch.setattr(current_app, 'send_task', lambda *a, **kw: None)
+        monkeypatch.setattr(current_app, 'send_task', lambda *a, **kw: SimpleNamespace(id='fake-task-id'))
         resp = client.post(
             f'/api/transfers/trigger/connection/{conn.pk}/',
             data='{"source_path": "/a", "destination_path": "/b"}',

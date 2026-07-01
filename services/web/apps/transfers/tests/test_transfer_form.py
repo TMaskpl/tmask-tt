@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 import pytest
 from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -102,7 +103,10 @@ class TestTransferCreateWithGPG:
 
     def test_gpg_passphrase_passed_to_delay(self, auth_client, regular_user, make_connection, mocker, django_capture_on_commit_callbacks, settings, tmp_path):
         settings.TRANSFERS_DIR = str(tmp_path)
-        mock_delay = mocker.patch('apps.transfers.views.current_app.send_task')
+        mock_delay = mocker.patch(
+            'apps.transfers.views.current_app.send_task',
+            return_value=SimpleNamespace(id='fake-task-id'),
+        )
         conn = make_connection(regular_user)
         with django_capture_on_commit_callbacks(execute=True):
             self._post(auth_client, conn, 'mypassword123')
@@ -111,7 +115,10 @@ class TestTransferCreateWithGPG:
 
     def test_empty_passphrase_passed_as_none(self, auth_client, regular_user, make_connection, mocker, django_capture_on_commit_callbacks, settings, tmp_path):
         settings.TRANSFERS_DIR = str(tmp_path)
-        mock_delay = mocker.patch('apps.transfers.views.current_app.send_task')
+        mock_delay = mocker.patch(
+            'apps.transfers.views.current_app.send_task',
+            return_value=SimpleNamespace(id='fake-task-id'),
+        )
         conn = make_connection(regular_user)
         with django_capture_on_commit_callbacks(execute=True):
             self._post(auth_client, conn, '')
@@ -120,7 +127,10 @@ class TestTransferCreateWithGPG:
 
     def test_whitespace_passphrase_treated_as_none(self, auth_client, regular_user, make_connection, mocker, django_capture_on_commit_callbacks, settings, tmp_path):
         settings.TRANSFERS_DIR = str(tmp_path)
-        mock_delay = mocker.patch('apps.transfers.views.current_app.send_task')
+        mock_delay = mocker.patch(
+            'apps.transfers.views.current_app.send_task',
+            return_value=SimpleNamespace(id='fake-task-id'),
+        )
         conn = make_connection(regular_user)
         with django_capture_on_commit_callbacks(execute=True):
             self._post(auth_client, conn, '   ')
@@ -129,7 +139,10 @@ class TestTransferCreateWithGPG:
 
     def test_source_path_stored_from_upload(self, auth_client, regular_user, make_connection, mocker, django_capture_on_commit_callbacks, settings, tmp_path):
         settings.TRANSFERS_DIR = str(tmp_path)
-        mock_delay = mocker.patch('apps.transfers.views.current_app.send_task')
+        mock_delay = mocker.patch(
+            'apps.transfers.views.current_app.send_task',
+            return_value=SimpleNamespace(id='fake-task-id'),
+        )
         conn = make_connection(regular_user)
         with django_capture_on_commit_callbacks(execute=True):
             auth_client.post(reverse('transfers:create'), {

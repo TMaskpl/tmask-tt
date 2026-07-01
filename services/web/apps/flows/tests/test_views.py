@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 import pytest
 from django.urls import reverse
 from apps.flows.models import Flow
@@ -49,7 +50,10 @@ class TestFlowCreateView:
 @pytest.mark.django_db
 class TestFlowRunView:
     def test_run_creates_transfer_job(self, auth_client, regular_user, make_flow, mocker, django_capture_on_commit_callbacks):
-        mock_delay = mocker.patch('apps.flows.views.current_app.send_task')
+        mock_delay = mocker.patch(
+            'apps.flows.views.current_app.send_task',
+            return_value=SimpleNamespace(id='fake-task-id'),
+        )
         flow = make_flow(regular_user)
         with django_capture_on_commit_callbacks(execute=True):
             response = auth_client.post(reverse('flows:run', args=[flow.pk]))
@@ -60,13 +64,31 @@ class TestFlowRunView:
         assert job.destination_path == flow.dest_path
         mock_delay.assert_called_once_with('transfers.execute', kwargs={'job_id': job.pk})
 
+    def test_run_persists_celery_task_id(
+        self, auth_client, regular_user, make_flow, mocker, django_capture_on_commit_callbacks,
+    ):
+        from types import SimpleNamespace
+        mocker.patch(
+            'apps.flows.views.current_app.send_task',
+            return_value=SimpleNamespace(id='fake-flow-task-id'),
+        )
+        flow = make_flow(regular_user)
+        with django_capture_on_commit_callbacks(execute=True):
+            response = auth_client.post(reverse('flows:run', args=[flow.pk]))
+        assert response.status_code == 302
+        job = TransferJob.objects.get(owner=regular_user, flow=flow)
+        assert job.celery_task_id == 'fake-flow-task-id'
+
     def test_run_requires_post(self, auth_client, regular_user, make_flow):
         flow = make_flow(regular_user)
         response = auth_client.get(reverse('flows:run', args=[flow.pk]))
         assert response.status_code == 405
 
     def test_operator_can_run_other_users_flow(self, auth_client, admin_user, make_flow, mocker, django_capture_on_commit_callbacks):
-        mock_delay = mocker.patch('apps.flows.views.current_app.send_task')
+        mock_delay = mocker.patch(
+            'apps.flows.views.current_app.send_task',
+            return_value=SimpleNamespace(id='fake-task-id'),
+        )
         flow = make_flow(admin_user)
         with django_capture_on_commit_callbacks(execute=True):
             response = auth_client.post(reverse('flows:run', args=[flow.pk]))

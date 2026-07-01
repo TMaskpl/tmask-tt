@@ -52,7 +52,8 @@ def trigger_connection(request, connection_id):
         source_path=source_path,
         destination_path=destination_path,
     )
-    current_app.send_task('transfers.execute', kwargs={'job_id': job.pk})
+    result = current_app.send_task('transfers.execute', kwargs={'job_id': job.pk})
+    TransferJob.objects.filter(pk=job.pk).update(celery_task_id=result.id)
     return JsonResponse({'job_id': job.pk}, status=202)
 
 
@@ -73,7 +74,8 @@ def trigger_flow(request, flow_id):
         source_path=flow.source_path,
         destination_path=flow.dest_path,
     )
-    current_app.send_task('transfers.execute', kwargs={'job_id': job.pk})
+    result = current_app.send_task('transfers.execute', kwargs={'job_id': job.pk})
+    TransferJob.objects.filter(pk=job.pk).update(celery_task_id=result.id)
     return JsonResponse({'job_id': job.pk}, status=202)
 
 

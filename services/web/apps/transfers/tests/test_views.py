@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 import pytest
 from django.urls import reverse
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -23,7 +24,10 @@ class TestTransferCreateView:
         django_capture_on_commit_callbacks, settings, tmp_path,
     ):
         settings.TRANSFERS_DIR = str(tmp_path)
-        mock_delay = mocker.patch('apps.transfers.views.current_app.send_task')
+        mock_delay = mocker.patch(
+            'apps.transfers.views.current_app.send_task',
+            return_value=SimpleNamespace(id='fake-task-id'),
+        )
         conn = make_connection(regular_user)
         upload = SimpleUploadedFile('file.tar', b'payload-bytes')
         with django_capture_on_commit_callbacks(execute=True):
@@ -39,6 +43,28 @@ class TestTransferCreateView:
         assert (tmp_path / 'file.tar').read_bytes() == b'payload-bytes'
         mock_delay.assert_called_once_with(
             'transfers.execute', kwargs={'job_id': job.pk, 'gpg_passphrase': None})
+
+    def test_create_transfer_persists_celery_task_id(
+        self, auth_client, regular_user, make_connection, mocker,
+        django_capture_on_commit_callbacks, settings, tmp_path,
+    ):
+        from types import SimpleNamespace
+        settings.TRANSFERS_DIR = str(tmp_path)
+        mocker.patch(
+            'apps.transfers.views.current_app.send_task',
+            return_value=SimpleNamespace(id='fake-transfer-task-id'),
+        )
+        conn = make_connection(regular_user)
+        upload = SimpleUploadedFile('file3.tar', b'payload-bytes')
+        with django_capture_on_commit_callbacks(execute=True):
+            response = auth_client.post(reverse('transfers:create'), {
+                'connection': conn.pk,
+                'destination_path': '/backup/',
+                'upload': upload,
+            })
+        assert response.status_code == 302
+        job = TransferJob.objects.get(owner=regular_user)
+        assert job.celery_task_id == 'fake-transfer-task-id'
 
     def test_create_transfer_write_failure_shows_error_no_dispatch(
         self, auth_client, regular_user, make_connection, mocker,
@@ -67,7 +93,10 @@ class TestTransferCreateView:
     ):
         settings.TRANSFERS_DIR = str(tmp_path)
         (tmp_path / 'file.tar').write_bytes(b'old-content')
-        mocker.patch('apps.transfers.views.current_app.send_task')
+        mocker.patch(
+            'apps.transfers.views.current_app.send_task',
+            return_value=SimpleNamespace(id='fake-task-id'),
+        )
         conn = make_connection(regular_user)
         upload = SimpleUploadedFile('file.tar', b'new-content')
         with django_capture_on_commit_callbacks(execute=True):

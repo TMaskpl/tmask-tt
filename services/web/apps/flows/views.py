@@ -58,5 +58,8 @@ def flow_run(request, pk):
             source_path=flow.source_path,
             destination_path=flow.dest_path,
         )
-        transaction.on_commit(lambda: current_app.send_task('transfers.execute', kwargs={'job_id': job.pk}))
+        def _dispatch():
+            result = current_app.send_task('transfers.execute', kwargs={'job_id': job.pk})
+            TransferJob.objects.filter(pk=job.pk).update(celery_task_id=result.id)
+        transaction.on_commit(_dispatch)
     return redirect('transfers:detail', pk=job.pk)
