@@ -131,3 +131,25 @@ class TestTransferLog:
         TransferLog.objects.create(job=job, level='info', message='Second')
         messages = list(job.logs.values_list('message', flat=True))
         assert messages == ['First', 'Second']
+
+
+@pytest.mark.django_db
+class TestMarkCancelled:
+    def test_mark_cancelled_sets_status_and_who(self, django_user_model, make_connection):
+        from apps.transfers.models import TransferJob, STATUS_CANCELLED
+        owner = django_user_model.objects.create_user(username='owner1', password='p')
+        stopper = django_user_model.objects.create_user(username='stopper1', password='p', role='admin')
+        conn = make_connection(owner)
+        job = TransferJob.objects.create(
+            owner=owner, connection=conn, source_path='/a', destination_path='/b',
+        )
+        job.mark_cancelled(by=stopper)
+        job.refresh_from_db()
+        assert job.status == STATUS_CANCELLED
+        assert job.cancelled_by_id == stopper.pk
+        assert job.finished_at is not None
+
+    def test_status_choices_include_cancelled(self):
+        from apps.transfers.models import TransferJob
+        values = [c[0] for c in TransferJob._meta.get_field('status').choices]
+        assert 'cancelled' in values
