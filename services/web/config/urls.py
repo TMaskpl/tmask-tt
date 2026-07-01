@@ -11,5 +11,6 @@ urlpatterns = [
     path('scheduler/', include('apps.scheduler.urls')),
     path('api/', include('apps.api.urls')),
     path('dashboard/', include('apps.dashboard.urls')),
+    path('organization/', include('apps.organization.urls')),
     path('', RedirectView.as_view(url='/transfers/', permanent=False)),
 ]
