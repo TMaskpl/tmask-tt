@@ -1,5 +1,6 @@
 from django import forms
 from django.contrib.auth import get_user_model
+from django.contrib.auth.forms import UserCreationForm
 from utils.url_validator import block_private_url
 
 
@@ -42,3 +43,10 @@ class ProfileForm(forms.ModelForm):
             except ValueError as e:
                 raise forms.ValidationError(str(e))
         return url
+
+
+class UserCreateForm(UserCreationForm):
+    class Meta(UserCreationForm.Meta):
+        model = get_user_model()
+        fields = ['username', 'email', 'role']
+        labels = {'email': 'Adres email', 'role': 'Rola'}

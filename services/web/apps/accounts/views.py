@@ -8,7 +8,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 import requests
 
-from .forms import LoginForm, ProfileForm
+from .forms import LoginForm, ProfileForm, UserCreateForm
 from .permissions import require_role
 from .models import ROLE_ADMIN, ROLE_CHOICES
 from utils.url_validator import block_private_url
@@ -70,6 +70,16 @@ def change_user_role(request, pk):
     target.save(update_fields=['role'])
     messages.success(request, f'Rola {target.username} zmieniona na {valid_roles[new_role]}.')
     return redirect(USERS_LIST)
+
+
+@require_role(ROLE_ADMIN)
+def user_create(request):
+    form = UserCreateForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        user = form.save()
+        messages.success(request, f'Użytkownik {user.username} utworzony z rolą {user.get_role_display()}.')
+        return redirect(USERS_LIST)
+    return render(request, 'users/create.html', {'form': form})
 
 
 @login_required

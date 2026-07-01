@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}NOWY USER — ADMIN{% endblock %}
+{% block content %}
+<div class="box">
+  <span class="box-title">NOWY UŻYTKOWNIK</span>
+  <form method="post">
+    {% csrf_token %}
+    {% if form.non_field_errors %}
+    <div class="msg-error" style="margin-bottom:1rem;">
+      {% for error in form.non_field_errors %}&gt; {{ error }}<br>{% endfor %}
+    </div>
+    {% endif %}
+    {% for field in form %}
+    <div class="field">
+      <label>{{ field.label|upper }}:</label>
+      {{ field }}
+      {% if field.help_text %}<div style="color:#6a8a6a;font-size:0.75rem;">{{ field.help_text }}</div>{% endif %}
+      {% if field.errors %}<div style="color:var(--red);font-size:0.8rem;">{{ field.errors }}</div>{% endif %}
+    </div>
+    {% endfor %}
+    <button type="submit" class="btn">[ UTWÓRZ ]</button>
+  </form>
+</div>
+{% endblock %}

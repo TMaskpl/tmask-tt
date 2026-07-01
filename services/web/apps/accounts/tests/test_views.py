@@ -304,3 +304,52 @@ class TestChangeUserRole:
         resp = admin_client.post(f'/accounts/users/{regular_user.pk}/role/', {'role': 'superuser'})
         regular_user.refresh_from_db()
         assert regular_user.role == 'operator'
+
+
+@pytest.mark.django_db
+class TestUserCreate:
+    def test_admin_can_create_user(self, admin_client, django_user_model):
+        resp = admin_client.post('/accounts/users/new/', {
+            'username': 'newoperator',
+            'email': 'newoperator@example.com',
+            'role': 'operator',
+            'password1': 'a-decent-password-1',
+            'password2': 'a-decent-password-1',
+        })
+        assert resp.status_code == 302
+        user = django_user_model.objects.get(username='newoperator')
+        assert user.role == 'operator'
+        assert user.email == 'newoperator@example.com'
+        assert user.check_password('a-decent-password-1')
+
+    def test_operator_cannot_create_user(self, auth_client):
+        resp = auth_client.get('/accounts/users/new/')
+        assert resp.status_code == 403
+
+    def test_readonly_cannot_create_user(self, readonly_client):
+        resp = readonly_client.post('/accounts/users/new/', {
+            'username': 'x', 'password1': 'a-decent-password-1', 'password2': 'a-decent-password-1', 'role': 'operator',
+        })
+        assert resp.status_code == 403
+
+    def test_duplicate_username_rejected(self, admin_client, regular_user):
+        resp = admin_client.post('/accounts/users/new/', {
+            'username': regular_user.username,
+            'email': 'dup@example.com',
+            'role': 'operator',
+            'password1': 'a-decent-password-1',
+            'password2': 'a-decent-password-1',
+        })
+        assert resp.status_code == 200
+        assert resp.context['form'].errors
+
+    def test_mismatched_passwords_rejected(self, admin_client, django_user_model):
+        resp = admin_client.post('/accounts/users/new/', {
+            'username': 'mismatched',
+            'email': 'mismatched@example.com',
+            'role': 'operator',
+            'password1': 'a-decent-password-1',
+            'password2': 'a-different-password-2',
+        })
+        assert resp.status_code == 200
+        assert not django_user_model.objects.filter(username='mismatched').exists()
