@@ -1,4 +1,5 @@
 from celery import current_app
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.shortcuts import render, redirect, get_object_or_404
@@ -8,11 +9,21 @@ from .forms import TransferForm
 
 @login_required
 def transfer_create(request):
-    form = TransferForm(request.POST or None, user=request.user)
+    form = TransferForm(request.POST or None, request.FILES or None, user=request.user)
     if request.method == 'POST' and form.is_valid():
+        uploaded = form.cleaned_data['upload']
+        dest = form.cleaned_data['source_path']
+        try:
+            with open(dest, 'wb') as fh:
+                for chunk in uploaded.chunks():
+                    fh.write(chunk)
+        except OSError as exc:
+            form.add_error(None, f'Nie udało się zapisać pliku: {exc}')
+            return render(request, 'transfers/create.html', {'form': form})
         with transaction.atomic():
             job = form.save(commit=False)
             job.owner = request.user
+            job.source_path = form.cleaned_data['source_path']
             job.save()
             passphrase = (form.cleaned_data.get('gpg_passphrase') or '').strip() or None
             transaction.on_commit(

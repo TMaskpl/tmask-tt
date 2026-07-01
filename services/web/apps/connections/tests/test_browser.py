@@ -72,6 +72,17 @@ class TestBrowseDirectory:
         assert resp.status_code == 200
         assert 'id_source_path' in resp.content.decode()
 
+    def test_fragment_offers_current_directory_selection(self, auth_client, regular_user, make_connection, mocker):
+        """A destination folder (e.g. /tmp) must be selectable directly. Directories are
+        navigable (data-browse-open) but the current directory itself needs a 'use this
+        folder' action carrying data-browse-select=current_path — otherwise browsing into
+        a folder and closing leaves the destination field empty."""
+        conn = make_connection(regular_user)
+        mocker.patch('apps.connections.views.list_directory', return_value=[])
+        resp = auth_client.get(self._url(conn.pk, path='/tmp'))
+        assert resp.status_code == 200
+        assert 'data-browse-select="/tmp"' in resp.content.decode()
+
     def test_list_directory_full_path_does_not_escape_parent(self, auth_client, regular_user, make_connection, mocker):
         """list_directory builds full_path as parent+'/'+name, not posixpath.join which can escape parent."""
         conn = make_connection(regular_user)
