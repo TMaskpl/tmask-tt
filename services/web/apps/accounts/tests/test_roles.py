@@ -1,3 +1,5 @@
+import importlib
+
 import pytest
 
 
@@ -34,9 +36,23 @@ class TestRoleLevels:
 
 @pytest.mark.django_db
 class TestRoleMigration:
-    def test_legacy_user_role_becomes_operator(self, django_user_model):
-        # Simulates a row written before this migration existed.
+    def test_migrate_user_role_to_operator_rewrites_legacy_rows(self, django_user_model):
+        migration_module = importlib.import_module(
+            'apps.accounts.migrations.0005_role_operator_readonly'
+        )
         user = django_user_model.objects.create_user(username='legacy', password='p')
-        user.role = 'operator'  # post-migration state; migration itself covered by Step 3 SQL check
-        user.save()
+        django_user_model.objects.filter(pk=user.pk).update(role='user')
+        from django.apps import apps as global_apps
+        migration_module.migrate_user_role_to_operator(global_apps, None)
+        user.refresh_from_db()
         assert user.role == 'operator'
+
+    def test_migrate_user_role_to_operator_leaves_other_roles_untouched(self, django_user_model):
+        migration_module = importlib.import_module(
+            'apps.accounts.migrations.0005_role_operator_readonly'
+        )
+        admin = django_user_model.objects.create_user(username='stays_admin', password='p', role='admin')
+        from django.apps import apps as global_apps
+        migration_module.migrate_user_role_to_operator(global_apps, None)
+        admin.refresh_from_db()
+        assert admin.role == 'admin'
