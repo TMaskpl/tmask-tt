@@ -6,6 +6,11 @@
     <span class="box-title">NEW TRANSFER</span>
     <form method="post" enctype="multipart/form-data">
       {% csrf_token %}
+      {% if form.non_field_errors %}
+      <div class="msg-error" style="margin-bottom:1rem;">
+        {% for error in form.non_field_errors %}&gt; {{ error }}<br>{% endfor %}
+      </div>
+      {% endif %}
       {% for field in form %}
       <div class="field">
         <label>{{ field.label|upper }}:</label>

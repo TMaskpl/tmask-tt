@@ -40,6 +40,27 @@ class TestTransferCreateView:
         mock_delay.assert_called_once_with(
             'transfers.execute', kwargs={'job_id': job.pk, 'gpg_passphrase': None})
 
+    def test_create_transfer_write_failure_shows_error_no_dispatch(
+        self, auth_client, regular_user, make_connection, mocker,
+        settings, tmp_path,
+    ):
+        # TRANSFERS_DIR points inside a directory that does not exist, so open()
+        # raises OSError (FileNotFoundError) — the view must re-render with a
+        # Polish error, create no job, and never dispatch.
+        settings.TRANSFERS_DIR = str(tmp_path / 'missing-dir')
+        mock_delay = mocker.patch('apps.transfers.views.current_app.send_task')
+        conn = make_connection(regular_user)
+        upload = SimpleUploadedFile('file.tar', b'payload')
+        response = auth_client.post(reverse('transfers:create'), {
+            'connection': conn.pk,
+            'destination_path': '/backup/',
+            'upload': upload,
+        })
+        assert response.status_code == 200
+        assert 'Nie udało się zapisać pliku' in response.content.decode()
+        assert not TransferJob.objects.filter(owner=regular_user).exists()
+        mock_delay.assert_not_called()
+
     def test_create_transfer_overwrites_existing_file(
         self, auth_client, regular_user, make_connection, mocker,
         django_capture_on_commit_callbacks, settings, tmp_path,
