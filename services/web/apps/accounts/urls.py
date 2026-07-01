@@ -8,6 +8,7 @@ urlpatterns = [
     path('login/', views.login_view, name='login'),
     path('logout/', views.logout_view, name='logout'),
     path('users/', views.users_list, name='users'),
+    path('users/<int:pk>/role/', views.change_user_role, name='change_user_role'),
     path('profile/', views.profile_view, name='profile'),
     path('test-webhook/', views.test_webhook, name='test_webhook'),
     path('api-tokens/generate/', views.generate_api_token, name='generate_api_token'),

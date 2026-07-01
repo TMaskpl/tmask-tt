@@ -275,3 +275,32 @@ class TestProfileFormSSRF:
         })
         assert response.status_code == 200
         assert 'webhook_url' in response.context['form'].errors
+
+
+@pytest.mark.django_db
+class TestChangeUserRole:
+    def test_admin_can_change_operator_to_readonly(self, admin_client, regular_user):
+        resp = admin_client.post(f'/accounts/users/{regular_user.pk}/role/', {'role': 'readonly'})
+        assert resp.status_code == 302
+        regular_user.refresh_from_db()
+        assert regular_user.role == 'readonly'
+
+    def test_operator_cannot_change_roles(self, auth_client, regular_user):
+        resp = auth_client.post(f'/accounts/users/{regular_user.pk}/role/', {'role': 'admin'})
+        assert resp.status_code == 403
+
+    def test_admin_cannot_demote_last_admin(self, admin_client, admin_user):
+        resp = admin_client.post(f'/accounts/users/{admin_user.pk}/role/', {'role': 'operator'})
+        admin_user.refresh_from_db()
+        assert admin_user.role == 'admin'
+
+    def test_admin_can_demote_self_if_another_admin_exists(self, admin_client, admin_user, django_user_model):
+        django_user_model.objects.create_user(username='second_admin', password='p', role='admin')
+        resp = admin_client.post(f'/accounts/users/{admin_user.pk}/role/', {'role': 'operator'})
+        admin_user.refresh_from_db()
+        assert admin_user.role == 'operator'
+
+    def test_invalid_role_value_rejected(self, admin_client, regular_user):
+        resp = admin_client.post(f'/accounts/users/{regular_user.pk}/role/', {'role': 'superuser'})
+        regular_user.refresh_from_db()
+        assert regular_user.role == 'operator'

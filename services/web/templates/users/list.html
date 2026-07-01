@@ -5,7 +5,7 @@
   <span class="box-title">USER MANAGEMENT</span>
   <table>
     <thead>
-      <tr><th>USERNAME</th><th>ROLE</th><th>EMAIL</th><th>LAST LOGIN</th><th>ACTIVE</th></tr>
+      <tr><th>USERNAME</th><th>ROLE</th><th>EMAIL</th><th>LAST LOGIN</th><th>ACTIVE</th><th>ACTIONS</th></tr>
     </thead>
     <tbody>
       {% for u in users %}
@@ -15,6 +15,17 @@
         <td>{{ u.email|default:"—" }}</td>
         <td>{{ u.last_login|date:"Y-m-d H:i"|default:"NEVER" }}</td>
         <td>{% if u.is_active %}<span style="color:var(--green-bright);">● YES</span>{% else %}<span style="color:var(--red);">○ NO</span>{% endif %}</td>
+        <td>
+          <form method="post" action="{% url 'accounts:change_user_role' u.pk %}" style="display:inline">
+            {% csrf_token %}
+            <select name="role">
+              {% for value, label in role_choices %}
+              <option value="{{ value }}" {% if u.role == value %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-small">[ZAPISZ]</button>
+          </form>
+        </td>
       </tr>
       {% endfor %}
     </tbody>
