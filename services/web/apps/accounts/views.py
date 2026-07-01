@@ -13,6 +13,7 @@ from .permissions import require_role
 from .models import ROLE_ADMIN, ROLE_CHOICES
 from utils.url_validator import block_private_url
 from apps.api.models import ApiToken, MAX_TOKENS_PER_USER
+from apps.organization.models import get_organization
 
 PROFILE_URL = 'accounts:profile'
 USERS_LIST = 'accounts:users'
@@ -48,7 +49,11 @@ def logout_view(request):
 def users_list(request):
     User = get_user_model()
     users = User.objects.all().order_by('username')
-    return render(request, 'users/list.html', {'users': users, 'role_choices': ROLE_CHOICES})
+    return render(request, 'users/list.html', {
+        'users': users,
+        'role_choices': ROLE_CHOICES,
+        'organization': get_organization(),
+    })
 
 
 @require_role(ROLE_ADMIN)

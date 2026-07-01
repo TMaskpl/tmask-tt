@@ -307,6 +307,21 @@ class TestChangeUserRole:
 
 
 @pytest.mark.django_db
+class TestUsersListShowsOrganization:
+    def test_page_shows_organization_name_and_links(self, admin_client):
+        from apps.organization.models import get_organization
+        org = get_organization()
+        org.name = 'Acme Corp'
+        org.save()
+        resp = admin_client.get('/accounts/users/')
+        assert resp.status_code == 200
+        content = resp.content.decode()
+        assert 'Acme Corp' in content
+        assert '/organization/' in content
+        assert '/accounts/users/new/' in content
+
+
+@pytest.mark.django_db
 class TestUserCreate:
     def test_admin_can_create_user(self, admin_client, django_user_model):
         resp = admin_client.post('/accounts/users/new/', {

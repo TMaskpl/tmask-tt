@@ -2,7 +2,11 @@
 {% block title %}USERS — ADMIN{% endblock %}
 {% block content %}
 <div class="box">
-  <span class="box-title">USER MANAGEMENT</span>
+  <span class="box-title">{{ organization.name|upper }} — CZŁONKOWIE</span>
+  <div class="toolbar" style="margin-bottom:1rem;">
+    <a href="{% url 'organization:settings' %}" class="btn btn-small">[ EDYTUJ NAZWĘ ORGANIZACJI ]</a>
+    <a href="{% url 'accounts:user_create' %}" class="btn">[ + DODAJ USERA ]</a>
+  </div>
   <table>
     <thead>
       <tr><th>USERNAME</th><th>ROLE</th><th>EMAIL</th><th>LAST LOGIN</th><th>ACTIVE</th><th>ACTIONS</th></tr>
