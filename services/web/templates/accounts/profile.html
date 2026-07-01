@@ -196,6 +196,39 @@
   padding: 0.5rem 0 1rem;
   letter-spacing: 1px;
 }
+
+/* ── Backup / Restore — dwie równe karty ──────────── */
+.backup-section { margin-top: 2rem; }
+.backup-section-title {
+  font-size: 0.75rem;
+  letter-spacing: 3px;
+  color: #556655;
+  text-transform: uppercase;
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #111;
+}
+.backup-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+.backup-grid .channel-card { margin-bottom: 0; padding-top: 1.4rem; }
+.backup-desc {
+  color: #6a8a6a;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  margin-bottom: 1.1rem;
+  min-height: 3.2em;
+}
+.backup-vform { display: flex; flex-direction: column; gap: 0.9rem; }
+.backup-vform .file-name { flex: 1; min-width: 0; }
+.backup-vform .btn:not(.btn-small) { align-self: flex-start; margin-top: 0.2rem; }
+@media (max-width: 720px) {
+  .backup-grid { grid-template-columns: 1fr; }
+  .backup-desc { min-height: 0; }
+}
 </style>
 
 {# ── Header ──────────────────────────────────────── #}
@@ -368,39 +401,49 @@
 </div>
 
 {# ── Backup / Restore ─────────────────────────────── #}
-<div class="tokens-panel" style="margin-top:1.5rem;">
-  <div class="tokens-title">BACKUP / RESTORE</div>
-  <div class="backup-row">
-    <div class="backup-meta">
-      <span class="backup-label">EKSPORT</span>
-      <span class="backup-hint">Pobiera całą konfigurację (połączenia + flows) do pliku JSON. Sekrety szyfrowane hasłem — zapamiętaj je.</span>
+<div class="backup-section">
+  <div class="backup-section-title">BACKUP / RESTORE</div>
+  <div class="backup-grid">
+
+    <div class="channel-card">
+      <div class="channel-title"><span class="ct-text">EKSPORT</span></div>
+      <p class="backup-desc">Pobiera całą konfigurację (połączenia + flows) do pliku JSON na Twój komputer. Sekrety szyfrowane hasłem — zapamiętaj je.</p>
+      <form method="post" action="{% url 'connections:export' %}" class="backup-vform">
+        {% csrf_token %}
+        <div class="cf-row">
+          <span class="cf-label">HASŁO SZYFROWANIA</span>
+          <div class="cf-input-row">
+            <input type="password" name="passphrase" required autocomplete="off">
+          </div>
+        </div>
+        <button type="submit" class="btn">[ EXPORT ]</button>
+      </form>
     </div>
-    <form method="post" action="{% url 'connections:export' %}" class="backup-form">
-      {% csrf_token %}
-      <label class="inline-label">HASŁO
-        <input type="password" name="passphrase" required autocomplete="off">
-      </label>
-      <button type="submit" class="btn">[ EXPORT ]</button>
-    </form>
-  </div>
-  <div class="backup-row">
-    <div class="backup-meta">
-      <span class="backup-label">IMPORT</span>
-      <span class="backup-hint">Wczytuje połączenia i flows z pliku. Istniejące (po nazwie) są pomijane — nic nie nadpisuje.</span>
+
+    <div class="channel-card">
+      <div class="channel-title"><span class="ct-text">IMPORT</span></div>
+      <p class="backup-desc">Wczytuje połączenia i flows z pliku z Twojego komputera. Istniejące (po nazwie) są pomijane — nic nie nadpisuje.</p>
+      <form method="post" action="{% url 'connections:import' %}" enctype="multipart/form-data" class="backup-vform">
+        {% csrf_token %}
+        <div class="cf-row">
+          <span class="cf-label">PLIK KONFIGURACJI</span>
+          <div class="field-with-btn">
+            <input type="text" class="file-name" readonly placeholder="nie wybrano pliku" id="import-file-name">
+            <label for="import-file" class="btn btn-small">[ WYBIERZ ]</label>
+            <input type="file" id="import-file" name="file" accept="application/json,.json"
+                   class="file-hidden" data-file-display="import-file-name">
+          </div>
+        </div>
+        <div class="cf-row">
+          <span class="cf-label">HASŁO Z EKSPORTU</span>
+          <div class="cf-input-row">
+            <input type="password" name="passphrase" required autocomplete="off">
+          </div>
+        </div>
+        <button type="submit" class="btn">[ IMPORT ]</button>
+      </form>
     </div>
-    <form method="post" action="{% url 'connections:import' %}" enctype="multipart/form-data" class="backup-form">
-      {% csrf_token %}
-      <div class="field-with-btn file-picker">
-        <input type="text" class="file-name" readonly placeholder="nie wybrano pliku" id="import-file-name">
-        <label for="import-file" class="btn btn-small">[ WYBIERZ ]</label>
-        <input type="file" id="import-file" name="file" accept="application/json,.json"
-               class="file-hidden" data-file-display="import-file-name">
-      </div>
-      <label class="inline-label">HASŁO
-        <input type="password" name="passphrase" required autocomplete="off">
-      </label>
-      <button type="submit" class="btn">[ IMPORT ]</button>
-    </form>
+
   </div>
 </div>
 
