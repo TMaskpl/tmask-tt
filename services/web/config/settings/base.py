@@ -24,6 +24,7 @@ INSTALLED_APPS = [
     'apps.flows',
     'apps.api',
     'apps.dashboard',
+    'apps.organization',
 ]
 
 MIDDLEWARE = [
