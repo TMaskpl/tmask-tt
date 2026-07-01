@@ -90,56 +90,53 @@ class TestValidateSourceFilename:
 
 @pytest.mark.django_db
 class TestTransferCreateWithGPG:
-    """Tests verifying GPG passphrase is wired through the form to Celery dispatch."""
+    """GPG passphrase is wired through the form to Celery dispatch."""
 
-    def test_gpg_passphrase_passed_to_delay(self, auth_client, regular_user, make_connection, mocker, django_capture_on_commit_callbacks):
+    def _post(self, auth_client, conn, passphrase, tmp_path):
+        return auth_client.post(reverse('transfers:create'), {
+            'connection': conn.pk,
+            'destination_path': '/backup/',
+            'upload': SimpleUploadedFile('secret.tar', b'x'),
+            'gpg_passphrase': passphrase,
+        })
+
+    def test_gpg_passphrase_passed_to_delay(self, auth_client, regular_user, make_connection, mocker, django_capture_on_commit_callbacks, settings, tmp_path):
+        settings.TRANSFERS_DIR = str(tmp_path)
         mock_delay = mocker.patch('apps.transfers.views.current_app.send_task')
         conn = make_connection(regular_user)
         with django_capture_on_commit_callbacks(execute=True):
-            auth_client.post(reverse('transfers:create'), {
-                'connection': conn.pk,
-                'source_path': 'secret.tar',
-                'destination_path': '/backup/',
-                'gpg_passphrase': 'mypassword123',
-            })
+            self._post(auth_client, conn, 'mypassword123', tmp_path)
         job = TransferJob.objects.get(owner=regular_user)
         mock_delay.assert_called_once_with('transfers.execute', kwargs={'job_id': job.pk, 'gpg_passphrase': 'mypassword123'})
 
-    def test_empty_passphrase_passed_as_none(self, auth_client, regular_user, make_connection, mocker, django_capture_on_commit_callbacks):
+    def test_empty_passphrase_passed_as_none(self, auth_client, regular_user, make_connection, mocker, django_capture_on_commit_callbacks, settings, tmp_path):
+        settings.TRANSFERS_DIR = str(tmp_path)
         mock_delay = mocker.patch('apps.transfers.views.current_app.send_task')
         conn = make_connection(regular_user)
         with django_capture_on_commit_callbacks(execute=True):
-            auth_client.post(reverse('transfers:create'), {
-                'connection': conn.pk,
-                'source_path': 'file.tar',
-                'destination_path': '/backup/',
-                'gpg_passphrase': '',
-            })
+            self._post(auth_client, conn, '', tmp_path)
         job = TransferJob.objects.get(owner=regular_user)
         mock_delay.assert_called_once_with('transfers.execute', kwargs={'job_id': job.pk, 'gpg_passphrase': None})
 
-    def test_whitespace_passphrase_treated_as_none(self, auth_client, regular_user, make_connection, mocker, django_capture_on_commit_callbacks):
+    def test_whitespace_passphrase_treated_as_none(self, auth_client, regular_user, make_connection, mocker, django_capture_on_commit_callbacks, settings, tmp_path):
+        settings.TRANSFERS_DIR = str(tmp_path)
         mock_delay = mocker.patch('apps.transfers.views.current_app.send_task')
         conn = make_connection(regular_user)
         with django_capture_on_commit_callbacks(execute=True):
-            auth_client.post(reverse('transfers:create'), {
-                'connection': conn.pk,
-                'source_path': 'file.tar',
-                'destination_path': '/backup/',
-                'gpg_passphrase': '   ',
-            })
+            self._post(auth_client, conn, '   ', tmp_path)
         job = TransferJob.objects.get(owner=regular_user)
         mock_delay.assert_called_once_with('transfers.execute', kwargs={'job_id': job.pk, 'gpg_passphrase': None})
 
-    def test_source_path_stored_with_transfers_prefix(self, auth_client, regular_user, make_connection, mocker, django_capture_on_commit_callbacks):
+    def test_source_path_stored_from_upload(self, auth_client, regular_user, make_connection, mocker, django_capture_on_commit_callbacks, settings, tmp_path):
+        settings.TRANSFERS_DIR = str(tmp_path)
         mock_delay = mocker.patch('apps.transfers.views.current_app.send_task')
         conn = make_connection(regular_user)
         with django_capture_on_commit_callbacks(execute=True):
             auth_client.post(reverse('transfers:create'), {
                 'connection': conn.pk,
-                'source_path': 'archive.tar.gz',
                 'destination_path': '/remote/archive.tar.gz',
+                'upload': SimpleUploadedFile('archive.tar.gz', b'x'),
             })
         job = TransferJob.objects.get(owner=regular_user)
-        assert job.source_path == f'/transfers/archive.tar.gz'
+        assert job.source_path == f'{tmp_path}/archive.tar.gz'
         mock_delay.assert_called_once()

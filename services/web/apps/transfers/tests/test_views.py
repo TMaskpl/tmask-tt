@@ -1,5 +1,6 @@
 import pytest
 from django.urls import reverse
+from django.core.files.uploadedfile import SimpleUploadedFile
 from apps.transfers.models import TransferJob, TransferLog, STATUS_PENDING
 from apps.transfers.forms import _validate_transfer_path
 from django.core.exceptions import ValidationError
@@ -11,20 +12,44 @@ class TestTransferCreateView:
         response = auth_client.get(reverse('transfers:create'))
         assert response.status_code == 200
 
-    def test_create_transfer_dispatches_celery_task(self, auth_client, regular_user, make_connection, mocker, django_capture_on_commit_callbacks):
+    def test_create_transfer_writes_file_and_dispatches(
+        self, auth_client, regular_user, make_connection, mocker,
+        django_capture_on_commit_callbacks, settings, tmp_path,
+    ):
+        settings.TRANSFERS_DIR = str(tmp_path)
         mock_delay = mocker.patch('apps.transfers.views.current_app.send_task')
         conn = make_connection(regular_user)
+        upload = SimpleUploadedFile('file.tar', b'payload-bytes')
         with django_capture_on_commit_callbacks(execute=True):
             response = auth_client.post(reverse('transfers:create'), {
                 'connection': conn.pk,
-                'source_path': 'file.tar',
                 'destination_path': '/backup/',
+                'upload': upload,
             })
         assert response.status_code == 302
         job = TransferJob.objects.get(owner=regular_user)
         assert job.status == STATUS_PENDING
-        assert job.source_path == '/transfers/file.tar'
-        mock_delay.assert_called_once_with('transfers.execute', kwargs={'job_id': job.pk, 'gpg_passphrase': None})
+        assert job.source_path == f'{tmp_path}/file.tar'
+        assert (tmp_path / 'file.tar').read_bytes() == b'payload-bytes'
+        mock_delay.assert_called_once_with(
+            'transfers.execute', kwargs={'job_id': job.pk, 'gpg_passphrase': None})
+
+    def test_create_transfer_overwrites_existing_file(
+        self, auth_client, regular_user, make_connection, mocker,
+        django_capture_on_commit_callbacks, settings, tmp_path,
+    ):
+        settings.TRANSFERS_DIR = str(tmp_path)
+        (tmp_path / 'file.tar').write_bytes(b'old-content')
+        mocker.patch('apps.transfers.views.current_app.send_task')
+        conn = make_connection(regular_user)
+        upload = SimpleUploadedFile('file.tar', b'new-content')
+        with django_capture_on_commit_callbacks(execute=True):
+            auth_client.post(reverse('transfers:create'), {
+                'connection': conn.pk,
+                'destination_path': '/backup/',
+                'upload': upload,
+            })
+        assert (tmp_path / 'file.tar').read_bytes() == b'new-content'
 
     def test_log_fragment_returns_logs(self, auth_client, regular_user, make_connection):
         job = TransferJob.objects.create(
