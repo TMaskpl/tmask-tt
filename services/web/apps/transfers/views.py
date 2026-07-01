@@ -1,13 +1,16 @@
 from celery import current_app
 from django.conf import settings
-from django.contrib.auth.decorators import login_required
+from django.contrib import messages
 from django.db import transaction
 from django.shortcuts import render, redirect, get_object_or_404
-from .models import TransferJob, STATUS_RUNNING
+from django.views.decorators.http import require_POST
+from apps.accounts.permissions import require_role
+from apps.accounts.models import ROLE_OPERATOR, ROLE_READONLY
+from .models import TransferJob, STATUS_RUNNING, STATUS_PENDING
 from .forms import TransferForm
 
 
-@login_required
+@require_role(ROLE_OPERATOR)
 def transfer_create(request):
     form = TransferForm(request.POST or None, request.FILES or None, user=request.user)
     if request.method == 'POST' and form.is_valid():
@@ -33,18 +36,18 @@ def transfer_create(request):
     return render(request, 'transfers/create.html', {'form': form})
 
 
-@login_required
+@require_role(ROLE_READONLY)
 def transfer_detail(request, pk):
     job = get_object_or_404(
         TransferJob.objects.select_related('connection', 'flow', 'flow__source_conn', 'flow__dest_conn'),
-        pk=pk, owner=request.user,
+        pk=pk,
     )
     return render(request, 'transfers/create.html', {'job': job})
 
 
-@login_required
+@require_role(ROLE_READONLY)
 def log_fragment(request, pk):
-    job = get_object_or_404(TransferJob, pk=pk, owner=request.user)
+    job = get_object_or_404(TransferJob, pk=pk)
     logs = job.logs.all()
     still_running = job.status == STATUS_RUNNING
     return render(request, 'transfers/log_fragment.html', {
@@ -52,7 +55,21 @@ def log_fragment(request, pk):
     })
 
 
-@login_required
+@require_role(ROLE_READONLY)
 def transfer_logs(request):
-    jobs = TransferJob.objects.filter(owner=request.user).select_related('connection', 'flow')
+    jobs = TransferJob.objects.all().select_related('connection', 'flow')
     return render(request, 'logs/list.html', {'jobs': jobs})
+
+
+@require_role(ROLE_OPERATOR)
+@require_POST
+def transfer_stop(request, pk):
+    job = get_object_or_404(TransferJob, pk=pk)
+    if job.status not in (STATUS_PENDING, STATUS_RUNNING):
+        messages.error(request, 'Transfer nie jest aktywny.')
+        return redirect('transfers:detail', pk=job.pk)
+    if job.celery_task_id:
+        current_app.control.revoke(job.celery_task_id, terminate=True, signal='SIGTERM')
+    job.mark_cancelled(by=request.user)
+    messages.success(request, 'Transfer zatrzymany.')
+    return redirect('transfers:detail', pk=job.pk)

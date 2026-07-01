@@ -172,6 +172,7 @@ label { display: block; margin-bottom: 0.25rem; color: #aaffaa; font-size: 0.85r
 .status-running  { color: var(--amber); border-color: var(--amber); animation: pulse 1.5s ease-in-out infinite; }
 .status-done     { color: var(--green-bright); border-color: var(--green-bright); }
 .status-failed   { color: var(--red); border-color: var(--red); }
+.status-cancelled { color: #888; border-color: #888; }
 
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
 

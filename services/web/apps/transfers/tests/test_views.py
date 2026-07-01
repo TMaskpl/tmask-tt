@@ -164,6 +164,82 @@ class TestTransferLogsView:
         assert response.status_code == 404
 
 
+@pytest.mark.django_db
+class TestOrgWideVisibility:
+    def test_operator_sees_job_created_by_another_user_in_history(self, auth_client, django_user_model, make_connection):
+        from apps.transfers.models import TransferJob
+        other = django_user_model.objects.create_user(username='tother1', password='p', role='admin')
+        conn = make_connection(other)
+        TransferJob.objects.create(owner=other, connection=conn, source_path='/a', destination_path='/b')
+        resp = auth_client.get('/transfers/logs/')
+        assert resp.status_code == 200
+
+    def test_operator_can_view_job_detail_created_by_another_user(self, auth_client, django_user_model, make_connection):
+        from apps.transfers.models import TransferJob
+        other = django_user_model.objects.create_user(username='tother2', password='p', role='admin')
+        conn = make_connection(other)
+        job = TransferJob.objects.create(owner=other, connection=conn, source_path='/a', destination_path='/b')
+        resp = auth_client.get(f'/transfers/{job.pk}/')
+        assert resp.status_code == 200
+
+    def test_transfer_form_offers_connections_from_other_users(self, django_user_model, make_connection):
+        from apps.transfers.forms import TransferForm
+        owner = django_user_model.objects.create_user(username='tconnowner', password='p')
+        conn = make_connection(owner, name='OtherUsersConn2')
+        requester = django_user_model.objects.create_user(username='trequester', password='p', role='admin')
+        form = TransferForm(user=requester)
+        assert conn in form.fields['connection'].queryset
+
+
+@pytest.mark.django_db
+class TestTransferStop:
+    def test_operator_can_stop_running_job(self, auth_client, django_user_model, make_connection, monkeypatch):
+        from celery import current_app
+        from apps.transfers.models import TransferJob, STATUS_RUNNING, STATUS_CANCELLED
+        other = django_user_model.objects.create_user(username='sother1', password='p', role='admin')
+        conn = make_connection(other)
+        job = TransferJob.objects.create(
+            owner=other, connection=conn, source_path='/a', destination_path='/b',
+            status=STATUS_RUNNING, celery_task_id='abc-123',
+        )
+        calls = {}
+        monkeypatch.setattr(
+            current_app.control, 'revoke',
+            lambda task_id, **kw: calls.update(task_id=task_id, kw=kw),
+        )
+        resp = auth_client.post(f'/transfers/{job.pk}/stop/')
+        assert resp.status_code == 302
+        job.refresh_from_db()
+        assert job.status == STATUS_CANCELLED
+        assert job.cancelled_by_id is not None
+        assert calls['task_id'] == 'abc-123'
+        assert calls['kw']['terminate'] is True
+
+    def test_readonly_cannot_stop_job(self, readonly_client, django_user_model, make_connection):
+        from apps.transfers.models import TransferJob, STATUS_RUNNING
+        other = django_user_model.objects.create_user(username='sother2', password='p', role='admin')
+        conn = make_connection(other)
+        job = TransferJob.objects.create(
+            owner=other, connection=conn, source_path='/a', destination_path='/b',
+            status=STATUS_RUNNING, celery_task_id='abc-456',
+        )
+        resp = readonly_client.post(f'/transfers/{job.pk}/stop/')
+        assert resp.status_code == 403
+
+    def test_stop_on_finished_job_is_noop(self, auth_client, django_user_model, make_connection):
+        from apps.transfers.models import TransferJob, STATUS_DONE
+        other = django_user_model.objects.create_user(username='sother3', password='p', role='admin')
+        conn = make_connection(other)
+        job = TransferJob.objects.create(
+            owner=other, connection=conn, source_path='/a', destination_path='/b',
+            status=STATUS_DONE,
+        )
+        resp = auth_client.post(f'/transfers/{job.pk}/stop/')
+        assert resp.status_code == 302
+        job.refresh_from_db()
+        assert job.status == STATUS_DONE
+
+
 class TestValidateTransferPath:
     def test_accepts_normal_absolute_path(self):
         _validate_transfer_path('/data/backups/file.tar')

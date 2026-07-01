@@ -45,7 +45,7 @@ class TransferForm(forms.ModelForm):
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
         if user:
-            self.fields['connection'].queryset = Connection.objects.filter(owner=user)
+            self.fields['connection'].queryset = Connection.objects.all()
 
     def clean_upload(self):
         uploaded = self.cleaned_data['upload']
