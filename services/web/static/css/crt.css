@@ -396,3 +396,33 @@ label { display: block; margin-bottom: 0.25rem; color: #aaffaa; font-size: 0.85r
   .stat-tile, .chart-box { animation: none; }
   .dash-header h1::after { animation: none; }
 }
+
+/* ============================================================
+   CONNECTIONS
+   ============================================================ */
+
+.toolbar { margin-bottom: 1.25rem; }
+
+/* Tabela — akcje wyrównane do prawej, spójny odstęp */
+th.col-actions, td.col-actions { text-align: right; white-space: nowrap; }
+
+.row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  justify-content: flex-end;
+}
+
+.test-result { font-size: 0.8rem; margin-left: 0.3rem; }
+
+/* Stylizowany file picker (zamiast natywnego "Choose File") */
+.file-name { font-size: 0.8rem; color: #8fbf8f; }
+label.btn-small { cursor: pointer; }
+.file-hidden {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}

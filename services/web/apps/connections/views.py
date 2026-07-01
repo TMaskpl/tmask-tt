@@ -1,19 +1,24 @@
 import io
+import json
 import posixpath
 import re
 import socket
+from datetime import date
 
 import paramiko
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.http import require_POST
+from .portability import export_config, import_config, PassphraseError
 from .forms import ConnectionForm
 from .models import Connection
 from .sftp_utils import list_directory, build_breadcrumbs
 from .ssh_tester import test_connection as _test_connection
 
 _CONNECTIONS_LIST = 'connections:list'
+_MAX_IMPORT_BYTES = 1024 * 1024
 
 @login_required
 def connection_list(request):
@@ -114,3 +119,51 @@ def browse_directory(request, pk):
         'current_path': path,
         'field_id': field_id,
     })
+
+
+@login_required
+@require_POST
+def connection_export(request):
+    passphrase = request.POST.get('passphrase', '')
+    if not passphrase:
+        messages.error(request, 'Podaj hasło do zaszyfrowania eksportu.')
+        return redirect(_CONNECTIONS_LIST)
+    data = export_config(request.user, passphrase)
+    response = JsonResponse(data)
+    response['Content-Disposition'] = (
+        f'attachment; filename=tmask-config-{date.today().isoformat()}.json'
+    )
+    return response
+
+
+@login_required
+@require_POST
+def connection_import(request):
+    passphrase = request.POST.get('passphrase', '')
+    upload = request.FILES.get('file')
+    if not passphrase or upload is None:
+        messages.error(request, 'Wybierz plik i podaj hasło.')
+        return redirect(_CONNECTIONS_LIST)
+    if upload.size > _MAX_IMPORT_BYTES:
+        messages.error(request, 'Plik jest za duży (limit 1 MB).')
+        return redirect(_CONNECTIONS_LIST)
+    try:
+        data = json.loads(upload.read().decode('utf-8'))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        messages.error(request, 'Nieprawidłowy plik konfiguracji.')
+        return redirect(_CONNECTIONS_LIST)
+    try:
+        result = import_config(request.user, data, passphrase)
+    except PassphraseError:
+        messages.error(request, 'Błędne hasło lub uszkodzony plik.')
+        return redirect(_CONNECTIONS_LIST)
+    except (ValueError, KeyError):
+        messages.error(request, 'Nieprawidłowy plik konfiguracji.')
+        return redirect(_CONNECTIONS_LIST)
+    messages.success(
+        request,
+        f'Dodano {result.conn_added} połączeń (pominięto {result.conn_skipped}), '
+        f'{result.flow_added} flows (pominięto {result.flow_skipped}, '
+        f'nierozwiązanych {result.flow_unresolved}).'
+    )
+    return redirect(_CONNECTIONS_LIST)

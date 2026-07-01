@@ -3,7 +3,7 @@
 {% block content %}
 <div class="box">
   <span class="box-title">CONNECTIONS</span>
-  <div style="margin-bottom:1rem;">
+  <div class="toolbar">
     <a href="{% url 'connections:create' %}" class="btn">[ + NEW CONNECTION ]</a>
   </div>
   {% if connections %}
@@ -11,7 +11,7 @@
     <thead>
       <tr>
         <th>NAME</th><th>HOST</th><th>PORT</th><th>PROTO</th>
-        <th>COMPRESS</th><th>ENCRYPT</th><th>ACTIONS</th>
+        <th>COMPRESS</th><th>ENCRYPT</th><th class="col-actions">ACTIONS</th>
       </tr>
     </thead>
     <tbody>
@@ -23,25 +23,27 @@
         <td>{{ conn.protocol|upper }}</td>
         <td>{% if conn.compress %}YES{% else %}—{% endif %}</td>
         <td>{% if conn.encrypt %}YES{% else %}—{% endif %}</td>
-        <td>
-          <button class="btn btn-warn"
-            hx-get="{% url 'connections:test' conn.pk %}"
-            hx-target="#test-result-{{ conn.pk }}"
-            hx-swap="innerHTML">[TEST]</button>
-          <a href="{% url 'connections:edit' conn.pk %}" class="btn">[EDIT]</a>
-          <form method="post" action="{% url 'connections:delete' conn.pk %}" style="display:inline"
-            onsubmit="return confirm('DELETE {{ conn.name }}?')">
-            {% csrf_token %}
-            <button type="submit" class="btn btn-danger">[DEL]</button>
-          </form>
-          <span id="test-result-{{ conn.pk }}" style="font-size:0.8rem; margin-left:0.5rem;"></span>
+        <td class="col-actions">
+          <div class="row-actions">
+            <button class="btn btn-small btn-warn"
+              hx-get="{% url 'connections:test' conn.pk %}"
+              hx-target="#test-result-{{ conn.pk }}"
+              hx-swap="innerHTML">[TEST]</button>
+            <a href="{% url 'connections:edit' conn.pk %}" class="btn btn-small">[EDIT]</a>
+            <form method="post" action="{% url 'connections:delete' conn.pk %}" style="display:inline"
+              onsubmit="return confirm('DELETE {{ conn.name }}?')">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-small btn-danger">[DEL]</button>
+            </form>
+            <span id="test-result-{{ conn.pk }}" class="test-result"></span>
+          </div>
         </td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
   {% else %}
-  <p style="color:#555;">NO CONNECTIONS CONFIGURED — ADD ONE ABOVE</p>
+  <p style="color:#6a8a6a;">NO CONNECTIONS CONFIGURED — ADD ONE ABOVE</p>
   {% endif %}
 </div>
 {% endblock %}
