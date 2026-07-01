@@ -59,7 +59,7 @@ class TestTriggerConnectionEndpoint:
         data = response.json()
         mock_delay.assert_called_once_with('transfers.execute', kwargs={'job_id': data['job_id']})
 
-    def test_wrong_owner_connection_returns_404(
+    def test_other_users_connection_returns_202(
         self, client, regular_user, admin_user, make_connection, make_api_token, mocker
     ):
         mocker.patch('apps.api.views.current_app.send_task')
@@ -69,7 +69,7 @@ class TestTriggerConnectionEndpoint:
             'source_path': '/data/file.tar',
             'destination_path': '/backup/',
         })
-        assert response.status_code == 404
+        assert response.status_code == 202
 
     def test_missing_source_path_returns_400(
         self, client, regular_user, make_connection, make_api_token
@@ -147,14 +147,14 @@ class TestTriggerFlowEndpoint:
         assert job.source_path == flow.source_path
         assert job.destination_path == flow.dest_path
 
-    def test_wrong_owner_flow_returns_404(
+    def test_other_users_flow_returns_202(
         self, client, regular_user, admin_user, make_flow, make_api_token, mocker
     ):
         mocker.patch('apps.api.views.current_app.send_task')
         other_flow = make_flow(admin_user)
         _, raw_key = make_api_token(regular_user)
         response = self._post(client, other_flow.pk, raw_key)
-        assert response.status_code == 404
+        assert response.status_code == 202
 
     def test_no_token_returns_403(self, client, regular_user, make_flow):
         flow = make_flow(regular_user)

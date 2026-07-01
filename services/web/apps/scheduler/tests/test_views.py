@@ -23,67 +23,67 @@ class TestScheduleListView:
         assert response.status_code == 302
         assert '/accounts/login/' in response['Location']
 
-    def test_shows_only_own_schedules(self, auth_client, regular_user, admin_user, make_flow, make_schedule):
+    def test_shows_schedules_from_all_users(self, auth_client, regular_user, admin_user, make_flow, make_schedule):
         make_schedule(regular_user, make_flow(regular_user), cron_expr='0 1 * * *')
         make_schedule(admin_user, make_flow(admin_user), cron_expr='0 2 * * *')
         response = auth_client.get(reverse('scheduler:list'))
         assert response.status_code == 200
         schedules = list(response.context['schedules'])
-        assert all(s.owner == regular_user for s in schedules)
-        assert len(schedules) == 1
+        assert {s.owner for s in schedules} == {regular_user, admin_user}
+        assert len(schedules) == 2
 
 
 @pytest.mark.django_db
 class TestScheduleCreateView:
-    def test_create_form_renders(self, auth_client):
-        response = auth_client.get(reverse('scheduler:create'))
+    def test_create_form_renders(self, admin_client):
+        response = admin_client.get(reverse('scheduler:create'))
         assert response.status_code == 200
 
-    def test_create_schedule(self, auth_client, regular_user, make_flow):
-        flow = make_flow(regular_user)
+    def test_create_schedule(self, admin_client, admin_user, make_flow):
+        flow = make_flow(admin_user)
         with patch('apps.scheduler.views._sync_celery_beat'):
-            response = auth_client.post(reverse('scheduler:create'), {
+            response = admin_client.post(reverse('scheduler:create'), {
                 'flow': flow.pk,
                 'cron_expr': '0 3 * * *',
                 'enabled': True,
             })
         assert response.status_code == 302
-        assert ScheduledTransfer.objects.filter(owner=regular_user, flow=flow).exists()
+        assert ScheduledTransfer.objects.filter(owner=admin_user, flow=flow).exists()
 
-    def test_create_calls_sync_celery_beat(self, auth_client, regular_user, make_flow):
-        flow = make_flow(regular_user)
+    def test_create_calls_sync_celery_beat(self, admin_client, admin_user, make_flow):
+        flow = make_flow(admin_user)
         with patch('apps.scheduler.views._sync_celery_beat') as mock_sync:
-            auth_client.post(reverse('scheduler:create'), {
+            admin_client.post(reverse('scheduler:create'), {
                 'flow': flow.pk,
                 'cron_expr': '*/5 * * * *',
                 'enabled': True,
             })
         mock_sync.assert_called_once()
 
-    def test_cannot_use_other_users_flow(self, auth_client, admin_user, make_flow):
-        other_flow = make_flow(admin_user)
+    def test_can_use_other_users_flow(self, admin_client, admin_user, regular_user, make_flow):
+        other_flow = make_flow(regular_user)
         with patch('apps.scheduler.views._sync_celery_beat'):
-            response = auth_client.post(reverse('scheduler:create'), {
+            response = admin_client.post(reverse('scheduler:create'), {
                 'flow': other_flow.pk,
                 'cron_expr': '0 3 * * *',
                 'enabled': True,
             })
-        assert response.status_code == 200
-        assert not ScheduledTransfer.objects.filter(flow=other_flow).exists()
+        assert response.status_code == 302
+        assert ScheduledTransfer.objects.filter(owner=admin_user, flow=other_flow).exists()
 
 
 @pytest.mark.django_db
 class TestScheduleEditView:
-    def test_edit_form_renders(self, auth_client, regular_user, make_flow, make_schedule):
+    def test_edit_form_renders(self, admin_client, regular_user, make_flow, make_schedule):
         sched = make_schedule(regular_user, make_flow(regular_user))
-        response = auth_client.get(reverse('scheduler:edit', args=[sched.pk]))
+        response = admin_client.get(reverse('scheduler:edit', args=[sched.pk]))
         assert response.status_code == 200
 
-    def test_edit_saves_changes(self, auth_client, regular_user, make_flow, make_schedule):
+    def test_edit_saves_changes(self, admin_client, regular_user, make_flow, make_schedule):
         flow = make_flow(regular_user)
         sched = make_schedule(regular_user, flow, cron_expr='0 1 * * *')
         with patch('apps.scheduler.views._sync_celery_beat'):
-            response = auth_client.post(reverse('scheduler:edit', args=[sched.pk]), {
+            response = admin_client.post(reverse('scheduler:edit', args=[sched.pk]), {
                 'flow': flow.pk,
                 'cron_expr': '0 5 * * *',
                 'enabled': True,
@@ -92,71 +92,73 @@ class TestScheduleEditView:
         sched.refresh_from_db()
         assert sched.cron_expr == '0 5 * * *'
 
-    def test_edit_404_for_other_users_schedule(self, auth_client, admin_user, make_flow, make_schedule):
-        sched = make_schedule(admin_user, make_flow(admin_user))
-        response = auth_client.get(reverse('scheduler:edit', args=[sched.pk]))
-        assert response.status_code == 404
+    def test_edit_returns_200_for_other_users_schedule(self, admin_client, regular_user, make_flow, make_schedule):
+        sched = make_schedule(regular_user, make_flow(regular_user))
+        response = admin_client.get(reverse('scheduler:edit', args=[sched.pk]))
+        assert response.status_code == 200
 
 
 @pytest.mark.django_db
 class TestScheduleToggleView:
-    def test_toggle_disables_active_schedule(self, auth_client, regular_user, make_flow, make_schedule):
+    def test_toggle_disables_active_schedule(self, admin_client, regular_user, make_flow, make_schedule):
         sched = make_schedule(regular_user, make_flow(regular_user), enabled=True)
         with patch('apps.scheduler.views._sync_celery_beat'):
-            response = auth_client.post(reverse('scheduler:toggle', args=[sched.pk]))
+            response = admin_client.post(reverse('scheduler:toggle', args=[sched.pk]))
         assert response.status_code == 302
         sched.refresh_from_db()
         assert sched.enabled is False
 
-    def test_toggle_enables_inactive_schedule(self, auth_client, regular_user, make_flow, make_schedule):
+    def test_toggle_enables_inactive_schedule(self, admin_client, regular_user, make_flow, make_schedule):
         sched = make_schedule(regular_user, make_flow(regular_user), enabled=False)
         with patch('apps.scheduler.views._sync_celery_beat'):
-            response = auth_client.post(reverse('scheduler:toggle', args=[sched.pk]))
+            response = admin_client.post(reverse('scheduler:toggle', args=[sched.pk]))
         assert response.status_code == 302
         sched.refresh_from_db()
         assert sched.enabled is True
 
-    def test_toggle_get_returns_405(self, auth_client, regular_user, make_flow, make_schedule):
+    def test_toggle_get_returns_405(self, admin_client, regular_user, make_flow, make_schedule):
         sched = make_schedule(regular_user, make_flow(regular_user))
-        response = auth_client.get(reverse('scheduler:toggle', args=[sched.pk]))
+        response = admin_client.get(reverse('scheduler:toggle', args=[sched.pk]))
         assert response.status_code == 405
 
-    def test_toggle_404_for_other_users_schedule(self, auth_client, admin_user, make_flow, make_schedule):
-        sched = make_schedule(admin_user, make_flow(admin_user))
-        response = auth_client.post(reverse('scheduler:toggle', args=[sched.pk]))
-        assert response.status_code == 404
+    def test_toggle_returns_302_for_other_users_schedule(self, admin_client, regular_user, make_flow, make_schedule):
+        sched = make_schedule(regular_user, make_flow(regular_user))
+        with patch('apps.scheduler.views._sync_celery_beat'):
+            response = admin_client.post(reverse('scheduler:toggle', args=[sched.pk]))
+        assert response.status_code == 302
 
-    def test_toggle_calls_sync_celery_beat(self, auth_client, regular_user, make_flow, make_schedule):
+    def test_toggle_calls_sync_celery_beat(self, admin_client, regular_user, make_flow, make_schedule):
         sched = make_schedule(regular_user, make_flow(regular_user))
         with patch('apps.scheduler.views._sync_celery_beat') as mock_sync:
-            auth_client.post(reverse('scheduler:toggle', args=[sched.pk]))
+            admin_client.post(reverse('scheduler:toggle', args=[sched.pk]))
         mock_sync.assert_called_once_with(sched)
 
 
 @pytest.mark.django_db
 class TestScheduleDeleteView:
-    def test_delete_removes_schedule(self, auth_client, regular_user, make_flow, make_schedule):
+    def test_delete_removes_schedule(self, admin_client, regular_user, make_flow, make_schedule):
         sched = make_schedule(regular_user, make_flow(regular_user))
         with patch('apps.scheduler.views._delete_celery_beat'):
-            response = auth_client.post(reverse('scheduler:delete', args=[sched.pk]))
+            response = admin_client.post(reverse('scheduler:delete', args=[sched.pk]))
         assert response.status_code == 302
         assert not ScheduledTransfer.objects.filter(pk=sched.pk).exists()
 
-    def test_delete_calls_delete_celery_beat(self, auth_client, regular_user, make_flow, make_schedule):
+    def test_delete_calls_delete_celery_beat(self, admin_client, regular_user, make_flow, make_schedule):
         sched = make_schedule(regular_user, make_flow(regular_user))
         with patch('apps.scheduler.views._delete_celery_beat') as mock_del:
-            auth_client.post(reverse('scheduler:delete', args=[sched.pk]))
+            admin_client.post(reverse('scheduler:delete', args=[sched.pk]))
         # Django sets pk=None on the instance after delete(), so we check call count only
         assert mock_del.call_count == 1
 
-    def test_delete_404_for_other_users_schedule(self, auth_client, admin_user, make_flow, make_schedule):
-        sched = make_schedule(admin_user, make_flow(admin_user))
-        response = auth_client.post(reverse('scheduler:delete', args=[sched.pk]))
-        assert response.status_code == 404
-
-    def test_delete_get_returns_405(self, auth_client, regular_user, make_flow, make_schedule):
+    def test_delete_returns_302_for_other_users_schedule(self, admin_client, regular_user, make_flow, make_schedule):
         sched = make_schedule(regular_user, make_flow(regular_user))
-        response = auth_client.get(reverse('scheduler:delete', args=[sched.pk]))
+        with patch('apps.scheduler.views._delete_celery_beat'):
+            response = admin_client.post(reverse('scheduler:delete', args=[sched.pk]))
+        assert response.status_code == 302
+
+    def test_delete_get_returns_405(self, admin_client, regular_user, make_flow, make_schedule):
+        sched = make_schedule(regular_user, make_flow(regular_user))
+        response = admin_client.get(reverse('scheduler:delete', args=[sched.pk]))
         assert response.status_code == 405
 
 

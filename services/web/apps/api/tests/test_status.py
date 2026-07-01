@@ -70,7 +70,7 @@ class TestJobStatusEndpoint:
         assert data['status'] == STATUS_FAILED
         assert data['error'] == 'Connection refused'
 
-    def test_other_users_job_returns_404(
+    def test_other_users_job_returns_200(
         self, client, regular_user, admin_user, make_connection, make_api_token
     ):
         other_conn = make_connection(admin_user)
@@ -80,7 +80,7 @@ class TestJobStatusEndpoint:
         )
         _, raw_key = make_api_token(regular_user)
         response = self._get(client, other_job.pk, raw_key)
-        assert response.status_code == 404
+        assert response.status_code == 200
 
     def test_nonexistent_job_returns_404(
         self, client, regular_user, make_api_token

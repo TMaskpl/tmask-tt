@@ -11,25 +11,25 @@ class TestFlowListView:
         assert response.status_code == 302
         assert '/accounts/login/' in response['Location']
 
-    def test_shows_only_own_flows(self, auth_client, regular_user, admin_user, make_flow):
+    def test_shows_flows_from_all_users(self, auth_client, regular_user, admin_user, make_flow):
         make_flow(regular_user, name='My Flow')
         make_flow(admin_user, name='Other Flow')
         response = auth_client.get(reverse('flows:list'))
         assert response.status_code == 200
         assert b'My Flow' in response.content
-        assert b'Other Flow' not in response.content
+        assert b'Other Flow' in response.content
 
 
 @pytest.mark.django_db
 class TestFlowCreateView:
-    def test_create_form_renders(self, auth_client):
-        response = auth_client.get(reverse('flows:create'))
+    def test_create_form_renders(self, admin_client):
+        response = admin_client.get(reverse('flows:create'))
         assert response.status_code == 200
 
-    def test_create_flow(self, auth_client, regular_user, make_connection):
-        src = make_connection(regular_user, name='Src', host='10.0.0.1')
-        dst = make_connection(regular_user, name='Dst', host='10.0.0.2')
-        response = auth_client.post(reverse('flows:create'), {
+    def test_create_flow(self, admin_client, admin_user, make_connection):
+        src = make_connection(admin_user, name='Src', host='10.0.0.1')
+        dst = make_connection(admin_user, name='Dst', host='10.0.0.2')
+        response = admin_client.post(reverse('flows:create'), {
             'name': 'New Flow',
             'source_conn': src.pk,
             'source_path': '/data/file.tar',
@@ -37,13 +37,13 @@ class TestFlowCreateView:
             'dest_path': '/backup/file.tar',
         })
         assert response.status_code == 302
-        assert Flow.objects.filter(owner=regular_user, name='New Flow').exists()
+        assert Flow.objects.filter(owner=admin_user, name='New Flow').exists()
 
-    def test_cannot_see_other_users_connections(self, auth_client, admin_user, make_connection):
-        _ = make_connection(admin_user, name='AdminConn')
-        response = auth_client.get(reverse('flows:create'))
+    def test_can_see_other_users_connections(self, admin_client, regular_user, make_connection):
+        _ = make_connection(regular_user, name='OtherConn')
+        response = admin_client.get(reverse('flows:create'))
         assert response.status_code == 200
-        assert b'AdminConn' not in response.content
+        assert b'OtherConn' in response.content
 
 
 @pytest.mark.django_db
@@ -65,24 +65,27 @@ class TestFlowRunView:
         response = auth_client.get(reverse('flows:run', args=[flow.pk]))
         assert response.status_code == 405
 
-    def test_cannot_run_other_users_flow(self, auth_client, admin_user, make_flow):
+    def test_operator_can_run_other_users_flow(self, auth_client, admin_user, make_flow, mocker, django_capture_on_commit_callbacks):
+        mock_delay = mocker.patch('apps.flows.views.current_app.send_task')
         flow = make_flow(admin_user)
-        response = auth_client.post(reverse('flows:run', args=[flow.pk]))
-        assert response.status_code == 404
+        with django_capture_on_commit_callbacks(execute=True):
+            response = auth_client.post(reverse('flows:run', args=[flow.pk]))
+        assert response.status_code == 302
+        mock_delay.assert_called_once()
 
 
 @pytest.mark.django_db
 class TestFlowDeleteView:
-    def test_delete_removes_flow(self, auth_client, regular_user, make_flow):
+    def test_delete_removes_flow(self, admin_client, regular_user, make_flow):
         flow = make_flow(regular_user)
-        response = auth_client.post(reverse('flows:delete', args=[flow.pk]))
+        response = admin_client.post(reverse('flows:delete', args=[flow.pk]))
         assert response.status_code == 302
         assert not Flow.objects.filter(pk=flow.pk).exists()
 
-    def test_cannot_delete_other_users_flow(self, auth_client, admin_user, make_flow):
+    def test_operator_gets_403_deleting_other_users_flow(self, auth_client, admin_user, make_flow):
         flow = make_flow(admin_user)
         response = auth_client.post(reverse('flows:delete', args=[flow.pk]))
-        assert response.status_code == 404
+        assert response.status_code == 403
 
 
 @pytest.mark.django_db
