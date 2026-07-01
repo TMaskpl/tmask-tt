@@ -227,3 +227,48 @@ class TestConnectionDelete:
         conn = make_connection(admin_user)
         response = auth_client.post(reverse('connections:delete', args=[conn.pk]))
         assert response.status_code == 404
+
+
+@pytest.mark.django_db
+class TestOrgWideVisibility:
+    def test_operator_sees_connection_created_by_another_user(self, auth_client, django_user_model, make_connection):
+        other = django_user_model.objects.create_user(username='other1', password='p', role='admin')
+        conn = make_connection(other, name='SharedConn')
+        resp = auth_client.get('/connections/')
+        assert b'SharedConn' in resp.content
+
+    def test_readonly_can_view_connection_list(self, readonly_client, django_user_model, make_connection):
+        other = django_user_model.objects.create_user(username='other2', password='p', role='admin')
+        make_connection(other, name='VisibleToReadonly')
+        resp = readonly_client.get('/connections/')
+        assert resp.status_code == 200
+        assert b'VisibleToReadonly' in resp.content
+
+    def test_operator_cannot_create_connection(self, auth_client):
+        resp = auth_client.post('/connections/new/', {
+            'name': 'X', 'host': 'h', 'port': 22, 'username': 'u', 'protocol': 'sftp',
+        })
+        assert resp.status_code == 403
+
+    def test_readonly_cannot_delete_connection(self, readonly_client, django_user_model, make_connection):
+        other = django_user_model.objects.create_user(username='other3', password='p', role='admin')
+        conn = make_connection(other)
+        resp = readonly_client.post(f'/connections/{conn.pk}/delete/')
+        assert resp.status_code == 403
+
+    def test_admin_can_edit_connection_created_by_another_user(self, admin_client, django_user_model, make_connection):
+        other = django_user_model.objects.create_user(username='other4', password='p', role='admin')
+        conn = make_connection(other, name='ToEdit')
+        resp = admin_client.get(f'/connections/{conn.pk}/edit/')
+        assert resp.status_code == 200
+
+    def test_operator_can_test_connection_created_by_another_user(self, auth_client, django_user_model, make_connection, monkeypatch):
+        from apps.connections import views as connections_views
+        other = django_user_model.objects.create_user(username='other5', password='p', role='admin')
+        conn = make_connection(other)
+        monkeypatch.setattr(
+            connections_views, '_test_connection',
+            lambda c: type('R', (), {'success': True, 'message': 'ok'})(),
+        )
+        resp = auth_client.get(f'/connections/{conn.pk}/test/')
+        assert resp.status_code == 200
