@@ -4,6 +4,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
+from apps.accounts.models import ROLE_LEVEL, ROLE_OPERATOR
 from apps.connections.models import Connection
 from apps.flows.models import Flow
 from apps.transfers.forms import _validate_transfer_path
@@ -12,14 +13,17 @@ from celery import current_app
 from .auth import require_api_token
 
 _NOT_FOUND = 'Not found'
+_FORBIDDEN = 'Operator or admin role required'
 
 
 @csrf_exempt
 @require_POST
 @require_api_token
 def trigger_connection(request, connection_id):
+    if request.api_user.role_level < ROLE_LEVEL[ROLE_OPERATOR]:
+        return JsonResponse({'error': _FORBIDDEN}, status=403)
     try:
-        connection = Connection.objects.get(pk=connection_id, owner=request.api_user)
+        connection = Connection.objects.get(pk=connection_id)
     except Connection.DoesNotExist:
         return JsonResponse({'error': _NOT_FOUND}, status=404)
 
@@ -56,8 +60,10 @@ def trigger_connection(request, connection_id):
 @require_POST
 @require_api_token
 def trigger_flow(request, flow_id):
+    if request.api_user.role_level < ROLE_LEVEL[ROLE_OPERATOR]:
+        return JsonResponse({'error': _FORBIDDEN}, status=403)
     try:
-        flow = Flow.objects.get(pk=flow_id, owner=request.api_user)
+        flow = Flow.objects.get(pk=flow_id)
     except Flow.DoesNotExist:
         return JsonResponse({'error': _NOT_FOUND}, status=404)
 
@@ -74,7 +80,7 @@ def trigger_flow(request, flow_id):
 @require_api_token
 def job_status(request, job_id):
     try:
-        job = TransferJob.objects.get(pk=job_id, owner=request.api_user)
+        job = TransferJob.objects.get(pk=job_id)
     except TransferJob.DoesNotExist:
         return JsonResponse({'error': _NOT_FOUND}, status=404)
 

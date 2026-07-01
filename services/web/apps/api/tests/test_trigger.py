@@ -170,3 +170,34 @@ class TestTriggerFlowEndpoint:
         _, raw_key = make_api_token(regular_user)
         response = client.get(self._url(flow.pk), HTTP_AUTHORIZATION=f'Token {raw_key}')
         assert response.status_code == 405
+
+
+@pytest.mark.django_db
+class TestOrgWideAndRoleGating:
+    def test_operator_token_can_trigger_connection_owned_by_another_user(self, client, django_user_model, make_connection, make_api_token, monkeypatch):
+        from celery import current_app
+        owner = django_user_model.objects.create_user(username='apiowner1', password='p', role='admin')
+        conn = make_connection(owner)
+        operator = django_user_model.objects.create_user(username='apioperator1', password='p', role='operator')
+        _, raw_key = make_api_token(operator)
+        monkeypatch.setattr(current_app, 'send_task', lambda *a, **kw: None)
+        resp = client.post(
+            f'/api/transfers/trigger/connection/{conn.pk}/',
+            data='{"source_path": "/a", "destination_path": "/b"}',
+            content_type='application/json',
+            HTTP_AUTHORIZATION=f'Token {raw_key}',
+        )
+        assert resp.status_code == 202
+
+    def test_readonly_token_cannot_trigger_connection(self, client, django_user_model, make_connection, make_api_token):
+        owner = django_user_model.objects.create_user(username='apiowner2', password='p', role='admin')
+        conn = make_connection(owner)
+        readonly = django_user_model.objects.create_user(username='apireadonly1', password='p', role='readonly')
+        _, raw_key = make_api_token(readonly)
+        resp = client.post(
+            f'/api/transfers/trigger/connection/{conn.pk}/',
+            data='{"source_path": "/a", "destination_path": "/b"}',
+            content_type='application/json',
+            HTTP_AUTHORIZATION=f'Token {raw_key}',
+        )
+        assert resp.status_code == 403

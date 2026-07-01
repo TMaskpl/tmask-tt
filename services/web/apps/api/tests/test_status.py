@@ -97,3 +97,15 @@ class TestJobStatusEndpoint:
         )
         response = client.get(self._url(job.pk))
         assert response.status_code == 403
+
+
+@pytest.mark.django_db
+class TestOrgWideJobStatus:
+    def test_any_authenticated_token_can_read_job_status_of_another_users_job(self, client, django_user_model, make_connection, make_api_token):
+        owner = django_user_model.objects.create_user(username='apiowner3', password='p', role='admin')
+        conn = make_connection(owner)
+        job = TransferJob.objects.create(owner=owner, connection=conn, source_path='/a', destination_path='/b')
+        viewer = django_user_model.objects.create_user(username='apiviewer1', password='p', role='readonly')
+        _, raw_key = make_api_token(viewer)
+        resp = client.get(f'/api/jobs/{job.pk}/status/', HTTP_AUTHORIZATION=f'Token {raw_key}')
+        assert resp.status_code == 200
