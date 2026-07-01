@@ -464,10 +464,22 @@ th.col-actions, td.col-actions { text-align: right; white-space: nowrap; }
 }
 .inline-label input { width: 150px; }
 
-.backup-form .file-input {
-  width: auto;
-  max-width: 200px;
+/* Stylizowany file picker (zamiast natywnego "Choose File") */
+.file-picker { flex: 0 1 320px; }
+.file-picker .file-name {
+  flex: 1;
+  min-width: 0;
   font-size: 0.8rem;
+  color: #8fbf8f;
+}
+.file-picker label.btn-small { cursor: pointer; }
+.file-hidden {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
 }
 
 @media (max-width: 640px) {

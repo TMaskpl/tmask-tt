@@ -25,6 +25,16 @@ function closeBrowser() {
   document.getElementById('file-browser-content').innerHTML = '';
 }
 
+// Stylizowany file input — pokaż nazwę wybranego pliku w polu tekstowym
+document.addEventListener('change', function (e) {
+  const input = e.target.closest('input[type="file"][data-file-display]');
+  if (!input) return;
+  const display = document.getElementById(input.dataset.fileDisplay);
+  if (display) {
+    display.value = input.files && input.files.length ? input.files[0].name : '';
+  }
+});
+
 document.addEventListener('click', function (e) {
   let el = e.target.closest('[data-browse-open]');
   if (el) {

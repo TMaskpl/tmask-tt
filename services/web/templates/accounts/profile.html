@@ -390,7 +390,12 @@
     </div>
     <form method="post" action="{% url 'connections:import' %}" enctype="multipart/form-data" class="backup-form">
       {% csrf_token %}
-      <input type="file" name="file" accept="application/json,.json" required class="file-input">
+      <div class="field-with-btn file-picker">
+        <input type="text" class="file-name" readonly placeholder="nie wybrano pliku" id="import-file-name">
+        <label for="import-file" class="btn btn-small">[ WYBIERZ ]</label>
+        <input type="file" id="import-file" name="file" accept="application/json,.json"
+               class="file-hidden" data-file-display="import-file-name">
+      </div>
       <label class="inline-label">HASŁO
         <input type="password" name="passphrase" required autocomplete="off">
       </label>
