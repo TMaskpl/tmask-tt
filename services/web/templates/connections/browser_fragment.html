@@ -8,6 +8,9 @@
     data-browse-conn="{{ conn_pk }}"
     data-browse-path="{{ crumb.path }}">{{ crumb.label }}</a>{% if not forloop.last %} / {% endif %}{% endfor %}
 </div>
+<div class="browse-actions">
+  <a href="#" class="btn btn-small" data-browse-select="{{ current_path }}">[ UŻYJ TEGO KATALOGU: {{ current_path }} ]</a>
+</div>
 <ul class="file-list">
   {% for entry in entries %}
   <li>
