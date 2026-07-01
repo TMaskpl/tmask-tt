@@ -13,8 +13,23 @@ def regular_user(db, django_user_model):
     return django_user_model.objects.create_user(
         username='user_test',
         password='testpass123',
-        role='user',
+        role='operator',
     )
+
+
+@pytest.fixture
+def readonly_user(db, django_user_model):
+    return django_user_model.objects.create_user(
+        username='readonly_test',
+        password='testpass123',
+        role='readonly',
+    )
+
+
+@pytest.fixture
+def readonly_client(client, readonly_user):
+    client.login(username='readonly_test', password='testpass123')
+    return client
 
 @pytest.fixture
 def auth_client(client, regular_user):
