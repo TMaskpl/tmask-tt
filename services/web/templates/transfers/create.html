@@ -4,12 +4,18 @@
 <div style="display:grid; grid-template-columns:1fr 1fr; gap:2rem;">
   <div class="box">
     <span class="box-title">NEW TRANSFER</span>
-    <form method="post">
+    <form method="post" enctype="multipart/form-data">
       {% csrf_token %}
       {% for field in form %}
       <div class="field">
         <label>{{ field.label|upper }}:</label>
-        {% if field.html_name == 'destination_path' %}
+        {% if field.html_name == 'upload' %}
+        <div class="field-with-btn">
+          <label for="{{ field.auto_id }}" class="btn btn-small">[ WYBIERZ ]</label>
+          <span id="upload-file-name" class="file-name">— brak pliku —</span>
+          <div class="file-hidden">{{ field }}</div>
+        </div>
+        {% elif field.html_name == 'destination_path' %}
         <div class="field-with-btn">
           {{ field }}
           <button type="button" class="btn btn-small"

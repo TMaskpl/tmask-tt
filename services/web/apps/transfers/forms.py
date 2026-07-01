@@ -28,7 +28,10 @@ def _validate_source_filename(value: str) -> None:
 
 
 class TransferForm(forms.ModelForm):
-    upload = forms.FileField(label='Local file')
+    upload = forms.FileField(
+        label='Local file',
+        widget=forms.ClearableFileInput(attrs={'data-file-display': 'upload-file-name'}),
+    )
     gpg_passphrase = forms.CharField(
         required=False,
         widget=forms.PasswordInput(attrs={'autocomplete': 'off'}),

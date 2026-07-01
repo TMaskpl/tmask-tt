@@ -12,6 +12,13 @@ class TestTransferCreateView:
         response = auth_client.get(reverse('transfers:create'))
         assert response.status_code == 200
 
+    def test_create_form_has_file_input_and_multipart(self, auth_client):
+        response = auth_client.get(reverse('transfers:create'))
+        assert response.status_code == 200
+        body = response.content.decode()
+        assert 'enctype="multipart/form-data"' in body
+        assert 'type="file"' in body
+
     def test_create_transfer_writes_file_and_dispatches(
         self, auth_client, regular_user, make_connection, mocker,
         django_capture_on_commit_callbacks, settings, tmp_path,
