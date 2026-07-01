@@ -13,7 +13,7 @@ class ScheduledTransferForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields['flow'].required = True
         if user:
-            self.fields['flow'].queryset = Flow.objects.filter(owner=user)
+            self.fields['flow'].queryset = Flow.objects.all()
 
     def clean_cron_expr(self):
         expr = self.cleaned_data['cron_expr']

@@ -158,3 +158,46 @@ class TestScheduleDeleteView:
         sched = make_schedule(regular_user, make_flow(regular_user))
         response = auth_client.get(reverse('scheduler:delete', args=[sched.pk]))
         assert response.status_code == 405
+
+
+@pytest.mark.django_db
+class TestOrgWideVisibilityAndAdminOnly:
+    def test_operator_sees_schedule_created_by_another_user(self, auth_client, django_user_model, make_flow):
+        from apps.scheduler.models import ScheduledTransfer
+        other = django_user_model.objects.create_user(username='sother1', password='p', role='admin')
+        flow = make_flow(other)
+        ScheduledTransfer.objects.create(owner=other, flow=flow, cron_expr='0 3 * * *', enabled=True)
+        resp = auth_client.get('/scheduler/')
+        assert resp.status_code == 200
+        assert flow.name.encode() in resp.content
+
+    def test_operator_cannot_create_schedule(self, auth_client):
+        resp = auth_client.get('/scheduler/new/')
+        assert resp.status_code == 403
+
+    def test_operator_cannot_toggle_schedule(self, auth_client, django_user_model, make_flow):
+        from apps.scheduler.models import ScheduledTransfer
+        other = django_user_model.objects.create_user(username='sother2', password='p', role='admin')
+        flow = make_flow(other)
+        sched = ScheduledTransfer.objects.create(owner=other, flow=flow, cron_expr='0 3 * * *', enabled=True)
+        resp = auth_client.post(f'/scheduler/{sched.pk}/toggle/')
+        assert resp.status_code == 403
+
+    def test_readonly_cannot_delete_schedule(self, readonly_client, django_user_model, make_flow):
+        from apps.scheduler.models import ScheduledTransfer
+        other = django_user_model.objects.create_user(username='sother3', password='p', role='admin')
+        flow = make_flow(other)
+        sched = ScheduledTransfer.objects.create(owner=other, flow=flow, cron_expr='0 3 * * *', enabled=True)
+        resp = readonly_client.post(f'/scheduler/{sched.pk}/delete/')
+        assert resp.status_code == 403
+
+
+@pytest.mark.django_db
+class TestScheduledTransferFormOrgWideFlows:
+    def test_form_offers_flows_from_other_users(self, django_user_model, make_flow):
+        from apps.scheduler.forms import ScheduledTransferForm
+        owner = django_user_model.objects.create_user(username='flowowner', password='p')
+        flow = make_flow(owner)
+        requester = django_user_model.objects.create_user(username='requester2', password='p', role='admin')
+        form = ScheduledTransferForm(user=requester)
+        assert flow in form.fields['flow'].queryset
