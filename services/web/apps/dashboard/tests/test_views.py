@@ -31,12 +31,6 @@ class TestDashboardView:
         data = response.context['data']
         assert set(data.keys()) == {'per_day', 'success', 'top'}
 
-    def test_per_user_isolation(self, auth_client, regular_user, admin_user, make_connection):
-        # job innego użytkownika nie może wpływać na agregaty regular_user
-        _make_job(admin_user, make_connection(admin_user, name='AdminConn'))
-        response = auth_client.get(reverse('dashboard:index'))
-        assert response.context['data']['success']['total'] == 0
-
     def test_json_script_present(self, auth_client, regular_user, make_connection):
         _make_job(regular_user, make_connection(regular_user))
         response = auth_client.get(reverse('dashboard:index'))
@@ -47,3 +41,20 @@ class TestDashboardView:
         start = html.index('id="dashboard-data"')
         snippet = html[start:start + 2000]
         assert '"per_day"' in snippet and '"success"' in snippet
+
+
+@pytest.mark.django_db
+class TestOrgWideStats:
+    def test_dashboard_includes_jobs_from_other_users(self, auth_client, django_user_model, make_connection):
+        other = django_user_model.objects.create_user(username='dother1', password='p', role='admin')
+        conn = make_connection(other)
+        TransferJob.objects.create(
+            owner=other, connection=conn, source_path='/a', destination_path='/b', status=STATUS_DONE,
+        )
+        resp = auth_client.get(reverse('dashboard:index'))
+        assert resp.status_code == 200
+        assert resp.context['data']['success']['total'] >= 1
+
+    def test_readonly_can_view_dashboard(self, readonly_client):
+        resp = readonly_client.get(reverse('dashboard:index'))
+        assert resp.status_code == 200

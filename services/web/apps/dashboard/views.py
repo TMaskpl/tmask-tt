@@ -11,7 +11,7 @@ from . import stats
 @login_required
 def dashboard(request):
     since = timezone.now() - timedelta(days=30)
-    jobs = TransferJob.objects.filter(owner=request.user, created_at__gte=since)
+    jobs = TransferJob.objects.filter(created_at__gte=since)
     data = {
         "per_day": stats.transfers_per_day(jobs),
         "success": stats.success_rate(jobs),
