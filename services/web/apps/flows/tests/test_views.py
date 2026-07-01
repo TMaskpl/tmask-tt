@@ -83,3 +83,48 @@ class TestFlowDeleteView:
         flow = make_flow(admin_user)
         response = auth_client.post(reverse('flows:delete', args=[flow.pk]))
         assert response.status_code == 404
+
+
+@pytest.mark.django_db
+class TestOrgWideVisibility:
+    def test_operator_sees_flow_created_by_another_user(self, auth_client, django_user_model, make_flow):
+        other = django_user_model.objects.create_user(username='fother1', password='p', role='admin')
+        make_flow(other, name='SharedFlow')
+        resp = auth_client.get('/flows/')
+        assert b'SharedFlow' in resp.content
+
+    def test_operator_can_run_flow_created_by_another_user(self, auth_client, django_user_model, make_flow, monkeypatch):
+        from celery import current_app
+        other = django_user_model.objects.create_user(username='fother2', password='p', role='admin')
+        flow = make_flow(other)
+        monkeypatch.setattr(current_app, 'send_task', lambda *a, **kw: None)
+        resp = auth_client.post(f'/flows/{flow.pk}/run/')
+        assert resp.status_code == 302
+
+    def test_readonly_cannot_run_flow(self, readonly_client, django_user_model, make_flow):
+        other = django_user_model.objects.create_user(username='fother3', password='p', role='admin')
+        flow = make_flow(other)
+        resp = readonly_client.post(f'/flows/{flow.pk}/run/')
+        assert resp.status_code == 403
+
+    def test_operator_cannot_create_flow(self, auth_client):
+        resp = auth_client.get('/flows/new/')
+        assert resp.status_code == 403
+
+    def test_operator_cannot_delete_flow(self, auth_client, django_user_model, make_flow):
+        other = django_user_model.objects.create_user(username='fother4', password='p', role='admin')
+        flow = make_flow(other)
+        resp = auth_client.post(f'/flows/{flow.pk}/delete/')
+        assert resp.status_code == 403
+
+
+@pytest.mark.django_db
+class TestFlowFormOrgWideConnections:
+    def test_flow_form_offers_connections_from_other_users(self, django_user_model, make_connection):
+        from apps.flows.forms import FlowForm
+        owner = django_user_model.objects.create_user(username='connowner', password='p')
+        conn = make_connection(owner, name='OtherUsersConn')
+        requester = django_user_model.objects.create_user(username='requester', password='p', role='admin')
+        form = FlowForm(user=requester)
+        assert conn in form.fields['source_conn'].queryset
+        assert conn in form.fields['dest_conn'].queryset

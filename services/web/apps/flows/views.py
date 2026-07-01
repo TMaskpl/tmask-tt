@@ -1,8 +1,9 @@
-from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.http import require_POST
 
+from apps.accounts.permissions import require_role
+from apps.accounts.models import ROLE_ADMIN, ROLE_OPERATOR, ROLE_READONLY
 from apps.transfers.models import TransferJob
 from celery import current_app
 from .forms import FlowForm
@@ -11,13 +12,13 @@ from .models import Flow
 _FLOWS_LIST = 'flows:list'
 
 
-@login_required
+@require_role(ROLE_READONLY)
 def flow_list(request):
-    flows = Flow.objects.filter(owner=request.user).select_related('source_conn', 'dest_conn')
+    flows = Flow.objects.all().select_related('source_conn', 'dest_conn')
     return render(request, 'flows/list.html', {'flows': flows})
 
 
-@login_required
+@require_role(ROLE_ADMIN)
 def flow_create(request):
     form = FlowForm(request.POST or None, user=request.user)
     if request.method == 'POST' and form.is_valid():
@@ -28,9 +29,9 @@ def flow_create(request):
     return render(request, 'flows/form.html', {'form': form, 'action': 'CREATE'})
 
 
-@login_required
+@require_role(ROLE_ADMIN)
 def flow_edit(request, pk):
-    flow = get_object_or_404(Flow, pk=pk, owner=request.user)
+    flow = get_object_or_404(Flow, pk=pk)
     form = FlowForm(request.POST or None, instance=flow, user=request.user)
     if request.method == 'POST' and form.is_valid():
         form.save()
@@ -38,18 +39,18 @@ def flow_edit(request, pk):
     return render(request, 'flows/form.html', {'form': form, 'action': 'EDIT', 'flow': flow})
 
 
-@login_required
+@require_role(ROLE_ADMIN)
 @require_POST
 def flow_delete(request, pk):
-    flow = get_object_or_404(Flow, pk=pk, owner=request.user)
+    flow = get_object_or_404(Flow, pk=pk)
     flow.delete()
     return redirect(_FLOWS_LIST)
 
 
-@login_required
+@require_role(ROLE_OPERATOR)
 @require_POST
 def flow_run(request, pk):
-    flow = get_object_or_404(Flow, pk=pk, owner=request.user)
+    flow = get_object_or_404(Flow, pk=pk)
     with transaction.atomic():
         job = TransferJob.objects.create(
             owner=request.user,

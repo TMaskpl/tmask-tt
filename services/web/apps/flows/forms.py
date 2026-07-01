@@ -12,7 +12,7 @@ class FlowForm(forms.ModelForm):
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
         if user:
-            qs = Connection.objects.filter(owner=user)
+            qs = Connection.objects.all()
             self.fields['source_conn'].queryset = qs
             self.fields['dest_conn'].queryset = qs
 
