@@ -1,5 +1,3 @@
-import os
-
 from celery import current_app
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
@@ -14,7 +12,7 @@ def transfer_create(request):
     form = TransferForm(request.POST or None, request.FILES or None, user=request.user)
     if request.method == 'POST' and form.is_valid():
         uploaded = form.cleaned_data['upload']
-        dest = os.path.join(settings.TRANSFERS_DIR, uploaded.name)
+        dest = form.cleaned_data['source_path']
         try:
             with open(dest, 'wb') as fh:
                 for chunk in uploaded.chunks():

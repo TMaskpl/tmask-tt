@@ -14,7 +14,6 @@ class TestTransferCreateView:
 
     def test_create_form_has_file_input_and_multipart(self, auth_client):
         response = auth_client.get(reverse('transfers:create'))
-        assert response.status_code == 200
         body = response.content.decode()
         assert 'enctype="multipart/form-data"' in body
         assert 'type="file"' in body

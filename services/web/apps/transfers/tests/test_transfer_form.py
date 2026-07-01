@@ -92,7 +92,7 @@ class TestValidateSourceFilename:
 class TestTransferCreateWithGPG:
     """GPG passphrase is wired through the form to Celery dispatch."""
 
-    def _post(self, auth_client, conn, passphrase, tmp_path):
+    def _post(self, auth_client, conn, passphrase):
         return auth_client.post(reverse('transfers:create'), {
             'connection': conn.pk,
             'destination_path': '/backup/',
@@ -105,7 +105,7 @@ class TestTransferCreateWithGPG:
         mock_delay = mocker.patch('apps.transfers.views.current_app.send_task')
         conn = make_connection(regular_user)
         with django_capture_on_commit_callbacks(execute=True):
-            self._post(auth_client, conn, 'mypassword123', tmp_path)
+            self._post(auth_client, conn, 'mypassword123')
         job = TransferJob.objects.get(owner=regular_user)
         mock_delay.assert_called_once_with('transfers.execute', kwargs={'job_id': job.pk, 'gpg_passphrase': 'mypassword123'})
 
@@ -114,7 +114,7 @@ class TestTransferCreateWithGPG:
         mock_delay = mocker.patch('apps.transfers.views.current_app.send_task')
         conn = make_connection(regular_user)
         with django_capture_on_commit_callbacks(execute=True):
-            self._post(auth_client, conn, '', tmp_path)
+            self._post(auth_client, conn, '')
         job = TransferJob.objects.get(owner=regular_user)
         mock_delay.assert_called_once_with('transfers.execute', kwargs={'job_id': job.pk, 'gpg_passphrase': None})
 
@@ -123,7 +123,7 @@ class TestTransferCreateWithGPG:
         mock_delay = mocker.patch('apps.transfers.views.current_app.send_task')
         conn = make_connection(regular_user)
         with django_capture_on_commit_callbacks(execute=True):
-            self._post(auth_client, conn, '   ', tmp_path)
+            self._post(auth_client, conn, '   ')
         job = TransferJob.objects.get(owner=regular_user)
         mock_delay.assert_called_once_with('transfers.execute', kwargs={'job_id': job.pk, 'gpg_passphrase': None})
 
