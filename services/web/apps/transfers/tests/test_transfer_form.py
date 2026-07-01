@@ -1,21 +1,10 @@
 import pytest
-from unittest.mock import MagicMock
 from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from apps.transfers.forms import TransferForm, _validate_source_filename
 from apps.transfers.models import TransferJob
 from django.core.exceptions import ValidationError
-
-
-def _mock_upload(name, size=4):
-    """Create a mock UploadedFile with an arbitrary .name bypassing Django's
-    validate_file_name normalisation (which strips slashes / rejects '..' in
-    Django 5.x before our code ever runs)."""
-    f = MagicMock()
-    f.name = name
-    f.size = size
-    return f
 
 
 @pytest.mark.django_db
@@ -30,13 +19,6 @@ class TestTransferFormUpload:
         return TransferForm(
             {'connection': conn.pk, 'destination_path': '/dst/'},
             {'upload': upload},
-            user=user,
-        )
-
-    def _form_mock(self, mock_upload, user, conn):
-        return TransferForm(
-            {'connection': conn.pk, 'destination_path': '/dst/'},
-            {'upload': mock_upload},
             user=user,
         )
 
@@ -55,22 +37,6 @@ class TestTransferFormUpload:
         form = self._form('exact.tar', regular_user, make_connection(regular_user),
                           size=settings.MAX_UPLOAD_BYTES)
         assert form.is_valid(), form.errors
-
-    def test_rejects_filename_with_slash(self, regular_user, make_connection):
-        # Django 5.x normalises SimpleUploadedFile names (strips path), so we
-        # use a mock to inject the raw name and exercise _validate_source_filename.
-        upload = _mock_upload('sub/evil.tar')
-        form = self._form_mock(upload, regular_user, make_connection(regular_user))
-        assert not form.is_valid()
-        assert 'upload' in form.errors
-
-    def test_rejects_filename_with_traversal(self, regular_user, make_connection):
-        # Django 5.x raises SuspiciousFileOperation for '..' before our code
-        # runs, so use a mock to test _validate_source_filename directly.
-        upload = _mock_upload('..')
-        form = self._form_mock(upload, regular_user, make_connection(regular_user))
-        assert not form.is_valid()
-        assert 'upload' in form.errors
 
     def test_missing_upload_rejected(self, regular_user, make_connection):
         form = TransferForm(
@@ -108,6 +74,18 @@ class TestValidateSourceFilename:
     def test_rejects_control_characters(self):
         with pytest.raises(ValidationError):
             _validate_source_filename('file\x1fname')
+
+    def test_rejects_empty_name(self):
+        with pytest.raises(ValidationError):
+            _validate_source_filename('')
+
+    def test_rejects_single_dot(self):
+        with pytest.raises(ValidationError):
+            _validate_source_filename('.')
+
+    def test_rejects_double_dot(self):
+        with pytest.raises(ValidationError):
+            _validate_source_filename('..')
 
 
 @pytest.mark.django_db
