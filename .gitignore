@@ -19,3 +19,4 @@ Trivy/*json
 backup-pg16/*
 transfers/*
 graphify-out/
+.worktrees/
