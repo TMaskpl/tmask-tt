@@ -1,69 +1,89 @@
 import pytest
+from unittest.mock import MagicMock
+from django.conf import settings
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
-from apps.transfers.forms import TransferForm, _validate_source_filename, TRANSFERS_MOUNT
+from apps.transfers.forms import TransferForm, _validate_source_filename
 from apps.transfers.models import TransferJob
 from django.core.exceptions import ValidationError
 
 
+def _mock_upload(name, size=4):
+    """Create a mock UploadedFile with an arbitrary .name bypassing Django's
+    validate_file_name normalisation (which strips slashes / rejects '..' in
+    Django 5.x before our code ever runs)."""
+    f = MagicMock()
+    f.name = name
+    f.size = size
+    return f
+
+
 @pytest.mark.django_db
-class TestTransferFormSourcePath:
-    """Regression tests for filename-only source_path field.
+class TestTransferFormUpload:
+    """The form accepts an uploaded file and derives source_path as
+    /transfers/<filename> so the worker can resolve the volume-mounted path."""
 
-    The form accepts only a bare filename (e.g. 'file.tar') and auto-prepends
-    /transfers/ so the worker container can resolve the volume-mounted path.
-    """
-
-    def _form(self, source_path, user, conn):
+    def _form(self, filename, user, conn, content=b'data', size=None):
+        upload = SimpleUploadedFile(filename, content)
+        if size is not None:
+            upload.size = size
         return TransferForm(
-            {'source_path': source_path, 'connection': conn.pk, 'destination_path': '/dst/'},
+            {'connection': conn.pk, 'destination_path': '/dst/'},
+            {'upload': upload},
             user=user,
         )
 
-    def test_filename_prepends_transfers_mount(self, regular_user, make_connection):
-        form = self._form('dn-gpg.txt', regular_user, make_connection(regular_user))
+    def _form_mock(self, mock_upload, user, conn):
+        return TransferForm(
+            {'connection': conn.pk, 'destination_path': '/dst/'},
+            {'upload': mock_upload},
+            user=user,
+        )
+
+    def test_valid_upload_derives_source_path(self, regular_user, make_connection):
+        form = self._form('backup.tar', regular_user, make_connection(regular_user))
         assert form.is_valid(), form.errors
-        assert form.cleaned_data['source_path'] == f'{TRANSFERS_MOUNT}/dn-gpg.txt'
+        assert form.cleaned_data['source_path'] == f'{settings.TRANSFERS_DIR}/backup.tar'
 
-    def test_filename_with_whitespace_stripped(self, regular_user, make_connection):
-        form = self._form('  file.tar  ', regular_user, make_connection(regular_user))
+    def test_upload_over_limit_rejected(self, regular_user, make_connection):
+        form = self._form('big.tar', regular_user, make_connection(regular_user),
+                          size=settings.MAX_UPLOAD_BYTES + 1)
+        assert not form.is_valid()
+        assert 'upload' in form.errors
+
+    def test_upload_at_limit_accepted(self, regular_user, make_connection):
+        form = self._form('exact.tar', regular_user, make_connection(regular_user),
+                          size=settings.MAX_UPLOAD_BYTES)
         assert form.is_valid(), form.errors
-        assert form.cleaned_data['source_path'] == f'{TRANSFERS_MOUNT}/file.tar'
 
-    def test_existing_transfers_prefix_not_doubled(self, regular_user, make_connection):
-        """User may paste /transfers/file.tar — should not become /transfers//transfers/file.tar."""
-        form = self._form('/transfers/file.tar', regular_user, make_connection(regular_user))
-        assert form.is_valid(), form.errors
-        assert form.cleaned_data['source_path'] == f'{TRANSFERS_MOUNT}/file.tar'
-
-    def test_rejects_path_with_forward_slash(self, regular_user, make_connection):
-        form = self._form('/data/file.tar', regular_user, make_connection(regular_user))
+    def test_rejects_filename_with_slash(self, regular_user, make_connection):
+        # Django 5.x normalises SimpleUploadedFile names (strips path), so we
+        # use a mock to inject the raw name and exercise _validate_source_filename.
+        upload = _mock_upload('sub/evil.tar')
+        form = self._form_mock(upload, regular_user, make_connection(regular_user))
         assert not form.is_valid()
-        assert 'source_path' in form.errors
+        assert 'upload' in form.errors
 
-    def test_rejects_path_with_backslash(self, regular_user, make_connection):
-        form = self._form('data\\file.tar', regular_user, make_connection(regular_user))
+    def test_rejects_filename_with_traversal(self, regular_user, make_connection):
+        # Django 5.x raises SuspiciousFileOperation for '..' before our code
+        # runs, so use a mock to test _validate_source_filename directly.
+        upload = _mock_upload('..')
+        form = self._form_mock(upload, regular_user, make_connection(regular_user))
         assert not form.is_valid()
-        assert 'source_path' in form.errors
+        assert 'upload' in form.errors
 
-    def test_rejects_leading_dash(self, regular_user, make_connection):
-        form = self._form('-rf file.tar', regular_user, make_connection(regular_user))
+    def test_missing_upload_rejected(self, regular_user, make_connection):
+        form = TransferForm(
+            {'connection': make_connection(regular_user).pk, 'destination_path': '/dst/'},
+            {},
+            user=regular_user,
+        )
         assert not form.is_valid()
-        assert 'source_path' in form.errors
+        assert 'upload' in form.errors
 
-    def test_rejects_control_characters(self, regular_user, make_connection):
-        form = self._form('file\x00.tar', regular_user, make_connection(regular_user))
-        assert not form.is_valid()
-        assert 'source_path' in form.errors
-
-    def test_widget_has_placeholder(self, regular_user, make_connection):
-        _ = make_connection(regular_user)
+    def test_upload_label_mentions_local(self, regular_user):
         form = TransferForm(user=regular_user)
-        widget_attrs = form.fields['source_path'].widget.attrs
-        assert 'placeholder' in widget_attrs
-
-    def test_source_path_label_is_local_transfers(self, regular_user):
-        form = TransferForm(user=regular_user)
-        assert 'transfers' in form.fields['source_path'].label.lower()
+        assert 'local' in form.fields['upload'].label.lower()
 
 
 class TestValidateSourceFilename:
@@ -143,5 +163,5 @@ class TestTransferCreateWithGPG:
                 'destination_path': '/remote/archive.tar.gz',
             })
         job = TransferJob.objects.get(owner=regular_user)
-        assert job.source_path == f'{TRANSFERS_MOUNT}/archive.tar.gz'
+        assert job.source_path == f'/transfers/archive.tar.gz'
         mock_delay.assert_called_once()
