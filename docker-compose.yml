@@ -33,6 +33,7 @@ services:
       - TZ=Europe/Warsaw
     volumes:
       - static_files:/app/staticfiles
+      - ./transfers:/transfers
     depends_on:
       postgres:
         condition: service_healthy

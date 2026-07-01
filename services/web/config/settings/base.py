@@ -116,3 +116,7 @@ EMAIL_USE_TLS       = config('EMAIL_USE_TLS', default=False, cast=bool)
 EMAIL_USE_SSL       = config('EMAIL_USE_SSL', default=False, cast=bool)
 DEFAULT_FROM_EMAIL  = config('DEFAULT_FROM_EMAIL', default='noreply@localhost')
 TELEGRAM_BOT_TOKEN  = config('TELEGRAM_BOT_TOKEN', default='')
+
+# Transfer file uploads — shared volume read by the worker container.
+TRANSFERS_DIR = '/transfers'
+MAX_UPLOAD_BYTES = 100 * 1024 * 1024  # 100 MB, matches nginx client_max_body_size
