@@ -1,0 +1,6 @@
+-r requirements-prod.txt
+pytest==8.*
+pytest-django==4.8.*
+pytest-mock==3.*
+pytest-cov==5.*
+factory-boy==3.*

@@ -26,7 +26,9 @@ services:
       retries: 5
 
   web:
-    build: ./services/web
+    build:
+      context: ./services/web
+      target: production
     env_file: .env
     environment:
       - DJANGO_SETTINGS_MODULE=config.settings.production
@@ -48,6 +50,28 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
+
+  # dev/test image (adds pytest etc. on top of production deps) — used only
+  # via `docker compose run --rm web-test ...`, never started by `up`.
+  web-test:
+    build:
+      context: ./services/web
+      target: dev
+    env_file: .env
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings.production
+      - TZ=Europe/Warsaw
+    volumes:
+      - ./transfers:/transfers
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - internal
+    profiles:
+      - test
 
   worker:
     build:
@@ -75,7 +99,9 @@ services:
       start_period: 20s
 
   beat:
-    build: ./services/web
+    build:
+      context: ./services/web
+      target: production
     env_file: .env
     environment:
       - DJANGO_SETTINGS_MODULE=config.settings.production
