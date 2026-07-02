@@ -5,6 +5,7 @@ from io import BytesIO
 import pyotp
 import qrcode
 from django.contrib.auth.hashers import check_password, make_password
+from django.db import transaction
 from django.utils import timezone
 
 RECOVERY_CODE_COUNT = 10
@@ -55,9 +56,13 @@ def check_recovery_code(user, raw_code: str):
     from .models import TOTPRecoveryCode
 
     normalized = normalize_recovery_code(raw_code)
-    for recovery_code in TOTPRecoveryCode.objects.filter(user=user, used_at__isnull=True):
-        if check_password(normalized, recovery_code.code_hash):
-            recovery_code.used_at = timezone.now()
-            recovery_code.save(update_fields=['used_at'])
-            return recovery_code
+    with transaction.atomic():
+        unused_codes = TOTPRecoveryCode.objects.select_for_update().filter(
+            user=user, used_at__isnull=True
+        )
+        for recovery_code in unused_codes:
+            if check_password(normalized, recovery_code.code_hash):
+                recovery_code.used_at = timezone.now()
+                recovery_code.save(update_fields=['used_at'])
+                return recovery_code
     return None

@@ -2,6 +2,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import login, logout, authenticate, get_user_model
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
 from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -67,19 +68,22 @@ def users_list(request):
 @require_POST
 def change_user_role(request, pk):
     User = get_user_model()
-    target = get_object_or_404(User, pk=pk)
     new_role = request.POST.get('role', '')
     valid_roles = dict(ROLE_CHOICES)
     if new_role not in valid_roles:
         messages.error(request, 'Nieprawidłowa rola.')
         return redirect(USERS_LIST)
-    if target.role == ROLE_ADMIN and new_role != ROLE_ADMIN:
-        remaining_admins = User.objects.filter(role=ROLE_ADMIN).exclude(pk=target.pk).count()
-        if remaining_admins == 0:
-            messages.error(request, 'Nie można odebrać roli Admin ostatniemu administratorowi.')
-            return redirect(USERS_LIST)
-    target.role = new_role
-    target.save(update_fields=['role'])
+    with transaction.atomic():
+        target = get_object_or_404(User.objects.select_for_update(), pk=pk)
+        if target.role == ROLE_ADMIN and new_role != ROLE_ADMIN:
+            remaining_admins = User.objects.select_for_update().filter(
+                role=ROLE_ADMIN
+            ).exclude(pk=target.pk).count()
+            if remaining_admins == 0:
+                messages.error(request, 'Nie można odebrać roli Admin ostatniemu administratorowi.')
+                return redirect(USERS_LIST)
+        target.role = new_role
+        target.save(update_fields=['role'])
     messages.success(request, f'Rola {target.username} zmieniona na {valid_roles[new_role]}.')
     return redirect(USERS_LIST)
 
