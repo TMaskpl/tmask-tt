@@ -20,3 +20,4 @@ backup-pg16/*
 transfers/*
 graphify-out/
 .worktrees/
+nginx/certs/

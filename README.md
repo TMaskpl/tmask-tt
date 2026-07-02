@@ -18,13 +18,18 @@ cp .env.example .env
 # Wygeneruj klucze:
 python3 -c "import secrets; print(secrets.token_urlsafe(50))"   # SECRET_KEY
 python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"  # FIELD_ENCRYPTION_KEY
-# Uzupełnij .env, następnie:
+# Uzupełnij .env, następnie wygeneruj certyfikat TLS (jednorazowo, self-signed, 10 lat):
+mkdir -p nginx/certs
+openssl req -x509 -nodes -newkey rsa:2048 \
+  -keyout nginx/certs/selfsigned.key -out nginx/certs/selfsigned.crt \
+  -days 3650 -subj "/CN=tmask-transporter.local" \
+  -addext "subjectAltName=DNS:tmask-transporter.local,DNS:localhost,IP:127.0.0.1"
 docker compose up -d
 docker compose run --rm web python manage.py migrate
 docker compose run --rm web python manage.py createsuperuser
 ```
 
-Aplikacja dostępna pod: http://localhost
+Aplikacja dostępna pod: https://localhost lub https://tmask-transporter.local (dodaj wpis do `/etc/hosts`: `127.0.0.1 tmask-transporter.local` lub adres IP serwera w LAN). Certyfikat jest self-signed — przeglądarka pokaże ostrzeżenie o niezaufanym CA, zaakceptuj je ręcznie ("Zaawansowane → Kontynuuj"). HTTP (port 80) przekierowuje automatycznie na HTTPS.
 
 ## Architektura
 
