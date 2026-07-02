@@ -341,6 +341,13 @@ class TestUserCreate:
         resp = auth_client.get('/accounts/users/new/')
         assert resp.status_code == 403
 
+    def test_operator_cannot_create_user_via_post(self, auth_client, django_user_model):
+        resp = auth_client.post('/accounts/users/new/', {
+            'username': 'sneaky', 'password1': 'a-decent-password-1', 'password2': 'a-decent-password-1', 'role': 'admin',
+        })
+        assert resp.status_code == 403
+        assert not django_user_model.objects.filter(username='sneaky').exists()
+
     def test_readonly_cannot_create_user(self, readonly_client):
         resp = readonly_client.post('/accounts/users/new/', {
             'username': 'x', 'password1': 'a-decent-password-1', 'password2': 'a-decent-password-1', 'role': 'operator',

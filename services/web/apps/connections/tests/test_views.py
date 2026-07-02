@@ -158,6 +158,16 @@ class TestConnectionEdit:
         response = admin_client.get(reverse('connections:edit', args=[conn.pk]))
         assert response.status_code == 200
 
+    def test_operator_cannot_edit_connection(self, auth_client, admin_user, make_connection):
+        conn = make_connection(admin_user)
+        response = auth_client.get(reverse('connections:edit', args=[conn.pk]))
+        assert response.status_code == 403
+
+    def test_readonly_cannot_edit_connection(self, readonly_client, admin_user, make_connection):
+        conn = make_connection(admin_user)
+        response = readonly_client.post(reverse('connections:edit', args=[conn.pk]), {'name': 'Hacked'})
+        assert response.status_code == 403
+
 
 @pytest.mark.django_db
 class TestConnectionTest:

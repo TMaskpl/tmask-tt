@@ -97,6 +97,16 @@ class TestScheduleEditView:
         response = admin_client.get(reverse('scheduler:edit', args=[sched.pk]))
         assert response.status_code == 200
 
+    def test_operator_cannot_edit_schedule(self, auth_client, admin_user, make_flow, make_schedule):
+        sched = make_schedule(admin_user, make_flow(admin_user))
+        response = auth_client.get(reverse('scheduler:edit', args=[sched.pk]))
+        assert response.status_code == 403
+
+    def test_readonly_cannot_edit_schedule(self, readonly_client, admin_user, make_flow, make_schedule):
+        sched = make_schedule(admin_user, make_flow(admin_user))
+        response = readonly_client.post(reverse('scheduler:edit', args=[sched.pk]), {'cron_expr': '0 0 * * *'})
+        assert response.status_code == 403
+
 
 @pytest.mark.django_db
 class TestScheduleToggleView:
