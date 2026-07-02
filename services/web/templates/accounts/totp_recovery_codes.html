@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}KODY ZAPASOWE — TMASK-TRANSPORTER{% endblock %}
+{% block content %}
+
+<div class="tokens-panel" style="max-width:480px; margin:2rem auto;">
+  <div class="tokens-title">KODY ZAPASOWE</div>
+
+  <p style="font-size:0.8rem; color:#aaffaa; margin-bottom:1rem;">
+    &gt; 2FA włączone. Zapisz te kody offline — każdy działa jednorazowo, gdy stracisz dostęp do aplikacji TOTP. Ta strona pokaże je tylko raz.
+  </p>
+
+  <div style="font-family:monospace; font-size:0.95rem; letter-spacing:2px; line-height:2; text-align:center; border:1px solid var(--border); padding:1rem; margin-bottom:1rem;">
+    {% for code in codes %}
+    <div>{{ code }}</div>
+    {% endfor %}
+  </div>
+
+  <div class="profile-save">
+    <a href="{% url 'accounts:profile' %}" class="btn">[ ZAPISAŁEM — WRÓĆ DO PROFILU ]</a>
+  </div>
+</div>
+
+{% endblock %}

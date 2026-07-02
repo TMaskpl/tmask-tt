@@ -8,7 +8,8 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 import requests
 
-from .forms import LoginForm, ProfileForm, UserCreateForm
+from . import totp
+from .forms import LoginForm, ProfileForm, UserCreateForm, TOTPCodeForm
 from .permissions import require_role
 from .models import ROLE_ADMIN, ROLE_CHOICES
 from utils.url_validator import block_private_url
@@ -161,3 +162,38 @@ def revoke_api_token(request, token_id):
     token.delete()
     messages.success(request, 'Token usunięty.')
     return redirect(PROFILE_URL)
+
+
+@login_required
+def totp_setup(request):
+    if request.user.totp_enabled:
+        messages.info(request, '2FA jest już włączone.')
+        return redirect(PROFILE_URL)
+
+    if request.method == 'POST':
+        form = TOTPCodeForm(request.POST)
+        secret = request.session.get('pending_totp_secret')
+        if secret and form.is_valid() and totp.verify_totp(secret, form.cleaned_data['code']):
+            request.user.totp_secret = secret
+            request.user.totp_enabled = True
+            request.user.save(update_fields=['totp_secret', 'totp_enabled'])
+            del request.session['pending_totp_secret']
+            request.session['new_recovery_codes'] = totp.generate_recovery_codes(request.user)
+            return redirect('accounts:2fa_recovery_codes')
+        form.add_error(None, 'Nieprawidłowy kod.')
+    else:
+        secret = totp.generate_secret()
+        request.session['pending_totp_secret'] = secret
+        form = TOTPCodeForm()
+
+    uri = totp.build_provisioning_uri(secret, request.user.username)
+    qr_data_uri = totp.build_qr_data_uri(uri)
+    return render(request, 'accounts/totp_setup.html', {'form': form, 'qr_data_uri': qr_data_uri, 'secret': secret})
+
+
+@login_required
+def totp_recovery_codes(request):
+    codes = request.session.pop('new_recovery_codes', None)
+    if not codes:
+        return redirect(PROFILE_URL)
+    return render(request, 'accounts/totp_recovery_codes.html', {'codes': codes})

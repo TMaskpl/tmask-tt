@@ -9,6 +9,10 @@ class LoginForm(forms.Form):
     password = forms.CharField(widget=forms.PasswordInput)
 
 
+class TOTPCodeForm(forms.Form):
+    code = forms.CharField(max_length=10, label='Kod')
+
+
 class ProfileForm(forms.ModelForm):
     class Meta:
         model  = get_user_model()
