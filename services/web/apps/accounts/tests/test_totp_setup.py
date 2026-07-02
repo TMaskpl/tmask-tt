@@ -65,6 +65,11 @@ class TestTotpSetupPost:
         auth_client.post(reverse('accounts:2fa_setup'), {'code': '000000'})
         assert auth_client.session['pending_totp_secret'] == secret_before
 
+    def test_post_without_pending_session_secret_does_not_crash(self, auth_client):
+        response = auth_client.post(reverse('accounts:2fa_setup'), {'code': '123456'})
+        assert response.status_code == 200
+        assert 'pending_totp_secret' in auth_client.session
+
 
 @pytest.mark.django_db
 class TestTotpRecoveryCodesView:

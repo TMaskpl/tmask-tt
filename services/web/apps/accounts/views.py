@@ -170,10 +170,11 @@ def totp_setup(request):
         messages.info(request, '2FA jest już włączone.')
         return redirect(PROFILE_URL)
 
-    if request.method == 'POST':
+    secret = request.session.get('pending_totp_secret')
+
+    if request.method == 'POST' and secret:
         form = TOTPCodeForm(request.POST)
-        secret = request.session.get('pending_totp_secret')
-        if secret and form.is_valid() and totp.verify_totp(secret, form.cleaned_data['code']):
+        if form.is_valid() and totp.verify_totp(secret, form.cleaned_data['code']):
             request.user.totp_secret = secret
             request.user.totp_enabled = True
             request.user.save(update_fields=['totp_secret', 'totp_enabled'])
@@ -182,8 +183,11 @@ def totp_setup(request):
             return redirect('accounts:2fa_recovery_codes')
         form.add_error(None, 'Nieprawidłowy kod.')
     else:
-        secret = totp.generate_secret()
-        request.session['pending_totp_secret'] = secret
+        if not secret:
+            secret = totp.generate_secret()
+            request.session['pending_totp_secret'] = secret
+            if request.method == 'POST':
+                messages.error(request, 'Sesja wygasła — zeskanuj kod QR ponownie.')
         form = TOTPCodeForm()
 
     uri = totp.build_provisioning_uri(secret, request.user.username)
