@@ -12,6 +12,8 @@ cryptography>=46.0.5
 bcrypt==4.*
 requests==2.*
 django-htmx==1.19.*
+pyotp==2.*
+qrcode[pil]==8.*
 # Dev/test
 pytest==8.*
 pytest-django==4.8.*

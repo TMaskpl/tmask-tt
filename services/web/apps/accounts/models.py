@@ -1,5 +1,6 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+from encrypted_model_fields.fields import EncryptedCharField
 
 ROLE_ADMIN    = 'admin'
 ROLE_OPERATOR = 'operator'
@@ -18,6 +19,8 @@ class User(AbstractUser):
     telegram_chat_id   = models.CharField(max_length=50, blank=True, default='')
     telegram_on_done   = models.BooleanField(default=False)
     telegram_on_failed = models.BooleanField(default=True)
+    totp_secret  = EncryptedCharField(max_length=64, blank=True, default='')
+    totp_enabled = models.BooleanField(default=False)
 
     @property
     def role_level(self) -> int:
@@ -34,3 +37,14 @@ class User(AbstractUser):
     class Meta:
         verbose_name = 'Użytkownik'
         verbose_name_plural = 'Użytkownicy'
+
+
+class TOTPRecoveryCode(models.Model):
+    user       = models.ForeignKey(User, on_delete=models.CASCADE, related_name='recovery_codes')
+    code_hash  = models.CharField(max_length=128)
+    used_at    = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Kod zapasowy TOTP'
+        verbose_name_plural = 'Kody zapasowe TOTP'
