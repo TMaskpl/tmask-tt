@@ -290,18 +290,18 @@ class TestChangeUserRole:
         assert resp.status_code == 403
 
     def test_admin_cannot_demote_last_admin(self, admin_client, admin_user):
-        resp = admin_client.post(f'/accounts/users/{admin_user.pk}/role/', {'role': 'operator'})
+        admin_client.post(f'/accounts/users/{admin_user.pk}/role/', {'role': 'operator'})
         admin_user.refresh_from_db()
         assert admin_user.role == 'admin'
 
     def test_admin_can_demote_self_if_another_admin_exists(self, admin_client, admin_user, django_user_model):
         django_user_model.objects.create_user(username='second_admin', password='p', role='admin')
-        resp = admin_client.post(f'/accounts/users/{admin_user.pk}/role/', {'role': 'operator'})
+        admin_client.post(f'/accounts/users/{admin_user.pk}/role/', {'role': 'operator'})
         admin_user.refresh_from_db()
         assert admin_user.role == 'operator'
 
     def test_invalid_role_value_rejected(self, admin_client, regular_user):
-        resp = admin_client.post(f'/accounts/users/{regular_user.pk}/role/', {'role': 'superuser'})
+        admin_client.post(f'/accounts/users/{regular_user.pk}/role/', {'role': 'superuser'})
         regular_user.refresh_from_db()
         assert regular_user.role == 'operator'
 

@@ -261,7 +261,7 @@ class TestConnectionDelete:
 class TestOrgWideVisibility:
     def test_operator_sees_connection_created_by_another_user(self, auth_client, django_user_model, make_connection):
         other = django_user_model.objects.create_user(username='other1', password='p', role='admin')
-        conn = make_connection(other, name='SharedConn')
+        make_connection(other, name='SharedConn')
         resp = auth_client.get('/connections/')
         assert b'SharedConn' in resp.content
 

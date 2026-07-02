@@ -1,5 +1,4 @@
 from celery import current_app
-from django.conf import settings
 from django.contrib import messages
 from django.db import transaction
 from django.shortcuts import render, redirect, get_object_or_404

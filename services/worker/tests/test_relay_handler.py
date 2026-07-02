@@ -129,7 +129,6 @@ class TestRelayHandler:
 
     def test_verify_called_when_enabled(self, relay_params):
         relay_params[0]['verify_checksum'] = True
-        sha = "a" * 64
         with patch('modules.relay.handler.paramiko.SSHClient') as MockSSH, \
              patch('modules.relay.handler.verify_relay') as mock_verify:
             mock_src_client, mock_dst_client, mock_src_sftp, mock_dst_sftp = _setup_two_clients(MockSSH)

@@ -2,7 +2,7 @@ import pytest
 from django.http import HttpResponse
 from django.urls import path
 from apps.accounts.permissions import require_role
-from apps.accounts.models import ROLE_ADMIN, ROLE_OPERATOR, ROLE_READONLY
+from apps.accounts.models import ROLE_ADMIN
 
 
 @require_role(ROLE_ADMIN)
