@@ -349,6 +349,31 @@
     </form>
   </div>
 
+  {# ── 2FA ─────────────────────────────────────── #}
+  <div class="tokens-panel" style="margin-bottom:1.5rem;">
+    <div class="tokens-title">2FA — WERYFIKACJA DWUSKŁADNIKOWA</div>
+    {% if user.totp_enabled %}
+    <div class="cf-status" style="border-top:none; padding-top:0;">
+      <span class="status-dot active" style="margin-right:0.4rem;"></span>
+      <span class="active-val">WŁĄCZONE</span>
+    </div>
+    <form method="post" action="{% url 'accounts:2fa_disable' %}" style="margin-top:0.85rem;">
+      {% csrf_token %}
+      <div class="cf-row">
+        <span class="cf-label">HASŁO (POTWIERDŹ WYŁĄCZENIE)</span>
+        <div class="cf-input-row">{{ totp_disable_form.password }}</div>
+      </div>
+      <button type="submit" class="btn btn-danger" style="margin-top:0.5rem;">[ WYŁĄCZ 2FA ]</button>
+    </form>
+    {% else %}
+    <div class="cf-status" style="border-top:none; padding-top:0;">
+      <span class="status-dot inactive" style="margin-right:0.4rem;"></span>
+      <span>WYŁĄCZONE</span>
+    </div>
+    <a href="{% url 'accounts:2fa_setup' %}" class="btn" style="margin-top:0.85rem; display:inline-block;">[ WŁĄCZ 2FA ]</a>
+    {% endif %}
+  </div>
+
   {# ── Prawa kolumna: API Tokens ─────────────────── #}
   <div class="tokens-panel">
     <div class="tokens-title">API TOKENS</div>

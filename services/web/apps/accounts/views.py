@@ -9,7 +9,7 @@ from django.views.decorators.http import require_POST
 import requests
 
 from . import totp
-from .forms import LoginForm, ProfileForm, UserCreateForm, TOTPCodeForm
+from .forms import LoginForm, ProfileForm, UserCreateForm, TOTPCodeForm, TOTPDisableForm
 from .permissions import require_role
 from .models import ROLE_ADMIN, ROLE_CHOICES
 from utils.url_validator import block_private_url
@@ -111,6 +111,7 @@ def profile_view(request):
         'form': form,
         'api_tokens': api_tokens,
         'new_token': new_token,
+        'totp_disable_form': TOTPDisableForm(),
     })
 
 
@@ -250,3 +251,18 @@ def totp_verify(request):
         form.add_error(None, 'Nieprawidłowy kod.')
 
     return render(request, 'accounts/totp_verify.html', {'form': form})
+
+
+@login_required
+@require_POST
+def totp_disable(request):
+    form = TOTPDisableForm(request.POST)
+    if form.is_valid() and request.user.check_password(form.cleaned_data['password']):
+        request.user.totp_secret = ''
+        request.user.totp_enabled = False
+        request.user.save(update_fields=['totp_secret', 'totp_enabled'])
+        request.user.recovery_codes.all().delete()
+        messages.success(request, '2FA wyłączone.')
+    else:
+        messages.error(request, 'Nieprawidłowe hasło — 2FA pozostaje włączone.')
+    return redirect(PROFILE_URL)
