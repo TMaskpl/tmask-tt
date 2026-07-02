@@ -48,6 +48,38 @@ class TestFlowCreateView:
 
 
 @pytest.mark.django_db
+class TestFlowEditView:
+    def test_admin_can_edit_flow_created_by_another_user(self, admin_client, regular_user, make_flow):
+        flow = make_flow(regular_user, name='OldName')
+        response = admin_client.get(reverse('flows:edit', args=[flow.pk]))
+        assert response.status_code == 200
+        assert b'OldName' in response.content
+
+    def test_admin_edit_saves_changes(self, admin_client, regular_user, make_flow):
+        flow = make_flow(regular_user, name='OldName')
+        response = admin_client.post(reverse('flows:edit', args=[flow.pk]), {
+            'name': 'NewName',
+            'source_conn': flow.source_conn_id,
+            'source_path': flow.source_path,
+            'dest_conn': flow.dest_conn_id,
+            'dest_path': flow.dest_path,
+        })
+        assert response.status_code == 302
+        flow.refresh_from_db()
+        assert flow.name == 'NewName'
+
+    def test_operator_cannot_edit_flow(self, auth_client, admin_user, make_flow):
+        flow = make_flow(admin_user)
+        response = auth_client.get(reverse('flows:edit', args=[flow.pk]))
+        assert response.status_code == 403
+
+    def test_readonly_cannot_edit_flow(self, readonly_client, admin_user, make_flow):
+        flow = make_flow(admin_user)
+        response = readonly_client.post(reverse('flows:edit', args=[flow.pk]), {'name': 'Hacked'})
+        assert response.status_code == 403
+
+
+@pytest.mark.django_db
 class TestFlowRunView:
     def test_run_creates_transfer_job(self, auth_client, regular_user, make_flow, mocker, django_capture_on_commit_callbacks):
         mock_delay = mocker.patch(

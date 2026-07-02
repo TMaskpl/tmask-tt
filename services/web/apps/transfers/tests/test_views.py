@@ -255,18 +255,22 @@ class TestTransferStop:
         resp = readonly_client.post(f'/transfers/{job.pk}/stop/')
         assert resp.status_code == 403
 
-    def test_stop_on_finished_job_is_noop(self, auth_client, django_user_model, make_connection):
+    def test_stop_on_finished_job_is_noop(self, auth_client, django_user_model, make_connection, monkeypatch):
+        from celery import current_app
         from apps.transfers.models import TransferJob, STATUS_DONE
         other = django_user_model.objects.create_user(username='sother3', password='p', role='admin')
         conn = make_connection(other)
         job = TransferJob.objects.create(
             owner=other, connection=conn, source_path='/a', destination_path='/b',
-            status=STATUS_DONE,
+            status=STATUS_DONE, celery_task_id='should-not-be-revoked',
         )
+        calls = []
+        monkeypatch.setattr(current_app.control, 'revoke', lambda *a, **kw: calls.append((a, kw)))
         resp = auth_client.post(f'/transfers/{job.pk}/stop/')
         assert resp.status_code == 302
         job.refresh_from_db()
         assert job.status == STATUS_DONE
+        assert calls == []
 
 
 class TestValidateTransferPath:
