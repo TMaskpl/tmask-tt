@@ -8,76 +8,144 @@
 
 **Tech Stack:** GitHub Actions (self-hosted runner), Docker Compose v2, bash, curl, Python 3 + PyYAML (lokalna walidacja składni workflow).
 
+## Kontekst zweryfikowany na żywym serwerze (2026-07-03)
+
+- Serwer: `192.168.50.224`, SSH `runner@192.168.50.224` port 22 (klucz już skopiowany).
+- Runner: usługa systemd `actions.runner.TMaskpl-tmask-tt.tmask-tt-deploy-onlo.service`, `WorkingDirectory=/opt/actions-runner`, działa jako user `runner`, status `active`.
+- User `runner` **jest już** w grupie `docker` (`groups` → `runner sudo users docker`) — Task z Task 1 sprzed tej korekty planu ("dodaj do grupy docker") jest zbędny.
+- **To jest świeży serwer — brak jakiegokolwiek istniejącego `docker-compose.yml`/`.env`/wdrożenia.** Pierwotny plan zakładał migrację istniejącej ręcznej produkcji na tę maszynę; w rzeczywistości to pierwszy deployment tmask-transporter na tym serwerze w ogóle. Task 1 poniżej został przepisany pod ten scenariusz (bootstrap od zera), zamiast "wyrównania katalogów".
+- Konkretna ścieżka checkout (deterministyczna z konwencji `actions/checkout` + nazwa folderu roboczego `_work`, potwierdzona przy rejestracji runnera): **`/opt/actions-runner/_work/tmask-tt/tmask-tt`**.
+
 ## Global Constraints
 
 - Oba joby (`test` i `deploy`) muszą działać na `runs-on: self-hosted` — GitHub-hosted runner nie ma dostępu do `.env` (gitignored, istnieje tylko na serwerze), a `web-test`/`worker` wymagają `env_file: .env` (spec decyzja #2).
-- **Krok `actions/checkout` w KAŻDYM jobie musi mieć `clean: false`.** Domyślne zachowanie `actions/checkout` (`clean: true`) uruchamia `git clean -ffdx` przed checkoutem — flaga `-x` usuwa też pliki `.gitignore`owane, czyli **skasowałaby `.env` i `nginx/certs/`** na każdym uruchomieniu workflow. To nie było w spec — odkryte przy pisaniu tego planu, krytyczne dla bezpieczeństwa produkcji.
+- **Krok `actions/checkout` w KAŻDYM jobie musi mieć `clean: false`.** Domyślne zachowanie `actions/checkout` (`clean: true`) uruchamia `git clean -ffdx` przed checkoutem — flaga `-x` usuwa też pliki `.gitignore`owane, czyli **skasowałaby `.env` i `nginx/certs/`** na każdym uruchomieniu workflow. To nie było w spec — odkryte przy pisaniu planu, krytyczne dla bezpieczeństwa produkcji.
 - Brak registry (GHCR) — obrazy budowane lokalnie na serwerze przez `docker compose build` (spec decyzja #1).
 - Trigger wyłącznie: `push` na `main` + `workflow_dispatch` — żadnych innych eventów (np. `pull_request`) nie dodawać, self-hosted runner na produkcyjnej maszynie nie powinien wykonywać kodu z niezmergowanych PR-ów.
 - `deploy` ma `needs: test` — nie usuwać, to jedyny mechanizm chroniący przed wdrożeniem czerwonego builda (spec decyzja #4).
 - Nie dodawać automatycznego rollbacku ani powiadomień (Slack/Discord) — poza zakresem spec.
-- Runner zarejestrowany jako `tmask-tt-deploy-onlo` dla repo `TMaskpl/tmask-tt`, uruchomiony jako usługa systemd (`sudo ./svc.sh install && start`) — już wykonane przez użytkownika przed tym planem, Task 1 tylko to weryfikuje i dostosowuje working directory.
+- `.env` produkcyjny generowany raz, ręcznie, w Task 1 — nigdy nie trafia do git (już objęty `.gitignore`), nigdy nie jest odtwarzany/nadpisywany przez workflow.
+- Certyfikat nginx (SAN: `tmask-transporter.local`, `localhost`, `127.0.0.1`) generowany dokładnie komendą z `docs/superpowers/specs/2026-07-02-https-design.md` — bez zmian w SAN względem tego, co już zaakceptowane w tamtym spec.
 
 ---
 
-### Task 1: Weryfikacja i wyrównanie working directory runnera z istniejącą produkcją (na serwerze)
+### Task 1: Bootstrap pierwszego wdrożenia na serwerze (`.env`, cert nginx, baza, superuser)
 
-**Files:** brak zmian w repo — praca wyłącznie na serwerze przez SSH.
+**Files:** brak zmian w repo — praca wyłącznie na serwerze przez SSH. Efekt: pliki `.env` i `nginx/certs/{selfsigned.crt,selfsigned.key}` na dysku serwera w `/opt/actions-runner/_work/tmask-tt/tmask-tt/` (oba gitignored, nigdy nie trafiają do repo).
 
 **Interfaces:**
-- Produces: potwierdzoną ścieżkę `<RUNNER_DIR>/_work/tmask-tt/tmask-tt` jako katalog, w którym `web`/`worker`/`beat`/`nginx` znajdą działający `.env` i `nginx/certs/` — Task 2 i Task 3 zakładają, że ta ścieżka istnieje i zawiera oba pliki/katalogi.
+- Produces: działający `.env` i `nginx/certs/` w `/opt/actions-runner/_work/tmask-tt/tmask-tt/` — Task 2 (workflow `test`) i Task 3 (workflow `deploy`) zakładają, że oba istnieją w tym katalogu, zanim workflow spróbuje tam cokolwiek zbudować/podnieść.
 
-- [ ] **Step 1: Znajdź katalog instalacji runnera i jego working directory**
+- [ ] **Step 1: Pierwszy checkout repo do katalogu roboczego runnera**
 
-SSH na serwer produkcyjny (`ssh runner@192.168.50.224`, port 22, klucz już skopiowany), następnie:
+Katalog `_work/tmask-tt/tmask-tt` jeszcze nie istnieje (świeży serwer, runner nigdy nie wykonał joba). Najprostszy sposób, by go utworzyć bez ręcznego rozwiązywania autoryzacji do prywatnego repo na serwerze: wypchnij Task 2 (workflow z samym jobem `test`) na `main` **przed** wykonaniem reszty tego taska. `actions/checkout` w GitHub Actions używa tokena wstrzykiwanego automatycznie przez usługę Actions do self-hosted runnera — nie wymaga żadnej ręcznej konfiguracji `git`/`gh` na serwerze.
+
+Kolejność wykonania w praktyce: zrób najpierw Step 1-3 z Task 2 (utworzenie i push `.github/workflows/deploy.yml` z samym jobem `test`), poczekaj aż job `test` się odpali i **zawiedzie** na kroku `docker compose --profile test build web-test` (oczekiwane — `.env` jeszcze nie istnieje). To wystarczy, by checkout utworzył katalog. Potem wróć tutaj i wykonaj Step 2 poniżej.
+
+- [ ] **Step 2: Zweryfikuj że katalog istnieje i jest czystym checkoutem**
+
 ```bash
-systemctl list-units --type=service | grep -i actions.runner
-systemctl cat "$(systemctl list-units --type=service | grep -io 'actions\.runner\.[^ ]*\.service' | head -1)" | grep WorkingDirectory
+ssh runner@192.168.50.224 'ls -la /opt/actions-runner/_work/tmask-tt/tmask-tt/'
 ```
-Expected: linia `WorkingDirectory=<RUNNER_DIR>` — to jest katalog, w którym leży `config.sh`/`svc.sh`. Runner był rejestrowany z domyślną nazwą folderu roboczego `_work` (potwierdzone w transkrypcie rejestracji), więc GitHub Actions `checkout` umieści repo pod `<RUNNER_DIR>/_work/tmask-tt/tmask-tt`.
+Expected: pliki repo (`docker-compose.yml`, `services/`, `.git/` itd.), brak `.env`, brak `nginx/certs/`.
 
-- [ ] **Step 2: Znajdź istniejący katalog produkcyjny (dzisiejszy ręczny deploy)**
+- [ ] **Step 3: Wygeneruj `.env` produkcyjny**
 
 ```bash
-find / -maxdepth 6 -iname "docker-compose.yml" -not -path "*/_work/*" 2>/dev/null
+ssh runner@192.168.50.224 bash -s <<'REMOTE'
+set -e
+cd /opt/actions-runner/_work/tmask-tt/tmask-tt
+
+PG_PASS=$(python3 -c "import secrets; print(secrets.token_urlsafe(24))")
+SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_urlsafe(50))")
+FIELD_KEY=$(python3 -c "
+try:
+    from cryptography.fernet import Fernet
+except ImportError:
+    import subprocess
+    subprocess.run(['pip3', 'install', '--user', 'cryptography'], check=True)
+    from cryptography.fernet import Fernet
+print(Fernet.generate_key().decode())
+")
+
+cat > .env <<EOF
+POSTGRES_DB=transporter
+POSTGRES_USER=transporter
+POSTGRES_PASSWORD=${PG_PASS}
+DATABASE_URL=postgresql://transporter:${PG_PASS}@postgres:5432/transporter
+
+SECRET_KEY=${SECRET_KEY}
+DEBUG=False
+ALLOWED_HOSTS=tmask-transporter.local,localhost,127.0.0.1
+
+REDIS_URL=redis://redis:6379/0
+CELERY_BROKER_URL=redis://redis:6379/0
+CELERY_RESULT_BACKEND=redis://redis:6379/0
+
+FIELD_ENCRYPTION_KEY=${FIELD_KEY}
+
+SENTRY_DSN=
+
+EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend
+EMAIL_HOST=smtp.example.com
+EMAIL_PORT=587
+EMAIL_HOST_USER=noreply@example.com
+EMAIL_HOST_PASSWORD=secret
+EMAIL_USE_TLS=True
+DEFAULT_FROM_EMAIL=TMask Transporter <noreply@example.com>
+EOF
+
+chmod 600 .env
+echo "OK: .env created, $(wc -l < .env) lines"
+REMOTE
 ```
-Expected: jedna ścieżka, np. `/root/tmask-tt` lub podobna — katalog, w którym dziś ręcznie odpalane jest `docker compose up -d`, zawierający `.env` i `nginx/certs/selfsigned.{crt,key}`.
+Expected: `OK: .env created, 22 lines` (lub zbliżona liczba), brak błędów. Hasła/klucze generowane losowo na serwerze — nigdy nie przechodzą przez lokalny terminal kontrolera w jawnej formie inaczej niż przez ten jednorazowy `heredoc` (nie są logowane/zapisywane lokalnie).
 
-- [ ] **Step 3: Potwierdź zawartość katalogu produkcyjnego**
+**Uwaga o `EMAIL_HOST_PASSWORD=secret` i innych placeholderach email:** to wartości z `.env.example` — jeśli e-mail nie jest jeszcze skonfigurowany na tym serwerze, zostają jako placeholder (backend `console` i tak tylko loguje maile, nie wysyła ich naprawdę). Do podmiany ręcznie przez użytkownika, gdy będzie miał prawdziwe dane SMTP — poza zakresem tego planu.
+
+- [ ] **Step 4: Wygeneruj certyfikat nginx (self-signed, jak w spec HTTPS)**
 
 ```bash
-ls -la <ISTNIEJACY_KATALOG>/.env <ISTNIEJACY_KATALOG>/nginx/certs/
-docker compose -f <ISTNIEJACY_KATALOG>/docker-compose.yml ps
+ssh runner@192.168.50.224 bash -s <<'REMOTE'
+set -e
+cd /opt/actions-runner/_work/tmask-tt/tmask-tt
+mkdir -p nginx/certs
+openssl req -x509 -nodes -newkey rsa:2048 \
+  -keyout nginx/certs/selfsigned.key -out nginx/certs/selfsigned.crt \
+  -days 3650 -subj "/CN=tmask-transporter.local" \
+  -addext "subjectAltName=DNS:tmask-transporter.local,DNS:localhost,IP:127.0.0.1"
+ls -la nginx/certs/
+REMOTE
 ```
-Expected: `.env` istnieje, `nginx/certs/selfsigned.crt` i `.key` istnieją, `docker compose ps` pokazuje działające kontenery (`web`, `worker`, `beat`, `nginx`, `postgres`, `redis` — status `Up`/`healthy`).
+Expected: `selfsigned.crt` i `selfsigned.key` utworzone w `nginx/certs/`.
 
-- [ ] **Step 4: Wyrównaj katalogi — jeśli `<ISTNIEJACY_KATALOG>` różni się od `<RUNNER_DIR>/_work/tmask-tt/tmask-tt`**
-
-```bash
-mkdir -p <RUNNER_DIR>/_work/tmask-tt
-mv <ISTNIEJACY_KATALOG> <RUNNER_DIR>/_work/tmask-tt/tmask-tt
-```
-Jeśli katalog docelowy (`_work/tmask-tt/tmask-tt`) już istnieje pusty (bo runner nigdy jeszcze nie robił checkoutu) — `mv` zadziała wprost. Jeśli już zawiera pliki z wcześniejszego joba, najpierw `rm -rf <RUNNER_DIR>/_work/tmask-tt/tmask-tt`. Jeśli `<ISTNIEJACY_KATALOG>` należy do innego użytkownika niż `runner` (np. `root`, bo deploy był dotąd ręczny) — dodaj `sudo` przed `mv`/`mkdir` i na końcu `sudo chown -R runner:runner <RUNNER_DIR>/_work/tmask-tt/tmask-tt`, żeby usługa runnera (działająca jako `runner`) mogła czytać/pisać w tym katalogu.
-
-- [ ] **Step 5: Zweryfikuj że po przeniesieniu docker compose nadal widzi te same kontenery**
+- [ ] **Step 5: Pierwsze ręczne uruchomienie stosu (bootstrap bazy) + superuser**
 
 ```bash
-cd <RUNNER_DIR>/_work/tmask-tt/tmask-tt
+ssh runner@192.168.50.224 bash -s <<'REMOTE'
+set -e
+cd /opt/actions-runner/_work/tmask-tt/tmask-tt
+docker compose up -d
+sleep 10
 docker compose ps
-curl -sk https://localhost/accounts/login/ -o /dev/null -w "%{http_code}\n"
+REMOTE
 ```
-Expected: te same kontenery co w Step 3 (przenosiny katalogu nie restartują kontenerów — Compose identyfikuje je po nazwie projektu, nie po ścieżce), `200` z curla.
+Expected: wszystkie serwisy (`postgres`, `redis`, `web`, `worker`, `beat`, `nginx`) `Up`/`healthy`. `web` przy starcie sam wykonał `migrate` (entrypoint.sh) — świeża baza ma już schemat.
 
-- [ ] **Step 6: Zweryfikuj że użytkownik runnera ma dostęp do Dockera bez sudo**
+Następnie utwórz konto administratora (interaktywnie, hasło wpisywane ręcznie przez użytkownika — kontroler NIE generuje hasła admina automatycznie):
+```bash
+ssh -t runner@192.168.50.224 'cd /opt/actions-runner/_work/tmask-tt/tmask-tt && docker compose exec web python manage.py createsuperuser'
+```
+Expected: interaktywny prompt (username/email/password) na terminalu użytkownika — **ten krok wykonuje użytkownik osobiście**, nie kontroler, żeby hasło admina nie przeszło przez sesję agenta.
+
+- [ ] **Step 6: Weryfikacja end-to-end bootstrapu**
 
 ```bash
-whoami
-groups
-docker ps
+ssh runner@192.168.50.224 'curl -sk https://localhost/accounts/login/ -o /dev/null -w "%{http_code}\n"'
 ```
-Expected: `docker ps` działa bez błędu `permission denied`. Jeśli błąd: `usermod -aG docker $(whoami)`, potem `sudo ./svc.sh stop && sudo ./svc.sh start` w `<RUNNER_DIR>` (restart usługi runnera wymagany, żeby proces odziedziczył nową grupę).
+Expected: `200`.
 
-_Ten task nie ma "commita" — to czysto operacyjny krok na serwerze, bez zmian w repo._
+_Ten task nie ma "commita" — to czysto operacyjny bootstrap na serwerze, bez zmian w repo. Sekrety (`.env`, klucz prywatny certu) zostają wyłącznie na serwerze._
 
 ---
 
@@ -88,6 +156,8 @@ _Ten task nie ma "commita" — to czysto operacyjny krok na serwerze, bez zmian 
 
 **Interfaces:**
 - Produces: plik workflow z jobem `test` — Task 3 dopisze do tego samego pliku job `deploy` z `needs: test`.
+
+**Uwaga o kolejności:** Steps 1-3 tego taska (napisanie + push workflow) wykonują się **przed** Task 1 Step 2 (patrz Task 1 Step 1) — pierwszy push z samym jobem `test` posłuży też do utworzenia katalogu checkout na serwerze. Step 4 tego taska (finalna zielona weryfikacja) wykonuje się **po** ukończeniu całego Task 1.
 
 - [ ] **Step 1: Utwórz katalog i plik workflow z jobem `test`**
 
@@ -136,9 +206,11 @@ git commit -m "ci: add test job (web + worker pytest) on self-hosted runner"
 git push origin main
 ```
 
-- [ ] **Step 4: Zweryfikuj w GitHub Actions UI**
+Expected natychmiast po push (na świeżym serwerze, patrz Task 1 Step 1): job `test` startuje, `actions/checkout` się udaje (tworzy `/opt/actions-runner/_work/tmask-tt/tmask-tt`), krok `Build test image (web-test)` **zawodzi** (brak `.env`) — to oczekiwane, wróć teraz do Task 1 Step 2.
 
-Otwórz `https://github.com/TMaskpl/tmask-tt/actions` — nowy workflow run powinien się pojawić (trigger: push na `main`), job `test` powinien przejść na zielono. Jeśli runner nie podejmuje joba: sprawdź `sudo ./svc.sh status` na serwerze (Task 1 musiał zostawić usługę działającą).
+- [ ] **Step 4: Finalna weryfikacja w GitHub Actions UI (PO ukończeniu Task 1)**
+
+Po zakończeniu Task 1 (bootstrap `.env`/certu/bazy na serwerze), odpal ponownie workflow ręcznie: `https://github.com/TMaskpl/tmask-tt/actions/workflows/deploy.yml` → **Run workflow** (branch `main`).
 
 Expected: job `test` zielony, logi pokazują `385 passed` (web) i `127 passed` (worker) — dokładne liczby zgodnie z ostatnim znanym stanem testów w dokumentacji projektu; jeśli się różnią, to nie błąd tego planu, tylko aktualny stan suite'u.
 
@@ -207,9 +279,11 @@ Expected: `test` zielony, potem `deploy` startuje automatycznie (dzięki `needs`
 - [ ] **Step 5: Ręczna weryfikacja na serwerze po deployu**
 
 ```bash
-cd <RUNNER_DIR>/_work/tmask-tt/tmask-tt   # ścieżka ustalona w Task 1
+ssh runner@192.168.50.224 '
+cd /opt/actions-runner/_work/tmask-tt/tmask-tt
 docker compose ps
 git status
+'
 ```
 Expected: wszystkie serwisy `Up`/`healthy`, `git status` pokazuje **tylko** pliki wersjonowane jako ewentualnie zmienione (zero wzmianek o `.env` czy `nginx/certs/` — muszą pozostać nietknięte, potwierdzenie że `clean: false` zadziałało).
 
@@ -282,10 +356,11 @@ git push origin tmp/verify-build-safety
 
 - [ ] **Step 3: Zapisz stan kontenerów PRZED odpaleniem workflow**
 
-Na serwerze:
 ```bash
-docker compose ps --format json > /tmp/before-state.json
-docker inspect $(docker compose ps -q web) --format '{{.State.StartedAt}}'
+ssh runner@192.168.50.224 '
+cd /opt/actions-runner/_work/tmask-tt/tmask-tt
+docker inspect $(docker compose ps -q web) --format "{{.State.StartedAt}}"
+'
 ```
 Expected: zapisany timestamp startu obecnego kontenera `web` — punkt odniesienia do porównania.
 
@@ -298,8 +373,11 @@ Expected: job `test` zielony (Dockerfile web-test/worker niezmieniony, tylko `we
 - [ ] **Step 5: Potwierdź brak przestoju na serwerze**
 
 ```bash
-docker inspect $(docker compose ps -q web) --format '{{.State.StartedAt}}'
+ssh runner@192.168.50.224 '
+cd /opt/actions-runner/_work/tmask-tt/tmask-tt
+docker inspect $(docker compose ps -q web) --format "{{.State.StartedAt}}"
 curl -sk https://localhost/accounts/login/ -o /dev/null -w "%{http_code}\n"
+'
 ```
 Expected: identyczny `StartedAt` jak w Step 3 (kontener `web` nie został ruszony), `curl` zwraca `200`.
 
@@ -312,7 +390,7 @@ git push origin --delete tmp/verify-build-safety
 ```
 Na serwerze usuń nieudany obraz z cache builda (opcjonalne, porządkowe):
 ```bash
-docker image prune -f
+ssh runner@192.168.50.224 'docker image prune -f'
 ```
 
 ---
@@ -340,7 +418,7 @@ Workflow: `.github/workflows/deploy.yml`. Podgląd przebiegów: `https://github.
 
 **Ręczny redeploy bez nowego commita:** zakładka Actions → workflow "Test & Deploy" → **Run workflow** (branch `main`).
 
-**Runner:** usługa systemd na serwerze produkcyjnym, nazwa `tmask-tt-deploy-onlo`. Status: `sudo ./svc.sh status` w katalogu instalacji runnera. Jeśli runner jest offline, workflow wisi w statusie "Waiting for a runner" — restart: `sudo ./svc.sh start`.
+**Runner:** usługa systemd `actions.runner.TMaskpl-tmask-tt.tmask-tt-deploy-onlo.service` na serwerze produkcyjnym (`/opt/actions-runner`). Status: `sudo ./svc.sh status` w `/opt/actions-runner`. Jeśli runner jest offline, workflow wisi w statusie "Waiting for a runner" — restart: `sudo ./svc.sh start`.
 
 **Rollback (ręczny, brak automatycznego):**
 ```bash
@@ -349,7 +427,7 @@ git push --force-with-lease origin main   # albo: git revert <zły-commit> && gi
 ```
 Push uruchomi normalną ścieżkę test→deploy i odbuduje poprzednią wersję. Brak wersjonowanych obrazów/tagów — to świadomy kompromis (jeden serwer, LAN-only, mała skala).
 
-**Czego workflow NIE rusza:** `.env` i `nginx/certs/` na serwerze (gitignored, `actions/checkout` skonfigurowany z `clean: false` właśnie po to, by ich nie skasować).
+**Czego workflow NIE rusza:** `.env` i `nginx/certs/` na serwerze (gitignored, `actions/checkout` skonfigurowany z `clean: false` właśnie po to, by ich nie skasować). Oba zostały wygenerowane ręcznie, raz, przy pierwszym wdrożeniu (`docs/superpowers/plans/2026-07-03-cicd-github-actions-deploy.md`, Task 1).
 ```
 
 - [ ] **Step 2: Commit**
@@ -362,7 +440,7 @@ git push origin main
 
 ---
 
-## Self-Review (wykonane przy pisaniu planu)
+## Self-Review (wykonane przy pisaniu planu, zaktualizowane po weryfikacji na żywym serwerze)
 
 **Pokrycie spec:**
 - Wariant A (self-hosted, brak registry) → Task 2, 3 ✓
@@ -371,9 +449,11 @@ git push origin main
 - Testy blokują deploy → Task 3 (`needs: test`), zweryfikowane w Task 4 ✓
 - Healthcheck → Task 3 Step 1 ✓
 - Rollback ręczny → udokumentowany w Task 6 ✓
-- Weryfikacja mechanizmu (spec sekcja "Testy/Weryfikacja", punkty 1-4) → Task 2 Step 4, Task 4, Task 5 pokrywają punkty 1-3; punkt 4 (workflow_dispatch jako redeploy) pokryty pośrednio przez Task 4/5 Step 3 (użycie Run workflow) i opisany w Task 6 dokumentacji
-- Wyrównanie katalogu runnera z produkcją (otwarta kwestia ze spec) → Task 1, rozwiązane konkretnymi krokami
+- Weryfikacja mechanizmu (spec sekcja "Testy/Weryfikacja") → Task 2 Step 4, Task 4, Task 5 ✓
 
-**Dodatkowa korekta znaleziona przy planowaniu (poza spec):** `clean: false` na `actions/checkout` — bez tego każdy deploy kasowałby `.env`/`nginx/certs/`. Dodane do Global Constraints i obu jobów.
+**Korekty znalezione podczas planowania i wykonania (poza pierwotnym spec):**
+1. `clean: false` na `actions/checkout` — bez tego każdy deploy kasowałby `.env`/`nginx/certs/`. Dodane do Global Constraints i obu jobów.
+2. Serwer okazał się świeżą maszyną bez istniejącej produkcji (spec/pierwsza wersja planu zakładały migrację istniejącego ręcznego wdrożenia) — Task 1 przepisany na pełny bootstrap (`.env`, cert, baza, superuser) zamiast "wyrównania katalogów".
+3. Kolejność Task 1/Task 2 odwrócona operacyjnie: pierwszy push workflow (Task 2 Steps 1-3) musi poprzedzić bootstrap sekretów (Task 1 Steps 2-6), bo to jedyny sposób utworzenia katalogu checkout na serwerze bez ręcznej konfiguracji auth do prywatnego repo.
 
-**Poza zakresem (zgodnie ze spec, nieujęte w tym planie):** GHCR, automatyczny rollback, powiadomienia, staging, aktualizacja nieaktualnych komend testowych w `CLAUDE.md`.
+**Poza zakresem (zgodnie ze spec, nieujęte w tym planie):** GHCR, automatyczny rollback, powiadomienia, staging, aktualizacja nieaktualnych komend testowych w `CLAUDE.md`, konfiguracja prawdziwego SMTP (zostaje placeholder z `.env.example`).
