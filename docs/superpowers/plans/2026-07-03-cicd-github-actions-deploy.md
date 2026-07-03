@@ -29,7 +29,7 @@
 
 - [ ] **Step 1: Znajdź katalog instalacji runnera i jego working directory**
 
-SSH na serwer produkcyjny (adres/port/użytkownik: **do potwierdzenia przed wykonaniem tego kroku** — `192.168.50.233` z `~/.ssh/config` okazał się błędnym adresem, właściwy to `192.168.50.224`, port/user do potwierdzenia), następnie:
+SSH na serwer produkcyjny (`ssh runner@192.168.50.224`, port 22, klucz już skopiowany), następnie:
 ```bash
 systemctl list-units --type=service | grep -i actions.runner
 systemctl cat "$(systemctl list-units --type=service | grep -io 'actions\.runner\.[^ ]*\.service' | head -1)" | grep WorkingDirectory
@@ -57,7 +57,7 @@ Expected: `.env` istnieje, `nginx/certs/selfsigned.crt` i `.key` istnieją, `doc
 mkdir -p <RUNNER_DIR>/_work/tmask-tt
 mv <ISTNIEJACY_KATALOG> <RUNNER_DIR>/_work/tmask-tt/tmask-tt
 ```
-Jeśli katalog docelowy (`_work/tmask-tt/tmask-tt`) już istnieje pusty (bo runner nigdy jeszcze nie robił checkoutu) — `mv` zadziała wprost. Jeśli już zawiera pliki z wcześniejszego joba, najpierw `rm -rf <RUNNER_DIR>/_work/tmask-tt/tmask-tt`.
+Jeśli katalog docelowy (`_work/tmask-tt/tmask-tt`) już istnieje pusty (bo runner nigdy jeszcze nie robił checkoutu) — `mv` zadziała wprost. Jeśli już zawiera pliki z wcześniejszego joba, najpierw `rm -rf <RUNNER_DIR>/_work/tmask-tt/tmask-tt`. Jeśli `<ISTNIEJACY_KATALOG>` należy do innego użytkownika niż `runner` (np. `root`, bo deploy był dotąd ręczny) — dodaj `sudo` przed `mv`/`mkdir` i na końcu `sudo chown -R runner:runner <RUNNER_DIR>/_work/tmask-tt/tmask-tt`, żeby usługa runnera (działająca jako `runner`) mogła czytać/pisać w tym katalogu.
 
 - [ ] **Step 5: Zweryfikuj że po przeniesieniu docker compose nadal widzi te same kontenery**
 
