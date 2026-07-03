@@ -46,7 +46,7 @@ Push/merge na `main` automatycznie:
 
 Workflow: `.github/workflows/deploy.yml`. Podgląd przebiegów: `https://github.com/TMaskpl/tmask-tt/actions`.
 
-**Ręczny redeploy bez nowego commita:** zakładka Actions → workflow "Test & Deploy" → **Run workflow** (branch `main`).
+**Ręczny redeploy bez nowego commita:** zakładka Actions → workflow "Test & Deploy" → **Run workflow** (branch `main`). Uwaga: **Run workflow zawsze wdraża wybrany branch na produkcję** — zawsze wybieraj `main`, chyba że świadomie testujesz mechanizm na branchu tymczasowym.
 
 **Runner:** usługa systemd `actions.runner.TMaskpl-tmask-tt.tmask-tt-deploy-onlo.service` na serwerze produkcyjnym (`/opt/actions-runner`). Status: `sudo ./svc.sh status` w `/opt/actions-runner`. Jeśli runner jest offline, workflow wisi w statusie "Waiting for a runner" — restart: `sudo ./svc.sh start`.
 

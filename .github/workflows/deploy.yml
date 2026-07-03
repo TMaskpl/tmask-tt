@@ -5,6 +5,10 @@ on:
     branches: [main]
   workflow_dispatch: {}
 
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+
 jobs:
   test:
     runs-on: self-hosted
