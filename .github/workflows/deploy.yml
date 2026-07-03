@@ -1,0 +1,26 @@
+name: Test & Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  test:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          clean: false
+
+      - name: Build test image (web-test)
+        run: docker compose --profile test build web-test
+
+      - name: Run web test suite
+        run: docker compose --profile test run --rm web-test python -m pytest apps/ -v
+
+      - name: Build worker image
+        run: docker compose build worker
+
+      - name: Run worker test suite
+        run: docker compose run --rm worker python -m pytest tests/ -v
