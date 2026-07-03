@@ -24,3 +24,29 @@ jobs:
 
       - name: Run worker test suite
         run: docker compose run --rm worker python -m pytest tests/ -v
+
+  deploy:
+    needs: test
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          clean: false
+
+      - name: Build production images
+        run: docker compose build
+
+      - name: Recreate containers
+        run: docker compose up -d
+
+      - name: Healthcheck
+        run: |
+          for i in $(seq 1 10); do
+            if curl -sf -k https://localhost/accounts/login/ > /dev/null; then
+              echo "Healthcheck OK"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "Healthcheck FAILED — kontener podniesiony, ale aplikacja nie odpowiada"
+          exit 1
