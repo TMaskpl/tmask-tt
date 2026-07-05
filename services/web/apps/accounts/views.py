@@ -3,7 +3,6 @@ from django.contrib import messages
 from django.contrib.auth import login, logout, authenticate, get_user_model
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
@@ -119,12 +118,15 @@ def profile_view(request):
     })
 
 
+_WEBHOOK_RESULT_TEMPLATE = 'accounts/_webhook_test_result.html'
+
+
 @login_required
 @require_POST
 def test_webhook(request):
     url = request.POST.get('webhook_url', '').strip()
     if not url:
-        return JsonResponse({'ok': False, 'error': 'Brak URL'})
+        return render(request, _WEBHOOK_RESULT_TEMPLATE, {'ok': False, 'message': 'Brak URL'})
     if 'hooks.slack.com' in url:
         payload = {'text': ':white_check_mark: *TMask Transporter* — test powiadomienia Slack'}
     else:
@@ -141,13 +143,13 @@ def test_webhook(request):
     try:
         block_private_url(url)
     except ValueError as e:
-        return JsonResponse({'ok': False, 'error': str(e)})
+        return render(request, _WEBHOOK_RESULT_TEMPLATE, {'ok': False, 'message': str(e)})
     try:
         resp = requests.post(url, json=payload, timeout=5)
         resp.raise_for_status()
-        return JsonResponse({'ok': True, 'code': resp.status_code})
+        return render(request, _WEBHOOK_RESULT_TEMPLATE, {'ok': True, 'message': f'WEBHOOK OK ({resp.status_code})'})
     except requests.RequestException as e:
-        return JsonResponse({'ok': False, 'error': str(e)})
+        return render(request, _WEBHOOK_RESULT_TEMPLATE, {'ok': False, 'message': str(e)})
 
 
 @login_required

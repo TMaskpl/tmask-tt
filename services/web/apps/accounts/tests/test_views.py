@@ -166,9 +166,10 @@ class TestTestWebhookView:
         with patch('apps.accounts.views.requests.post', return_value=mock_resp):
             response = auth_client.post(url, {'webhook_url': 'http://hooks.example.com/'})
         assert response.status_code == 200
-        data = response.json()
-        assert data['ok'] is True
-        assert data['code'] == 200
+        assert response['Content-Type'].startswith('text/html')
+        body = response.content.decode()
+        assert 'class="test-ok"' in body
+        assert '200' in body
 
     def test_returns_error_on_connection_refused(self, auth_client):
         import requests as req
@@ -177,17 +178,17 @@ class TestTestWebhookView:
                    side_effect=req.ConnectionError('Connection refused')):
             response = auth_client.post(url, {'webhook_url': 'http://hooks.example.com/'})
         assert response.status_code == 200
-        data = response.json()
-        assert data['ok'] is False
-        assert 'Connection refused' in data['error']
+        body = response.content.decode()
+        assert 'class="test-fail"' in body
+        assert 'Connection refused' in body
 
     def test_returns_error_on_missing_url(self, auth_client):
         url = reverse('accounts:test_webhook')
         response = auth_client.post(url, {'webhook_url': ''})
         assert response.status_code == 200
-        data = response.json()
-        assert data['ok'] is False
-        assert 'URL' in data['error']
+        body = response.content.decode()
+        assert 'class="test-fail"' in body
+        assert 'URL' in body
 
     def test_returns_error_on_timeout(self, auth_client):
         import requests as req
@@ -196,38 +197,35 @@ class TestTestWebhookView:
                    side_effect=req.Timeout('timeout')):
             response = auth_client.post(url, {'webhook_url': 'http://hooks.example.com/'})
         assert response.status_code == 200
-        data = response.json()
-        assert data['ok'] is False
+        assert 'class="test-fail"' in response.content.decode()
 
     def test_blocks_private_ip(self, auth_client):
         url = reverse('accounts:test_webhook')
         response = auth_client.post(url, {'webhook_url': 'http://192.168.1.100/hook'})
         assert response.status_code == 200
-        data = response.json()
-        assert data['ok'] is False
-        assert 'wewnętrznych' in data['error']
+        body = response.content.decode()
+        assert 'class="test-fail"' in body
+        assert 'wewnętrznych' in body
 
     def test_blocks_loopback_ip(self, auth_client):
         url = reverse('accounts:test_webhook')
         response = auth_client.post(url, {'webhook_url': 'http://127.0.0.1/hook'})
         assert response.status_code == 200
-        data = response.json()
-        assert data['ok'] is False
+        assert 'class="test-fail"' in response.content.decode()
 
     def test_blocks_localhost(self, auth_client):
         url = reverse('accounts:test_webhook')
         response = auth_client.post(url, {'webhook_url': 'http://localhost/hook'})
         assert response.status_code == 200
-        data = response.json()
-        assert data['ok'] is False
+        assert 'class="test-fail"' in response.content.decode()
 
     def test_blocks_non_http_scheme(self, auth_client):
         url = reverse('accounts:test_webhook')
         response = auth_client.post(url, {'webhook_url': 'file:///etc/passwd'})
         assert response.status_code == 200
-        data = response.json()
-        assert data['ok'] is False
-        assert 'http' in data['error']
+        body = response.content.decode()
+        assert 'class="test-fail"' in body
+        assert 'http' in body
 
 
 @pytest.mark.django_db

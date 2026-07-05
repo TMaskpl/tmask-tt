@@ -472,26 +472,6 @@
   </div>
 </div>
 
-{# ── Webhook JS ───────────────────────────────────── #}
-<script>
-  document.body.addEventListener('htmx:afterRequest', function(evt) {
-    if (evt.detail.target !== document.getElementById('webhook-test-result')) return;
-    var el = evt.detail.target;
-    try {
-      var data = JSON.parse(evt.detail.xhr.responseText);
-      var span = document.createElement('span');
-      if (data.ok) {
-        span.className = 'msg-success';
-        span.textContent = '> OK — ' + data.code;
-      } else {
-        span.className = 'error';
-        span.textContent = '> ERROR — ' + data.error;
-      }
-      el.replaceChildren(span);
-    } catch(e) {}
-  });
-</script>
-
 {# ── New token modal ──────────────────────────────── #}
 {% if new_token %}
 <div id="token-modal" style="
