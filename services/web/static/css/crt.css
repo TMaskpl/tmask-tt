@@ -422,7 +422,19 @@ th.col-actions, td.col-actions { text-align: right; white-space: nowrap; }
   justify-content: flex-end;
 }
 
-.test-result { font-size: 0.8rem; margin-left: 0.3rem; }
+/* max-width + ellipsis: niezależnie od długości komunikatu (np. SSH ERROR z treścią
+   wyjątku) wynik testu nigdy nie wychodzi poza .row-actions/.box — pełna treść w title
+   (tooltip po najechaniu). */
+.test-result {
+  display: inline-block;
+  vertical-align: middle;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8rem;
+  margin-left: 0.3rem;
+}
 .test-ok   { color: var(--green-bright); }
 .test-fail { color: var(--red); }
 

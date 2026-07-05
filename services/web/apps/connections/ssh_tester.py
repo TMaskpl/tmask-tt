@@ -45,7 +45,8 @@ def test_connection(connection) -> SSHTestResult:
             return SSHTestResult(False, 'AUTH FAILED — brak danych uwierzytelniania')
 
         client.connect(**connect_kwargs)
-        return SSHTestResult(True, f'CONNECTION OK — {connection.host}:{connection.port}')
+        # Host:port celowo pominięte — już widoczne w kolumnach HOST/PORT tej samej tabeli
+        return SSHTestResult(True, 'CONNECTION OK')
 
     except paramiko.AuthenticationException:
         return SSHTestResult(False, 'AUTH FAILED — nieprawidłowe dane uwierzytelniania')
