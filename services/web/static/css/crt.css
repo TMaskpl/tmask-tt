@@ -423,6 +423,8 @@ th.col-actions, td.col-actions { text-align: right; white-space: nowrap; }
 }
 
 .test-result { font-size: 0.8rem; margin-left: 0.3rem; }
+.test-ok   { color: var(--green-bright); }
+.test-fail { color: var(--red); }
 
 /* Stylizowany file picker (zamiast natywnego "Choose File") */
 .file-name { font-size: 0.8rem; color: #8fbf8f; }

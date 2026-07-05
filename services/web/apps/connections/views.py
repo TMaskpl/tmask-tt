@@ -56,7 +56,7 @@ def connection_delete(request, pk):
 def connection_test(request, pk):
     conn = get_object_or_404(Connection, pk=pk)
     result = _test_connection(conn)
-    return JsonResponse({'success': result.success, 'message': result.message})
+    return render(request, 'connections/_test_result.html', {'result': result})
 
 @require_role(ROLE_ADMIN)
 def connection_scan_hostkey(request, pk):

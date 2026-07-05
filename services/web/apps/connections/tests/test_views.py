@@ -171,27 +171,32 @@ class TestConnectionEdit:
 
 @pytest.mark.django_db
 class TestConnectionTest:
-    def test_returns_success_json(self, auth_client, regular_user, make_connection):
+    def test_returns_success_html_fragment(self, auth_client, regular_user, make_connection):
         from apps.connections.ssh_tester import SSHTestResult
         conn = make_connection(regular_user)
         with patch('apps.connections.views._test_connection',
-                   return_value=SSHTestResult(success=True, message='CONNECTION OK')):
+                   return_value=SSHTestResult(success=True, message='CONNECTION OK — 10.0.0.1:22')):
             response = auth_client.get(reverse('connections:test', args=[conn.pk]))
         assert response.status_code == 200
-        data = response.json()
-        assert data['success'] is True
-        assert 'CONNECTION OK' in data['message']
+        assert response['Content-Type'].startswith('text/html')
+        body = response.content.decode()
+        assert 'class="test-ok"' in body
+        assert 'class="test-fail"' not in body
+        # myślnik musi renderować się jako prawdziwy znak unicode, nie jako uciekniety — z JSON
+        assert 'CONNECTION OK — 10.0.0.1:22' in body
+        assert '\\u2014' not in body
 
-    def test_returns_failure_json(self, auth_client, regular_user, make_connection):
+    def test_returns_failure_html_fragment(self, auth_client, regular_user, make_connection):
         from apps.connections.ssh_tester import SSHTestResult
         conn = make_connection(regular_user)
         with patch('apps.connections.views._test_connection',
-                   return_value=SSHTestResult(success=False, message='AUTH FAILED')):
+                   return_value=SSHTestResult(success=False, message='AUTH FAILED — brak danych')):
             response = auth_client.get(reverse('connections:test', args=[conn.pk]))
         assert response.status_code == 200
-        data = response.json()
-        assert data['success'] is False
-        assert 'AUTH FAILED' in data['message']
+        body = response.content.decode()
+        assert 'class="test-fail"' in body
+        assert 'class="test-ok"' not in body
+        assert 'AUTH FAILED — brak danych' in body
 
     def test_returns_200_for_other_users_connection(self, auth_client, admin_user, make_connection):
         from apps.connections.ssh_tester import SSHTestResult
