@@ -361,6 +361,29 @@ class TestCleanupSourceFileOnSuccess:
             execute_transfer(job_id=1)
             assert source.exists()
 
+    def test_does_not_delete_when_path_shares_string_prefix_but_not_subdirectory(self, tmp_path):
+        transfers_dir = tmp_path / "transfers"
+        transfers_dir.mkdir()
+        colliding_dir = tmp_path / "transfers-evil"
+        colliding_dir.mkdir()
+        source = colliding_dir / "upload.txt"
+        source.write_text("dummy")
+        with patch('tasks.settings.TRANSFERS_DIR', str(transfers_dir)), \
+             patch('tasks.SFTPHandler') as MockSFTP, \
+             patch('tasks.TransferJob') as MockJob, \
+             patch('tasks.TransferLog'):
+            mock_job = MagicMock()
+            MockJob.objects.get.return_value = mock_job
+            mock_job.flow_id = None
+            mock_job.connection_id = 5
+            mock_job.connection.protocol = 'sftp'
+            mock_job.source_path = str(source)
+            mock_job.pk = 1
+            MockSFTP.return_value.execute.return_value = None
+            from tasks import execute_transfer
+            execute_transfer(job_id=1)
+            assert source.exists()
+
     def test_success_survives_missing_file(self, tmp_path):
         missing = tmp_path / "gone.txt"
         with patch('tasks.settings.TRANSFERS_DIR', str(tmp_path)), \

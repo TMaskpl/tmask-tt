@@ -1,4 +1,6 @@
 import os
+from pathlib import Path
+
 import django
 
 from celery import Celery
@@ -151,7 +153,12 @@ def _cleanup_source_file(job) -> None:
     if job.connection_id is None:
         return  # flow/relay — source_path na zdalnym hoście, nie dotykamy
     path = job.source_path
-    if not path or not path.startswith(settings.TRANSFERS_DIR):
+    if not path:
+        return
+    try:
+        if not Path(path).resolve().is_relative_to(Path(settings.TRANSFERS_DIR).resolve()):
+            return
+    except OSError:
         return
     try:
         os.unlink(path)
