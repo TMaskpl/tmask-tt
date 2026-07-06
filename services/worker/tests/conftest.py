@@ -33,6 +33,8 @@ if not _dj_settings.configured:
         CELERY_TASK_ALWAYS_EAGER=True,
         CELERY_BROKER_URL='memory://',
         CELERY_RESULT_BACKEND='cache+memory://',
+        TRANSFERS_DIR='/transfers',
+        TRANSFERS_RETENTION_DAYS=1,
     )
 
 # Neutralise django.setup() — settings are already configured inline.

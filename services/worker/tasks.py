@@ -7,6 +7,7 @@ from celery.utils.log import get_task_logger
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings.production')
 django.setup()
 
+from django.conf import settings  # noqa: E402
 from apps.transfers.models import TransferJob, TransferLog  # noqa: E402
 from modules.sftp.handler import SFTPHandler, SFTPTransferError  # noqa: E402
 from modules.rsync.handler import RsyncHandler, RsyncTransferError  # noqa: E402
@@ -146,6 +147,18 @@ def send_telegram(self, job_id: int):
         raise self.retry(exc=exc)
 
 
+def _cleanup_source_file(job) -> None:
+    if job.connection_id is None:
+        return  # flow/relay — source_path na zdalnym hoście, nie dotykamy
+    path = job.source_path
+    if not path or not path.startswith(settings.TRANSFERS_DIR):
+        return
+    try:
+        os.unlink(path)
+    except OSError as e:
+        logger.warning(f'Nie udało się usunąć {path} po transferze: {e}')
+
+
 @app.task(bind=True, name='transfers.execute')
 def execute_transfer(self, job_id: int | None = None, scheduled_id: int | None = None, gpg_passphrase: str | None = None):
     job = _resolve_job(job_id, scheduled_id)
@@ -160,6 +173,7 @@ def execute_transfer(self, job_id: int | None = None, scheduled_id: int | None =
     try:
         _run_transfer(job, gpg_passphrase, log_callback)
         job.mark_done()
+        _cleanup_source_file(job)
         send_notification.delay(job.pk)
         send_webhook.delay(job.pk)
         send_telegram.delay(job.pk)

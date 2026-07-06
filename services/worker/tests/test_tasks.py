@@ -298,3 +298,103 @@ class TestBuildRelayParamsVerifyChecksum:
             conn.known_host_key = ''
         source_params, dest_params = _build_relay_params(flow)
         assert source_params['verify_checksum'] is True
+
+
+class TestCleanupSourceFileOnSuccess:
+    def test_deletes_source_file_after_success_when_connection_job(self, tmp_path):
+        source = tmp_path / "upload.txt"
+        source.write_text("dummy")
+        with patch('tasks.settings.TRANSFERS_DIR', str(tmp_path)), \
+             patch('tasks.SFTPHandler') as MockSFTP, \
+             patch('tasks.TransferJob') as MockJob, \
+             patch('tasks.TransferLog'):
+            mock_job = MagicMock()
+            MockJob.objects.get.return_value = mock_job
+            mock_job.flow_id = None
+            mock_job.connection_id = 5
+            mock_job.connection.protocol = 'sftp'
+            mock_job.source_path = str(source)
+            mock_job.pk = 1
+            MockSFTP.return_value.execute.return_value = None
+            from tasks import execute_transfer
+            execute_transfer(job_id=1)
+            assert not source.exists()
+
+    def test_does_not_delete_when_flow_job(self, tmp_path):
+        source = tmp_path / "upload.txt"
+        source.write_text("dummy")
+        with patch('tasks.settings.TRANSFERS_DIR', str(tmp_path)), \
+             patch('tasks.RelayHandler') as MockRelay, \
+             patch('tasks.TransferJob') as MockJob, \
+             patch('tasks.TransferLog'):
+            mock_job = MagicMock()
+            MockJob.objects.get.return_value = mock_job
+            mock_job.flow_id = 99
+            mock_job.connection_id = None
+            mock_job.source_path = str(source)
+            mock_job.pk = 1
+            MockRelay.return_value.execute.return_value = None
+            from tasks import execute_transfer
+            execute_transfer(job_id=1)
+            assert source.exists()
+
+    def test_does_not_delete_path_outside_transfers_dir(self, tmp_path):
+        transfers_dir = tmp_path / "transfers"
+        transfers_dir.mkdir()
+        outside_dir = tmp_path / "outside"
+        outside_dir.mkdir()
+        source = outside_dir / "upload.txt"
+        source.write_text("dummy")
+        with patch('tasks.settings.TRANSFERS_DIR', str(transfers_dir)), \
+             patch('tasks.SFTPHandler') as MockSFTP, \
+             patch('tasks.TransferJob') as MockJob, \
+             patch('tasks.TransferLog'):
+            mock_job = MagicMock()
+            MockJob.objects.get.return_value = mock_job
+            mock_job.flow_id = None
+            mock_job.connection_id = 5
+            mock_job.connection.protocol = 'sftp'
+            mock_job.source_path = str(source)
+            mock_job.pk = 1
+            MockSFTP.return_value.execute.return_value = None
+            from tasks import execute_transfer
+            execute_transfer(job_id=1)
+            assert source.exists()
+
+    def test_success_survives_missing_file(self, tmp_path):
+        missing = tmp_path / "gone.txt"
+        with patch('tasks.settings.TRANSFERS_DIR', str(tmp_path)), \
+             patch('tasks.SFTPHandler') as MockSFTP, \
+             patch('tasks.TransferJob') as MockJob, \
+             patch('tasks.TransferLog'):
+            mock_job = MagicMock()
+            MockJob.objects.get.return_value = mock_job
+            mock_job.flow_id = None
+            mock_job.connection_id = 5
+            mock_job.connection.protocol = 'sftp'
+            mock_job.source_path = str(missing)
+            mock_job.pk = 1
+            MockSFTP.return_value.execute.return_value = None
+            from tasks import execute_transfer
+            execute_transfer(job_id=1)
+            mock_job.mark_done.assert_called_once()
+
+    def test_does_not_delete_on_failed_transfer(self, tmp_path):
+        source = tmp_path / "upload.txt"
+        source.write_text("dummy")
+        with patch('tasks.settings.TRANSFERS_DIR', str(tmp_path)), \
+             patch('tasks.SFTPHandler') as MockSFTP, \
+             patch('tasks.TransferJob') as MockJob, \
+             patch('tasks.TransferLog'):
+            from modules.sftp.handler import SFTPTransferError
+            mock_job = MagicMock()
+            MockJob.objects.get.return_value = mock_job
+            mock_job.flow_id = None
+            mock_job.connection_id = 5
+            mock_job.connection.protocol = 'sftp'
+            mock_job.source_path = str(source)
+            mock_job.pk = 1
+            MockSFTP.return_value.execute.side_effect = SFTPTransferError('AUTH FAILED')
+            from tasks import execute_transfer
+            execute_transfer(job_id=1)
+            assert source.exists()
