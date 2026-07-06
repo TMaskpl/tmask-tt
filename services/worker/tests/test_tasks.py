@@ -468,3 +468,14 @@ class TestCleanupOldTransfers:
             from tasks import cleanup_old_transfers
             cleanup_old_transfers()
             assert mock_unlink.call_count == 2
+
+    def test_skips_subdirectories_without_error(self, tmp_path):
+        subdir = tmp_path / "some_subdir"
+        subdir.mkdir()
+        old_time = time.time() - 2 * 86400
+        os.utime(subdir, (old_time, old_time))
+        with patch('tasks.settings.TRANSFERS_DIR', str(tmp_path)), \
+             patch('tasks.settings.TRANSFERS_RETENTION_DAYS', 1):
+            from tasks import cleanup_old_transfers
+            cleanup_old_transfers()
+            assert subdir.exists()
