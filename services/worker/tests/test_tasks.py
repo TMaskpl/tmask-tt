@@ -1,3 +1,6 @@
+import os
+import time
+
 import pytest
 from unittest.mock import patch, MagicMock
 
@@ -421,3 +424,47 @@ class TestCleanupSourceFileOnSuccess:
             from tasks import execute_transfer
             execute_transfer(job_id=1)
             assert source.exists()
+
+
+class TestCleanupOldTransfers:
+    def test_removes_files_older_than_threshold(self, tmp_path):
+        old_file = tmp_path / "old.txt"
+        old_file.write_text("dummy")
+        old_time = time.time() - 2 * 86400
+        os.utime(old_file, (old_time, old_time))
+        with patch('tasks.settings.TRANSFERS_DIR', str(tmp_path)), \
+             patch('tasks.settings.TRANSFERS_RETENTION_DAYS', 1):
+            from tasks import cleanup_old_transfers
+            cleanup_old_transfers()
+            assert not old_file.exists()
+
+    def test_keeps_files_newer_than_threshold(self, tmp_path):
+        new_file = tmp_path / "new.txt"
+        new_file.write_text("dummy")
+        with patch('tasks.settings.TRANSFERS_DIR', str(tmp_path)), \
+             patch('tasks.settings.TRANSFERS_RETENTION_DAYS', 1):
+            from tasks import cleanup_old_transfers
+            cleanup_old_transfers()
+            assert new_file.exists()
+
+    def test_empty_directory_no_error(self, tmp_path):
+        with patch('tasks.settings.TRANSFERS_DIR', str(tmp_path)), \
+             patch('tasks.settings.TRANSFERS_RETENTION_DAYS', 1):
+            from tasks import cleanup_old_transfers
+            cleanup_old_transfers()
+
+    def test_single_file_error_does_not_abort_loop(self, tmp_path):
+        file_a = tmp_path / "a.txt"
+        file_b = tmp_path / "b.txt"
+        file_a.write_text("dummy")
+        file_b.write_text("dummy")
+        old_time = time.time() - 2 * 86400
+        os.utime(file_a, (old_time, old_time))
+        os.utime(file_b, (old_time, old_time))
+        with patch('tasks.settings.TRANSFERS_DIR', str(tmp_path)), \
+             patch('tasks.settings.TRANSFERS_RETENTION_DAYS', 1), \
+             patch('tasks.os.unlink') as mock_unlink:
+            mock_unlink.side_effect = [OSError('permission denied'), None]
+            from tasks import cleanup_old_transfers
+            cleanup_old_transfers()
+            assert mock_unlink.call_count == 2

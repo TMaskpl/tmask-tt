@@ -210,3 +210,19 @@ def cleanup_orphan_jobs():
     count = orphans.count()
     orphans.update(status='failed', error_message='TASK INTERRUPTED — worker restarted')
     logger.info(f'Cleaned up {count} orphaned jobs')
+
+
+@app.task(name='transfers.cleanup_old_transfers')
+def cleanup_old_transfers():
+    import time
+    cutoff = time.time() - settings.TRANSFERS_RETENTION_DAYS * 86400
+    removed = 0
+    for name in os.listdir(settings.TRANSFERS_DIR):
+        path = os.path.join(settings.TRANSFERS_DIR, name)
+        try:
+            if os.path.isfile(path) and os.path.getmtime(path) < cutoff:
+                os.unlink(path)
+                removed += 1
+        except OSError as e:
+            logger.warning(f'Retention: nie udało się usunąć {path}: {e}')
+    logger.info(f'Retention: usunięto {removed} plików z {settings.TRANSFERS_DIR}')
