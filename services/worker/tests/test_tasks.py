@@ -479,3 +479,10 @@ class TestCleanupOldTransfers:
             from tasks import cleanup_old_transfers
             cleanup_old_transfers()
             assert subdir.exists()
+
+    def test_missing_transfers_dir_does_not_raise(self, tmp_path):
+        missing_dir = tmp_path / "does-not-exist"
+        with patch('tasks.settings.TRANSFERS_DIR', str(missing_dir)), \
+             patch('tasks.settings.TRANSFERS_RETENTION_DAYS', 1):
+            from tasks import cleanup_old_transfers
+            cleanup_old_transfers()

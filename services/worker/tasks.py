@@ -158,7 +158,8 @@ def _cleanup_source_file(job) -> None:
     try:
         if not Path(path).resolve().is_relative_to(Path(settings.TRANSFERS_DIR).resolve()):
             return
-    except OSError:
+    except OSError as e:
+        logger.warning(f'Nie udało się zweryfikować ścieżki {path}: {e}')
         return
     try:
         os.unlink(path)
@@ -215,6 +216,9 @@ def cleanup_orphan_jobs():
 @app.task(name='transfers.cleanup_old_transfers')
 def cleanup_old_transfers():
     import time
+    if not os.path.isdir(settings.TRANSFERS_DIR):
+        logger.warning(f'Retention: {settings.TRANSFERS_DIR} nie istnieje — pomijam')
+        return
     cutoff = time.time() - settings.TRANSFERS_RETENTION_DAYS * 86400
     removed = 0
     for name in os.listdir(settings.TRANSFERS_DIR):
