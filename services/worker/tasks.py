@@ -10,6 +10,7 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings.production')
 django.setup()
 
 from django.conf import settings  # noqa: E402
+from apps.connections.models import Connection  # noqa: E402
 from apps.transfers.models import TransferJob, TransferLog  # noqa: E402
 from modules.sftp.handler import SFTPHandler, SFTPTransferError  # noqa: E402
 from modules.rsync.handler import RsyncHandler, RsyncTransferError  # noqa: E402
@@ -230,3 +231,31 @@ def cleanup_old_transfers():
         except OSError as e:
             logger.warning(f'Retention: nie udało się usunąć {path}: {e}')
     logger.info(f'Retention: usunięto {removed} plików z {settings.TRANSFERS_DIR}')
+
+
+@app.task(name='transfers.dry_run_preview')
+def dry_run_preview(connection_id: int, source_path: str, destination_path: str, gpg_passphrase: str | None = None) -> dict:
+    try:
+        conn = Connection.objects.get(pk=connection_id)
+    except Connection.DoesNotExist:
+        return {'exit_code': None, 'output': f'Connection {connection_id} nie istnieje'}
+
+    params = {
+        'host': conn.host,
+        'port': conn.port,
+        'username': conn.username,
+        'password': conn.password,
+        'ssh_key': conn.ssh_key,
+        'source_path': source_path,
+        'destination_path': destination_path,
+        'compress': conn.compress,
+        'encrypt': conn.encrypt,
+        'gpg_passphrase': gpg_passphrase,
+        'strict_host_key_checking': conn.strict_host_key_checking,
+        'known_host_key': conn.known_host_key,
+    }
+
+    def log_callback(level: str, message: str):
+        logger.info(f'[dry-run preview] {level}: {message}') if level != 'warn' else logger.warning(f'[dry-run preview] {message}')
+
+    return RsyncHandler(params).preview(log_callback)

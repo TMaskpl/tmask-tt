@@ -486,3 +486,70 @@ class TestCleanupOldTransfers:
              patch('tasks.settings.TRANSFERS_RETENTION_DAYS', 1):
             from tasks import cleanup_old_transfers
             cleanup_old_transfers()
+
+
+class TestDryRunPreviewTask:
+    def test_builds_params_from_connection_and_delegates_to_preview(self):
+        with patch('tasks.Connection') as MockConn, \
+             patch('tasks.RsyncHandler') as MockRsync:
+            mock_conn = MagicMock()
+            mock_conn.host = '10.0.0.5'
+            mock_conn.port = 22
+            mock_conn.username = 'deploy'
+            mock_conn.password = None
+            mock_conn.ssh_key = 'key-data'
+            mock_conn.compress = True
+            mock_conn.encrypt = False
+            mock_conn.strict_host_key_checking = True
+            mock_conn.known_host_key = 'known-host-entry'
+            MockConn.objects.get.return_value = mock_conn
+            MockRsync.return_value.preview.return_value = {'exit_code': 0, 'output': 'ok'}
+
+            from tasks import dry_run_preview
+            result = dry_run_preview(connection_id=1, source_path='/transfers/f.tar', destination_path='/backup/')
+
+            assert result == {'exit_code': 0, 'output': 'ok'}
+            params = MockRsync.call_args[0][0]
+            assert params['host'] == '10.0.0.5'
+            assert params['source_path'] == '/transfers/f.tar'
+            assert params['destination_path'] == '/backup/'
+            assert params['compress'] is True
+
+    def test_returns_error_dict_when_connection_not_found(self):
+        with patch('tasks.Connection') as MockConn:
+            MockConn.DoesNotExist = Exception
+            MockConn.objects.get.side_effect = MockConn.DoesNotExist
+            from tasks import dry_run_preview
+            result = dry_run_preview(connection_id=999, source_path='/transfers/f.tar', destination_path='/backup/')
+            assert result['exit_code'] is None
+            assert 'nie istnieje' in result['output']
+
+    def test_passes_gpg_passphrase_to_params(self):
+        with patch('tasks.Connection') as MockConn, \
+             patch('tasks.RsyncHandler') as MockRsync:
+            mock_conn = MagicMock()
+            mock_conn.encrypt = True
+            MockConn.objects.get.return_value = mock_conn
+            MockRsync.return_value.preview.return_value = {'exit_code': 0, 'output': 'ok'}
+
+            from tasks import dry_run_preview
+            dry_run_preview(
+                connection_id=1, source_path='/transfers/f.tar',
+                destination_path='/backup/', gpg_passphrase='secret123',
+            )
+
+            params = MockRsync.call_args[0][0]
+            assert params['gpg_passphrase'] == 'secret123'
+            assert params['encrypt'] is True
+
+    def test_delegates_to_rsync_handler_preview_not_execute(self):
+        with patch('tasks.Connection') as MockConn, \
+             patch('tasks.RsyncHandler') as MockRsync:
+            MockConn.objects.get.return_value = MagicMock()
+            MockRsync.return_value.preview.return_value = {'exit_code': 0, 'output': 'ok'}
+
+            from tasks import dry_run_preview
+            dry_run_preview(connection_id=1, source_path='/a', destination_path='/b')
+
+            MockRsync.return_value.preview.assert_called_once()
+            MockRsync.return_value.execute.assert_not_called()

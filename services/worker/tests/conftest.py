@@ -45,3 +45,5 @@ django.setup = lambda: None
 sys.modules.setdefault('apps', MagicMock())
 sys.modules.setdefault('apps.transfers', MagicMock())
 sys.modules.setdefault('apps.transfers.models', MagicMock())
+sys.modules.setdefault('apps.connections', MagicMock())
+sys.modules.setdefault('apps.connections.models', MagicMock())
