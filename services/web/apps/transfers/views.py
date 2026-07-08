@@ -37,6 +37,34 @@ def transfer_create(request):
     return render(request, 'transfers/create.html', {'form': form})
 
 
+@require_role(ROLE_OPERATOR)
+def transfer_dry_run(request):
+    form = TransferForm(request.POST or None, request.FILES or None, user=request.user)
+    if request.method == 'POST' and form.is_valid():
+        connection = form.cleaned_data['connection']
+        if connection.protocol != 'rsync':
+            form.add_error(None, 'Dry-run jest dostępny tylko dla połączeń rsync.')
+            return render(request, 'transfers/create.html', {'form': form})
+        uploaded = form.cleaned_data['upload']
+        dest = form.cleaned_data['source_path']
+        try:
+            with open(dest, 'wb') as fh:
+                for chunk in uploaded.chunks():
+                    fh.write(chunk)
+        except OSError as exc:
+            form.add_error(None, f'Nie udało się zapisać pliku: {exc}')
+            return render(request, 'transfers/create.html', {'form': form})
+        passphrase = (form.cleaned_data.get('gpg_passphrase') or '').strip() or None
+        result = current_app.send_task('transfers.dry_run_preview', kwargs={
+            'connection_id': connection.pk,
+            'source_path': form.cleaned_data['source_path'],
+            'destination_path': form.cleaned_data['destination_path'],
+            'gpg_passphrase': passphrase,
+        })
+        return render(request, 'transfers/create.html', {'form': form, 'dry_run_task_id': result.id})
+    return render(request, 'transfers/create.html', {'form': form})
+
+
 @require_role(ROLE_READONLY)
 def transfer_detail(request, pk):
     job = get_object_or_404(

@@ -299,3 +299,73 @@ class TestValidateTransferPath:
     def test_rejects_control_characters(self):
         with pytest.raises(ValidationError):
             _validate_transfer_path('/data/file\x00name')
+
+
+@pytest.mark.django_db
+class TestTransferDryRunView:
+    def test_dry_run_forbidden_for_readonly(self, readonly_client, regular_user, make_connection):
+        conn = make_connection(regular_user, protocol='rsync')
+        response = readonly_client.post(reverse('transfers:dry_run'), {
+            'connection': conn.pk,
+            'destination_path': '/backup/',
+            'upload': SimpleUploadedFile('file.tar', b'payload'),
+        })
+        assert response.status_code == 403
+
+    def test_dry_run_rejects_non_rsync_connection(self, auth_client, regular_user, make_connection, settings, tmp_path):
+        settings.TRANSFERS_DIR = str(tmp_path)
+        conn = make_connection(regular_user, protocol='sftp')
+        response = auth_client.post(reverse('transfers:dry_run'), {
+            'connection': conn.pk,
+            'destination_path': '/backup/',
+            'upload': SimpleUploadedFile('file.tar', b'payload'),
+        })
+        assert response.status_code == 200
+        assert 'rsync' in response.content.decode().lower()
+        assert TransferJob.objects.count() == 0
+
+    def test_dry_run_validates_form_same_as_create(self, auth_client, regular_user, make_connection, settings, tmp_path):
+        settings.TRANSFERS_DIR = str(tmp_path)
+        conn = make_connection(regular_user, protocol='rsync')
+        response = auth_client.post(reverse('transfers:dry_run'), {
+            'connection': conn.pk,
+            'destination_path': '/backup/',
+            # brak 'upload' — pole wymagane
+        })
+        assert response.status_code == 200
+        assert TransferJob.objects.count() == 0
+
+    def test_dry_run_saves_upload_without_creating_transferjob(self, auth_client, regular_user, make_connection, settings, tmp_path, mocker):
+        settings.TRANSFERS_DIR = str(tmp_path)
+        mocker.patch(
+            'apps.transfers.views.current_app.send_task',
+            return_value=SimpleNamespace(id='fake-task-id'),
+        )
+        conn = make_connection(regular_user, protocol='rsync')
+        upload = SimpleUploadedFile('preview.tar', b'payload-bytes')
+        response = auth_client.post(reverse('transfers:dry_run'), {
+            'connection': conn.pk,
+            'destination_path': '/backup/',
+            'upload': upload,
+        })
+        assert response.status_code == 200
+        assert TransferJob.objects.count() == 0
+        assert (tmp_path / 'preview.tar').exists()
+
+    def test_dry_run_dispatches_task_and_returns_task_id(self, auth_client, regular_user, make_connection, settings, tmp_path, mocker):
+        settings.TRANSFERS_DIR = str(tmp_path)
+        mock_send = mocker.patch(
+            'apps.transfers.views.current_app.send_task',
+            return_value=SimpleNamespace(id='fake-task-id'),
+        )
+        conn = make_connection(regular_user, protocol='rsync')
+        upload = SimpleUploadedFile('preview.tar', b'payload-bytes')
+        response = auth_client.post(reverse('transfers:dry_run'), {
+            'connection': conn.pk,
+            'destination_path': '/backup/',
+            'upload': upload,
+        })
+        assert response.status_code == 200
+        mock_send.assert_called_once()
+        assert mock_send.call_args[0][0] == 'transfers.dry_run_preview'
+        assert response.context['dry_run_task_id'] == 'fake-task-id'
