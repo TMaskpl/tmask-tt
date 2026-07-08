@@ -369,3 +369,9 @@ class TestTransferDryRunView:
         mock_send.assert_called_once()
         assert mock_send.call_args[0][0] == 'transfers.dry_run_preview'
         assert response.context['dry_run_task_id'] == 'fake-task-id'
+        # Verify the actual kwargs passed to the task dispatch
+        kwargs = mock_send.call_args.kwargs
+        assert kwargs['kwargs']['connection_id'] == conn.pk
+        assert kwargs['kwargs']['source_path'] == f'{tmp_path}/preview.tar'
+        assert kwargs['kwargs']['destination_path'] == '/backup/'
+        assert kwargs['kwargs']['gpg_passphrase'] is None
