@@ -1,0 +1,16 @@
+{% if state == 'PENDING' or state == 'STARTED' %}
+<div id="dry-run-result" class="msg-ok"
+  hx-get="{% url 'transfers:dry_run_status' task_id %}"
+  hx-trigger="every 2s"
+  hx-swap="outerHTML">
+  &gt; DRY-RUN W TOKU...
+</div>
+{% elif state == 'SUCCESS' and result.exit_code == 0 %}
+<div id="dry-run-result" class="msg-ok">&gt; DRY-RUN OK — poniżej co zostanie przesłane:
+{{ result.output }}</div>
+{% elif state == 'SUCCESS' %}
+<div id="dry-run-result" class="msg-error">&gt; DRY-RUN FAILED (exit {{ result.exit_code }}):
+{{ result.output }}</div>
+{% else %}
+<div id="dry-run-result" class="msg-error">&gt; DRY-RUN BŁĄD — nie udało się wykonać podglądu.</div>
+{% endif %}

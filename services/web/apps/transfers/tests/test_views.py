@@ -375,3 +375,49 @@ class TestTransferDryRunView:
         assert kwargs['kwargs']['source_path'] == f'{tmp_path}/preview.tar'
         assert kwargs['kwargs']['destination_path'] == '/backup/'
         assert kwargs['kwargs']['gpg_passphrase'] is None
+
+
+@pytest.mark.django_db
+class TestTransferDryRunStatusView:
+    def test_status_forbidden_for_readonly(self, readonly_client):
+        response = readonly_client.get(reverse('transfers:dry_run_status', args=['fake-id']))
+        assert response.status_code == 403
+
+    def test_status_renders_pending(self, auth_client, mocker):
+        mock_result = mocker.MagicMock()
+        mock_result.state = 'PENDING'
+        mocker.patch('apps.transfers.views.AsyncResult', return_value=mock_result)
+        response = auth_client.get(reverse('transfers:dry_run_status', args=['fake-id']))
+        assert response.status_code == 200
+        body = response.content.decode()
+        assert 'every' in body  # kontener nadal polluje (hx-trigger)
+
+    def test_status_renders_success_exit_zero(self, auth_client, mocker):
+        mock_result = mocker.MagicMock()
+        mock_result.state = 'SUCCESS'
+        mock_result.result = {'exit_code': 0, 'output': 'sending incremental file list\nfile.tar'}
+        mocker.patch('apps.transfers.views.AsyncResult', return_value=mock_result)
+        response = auth_client.get(reverse('transfers:dry_run_status', args=['fake-id']))
+        assert response.status_code == 200
+        body = response.content.decode()
+        assert 'file.tar' in body
+        assert 'msg-ok' in body
+
+    def test_status_renders_success_nonzero_exit(self, auth_client, mocker):
+        mock_result = mocker.MagicMock()
+        mock_result.state = 'SUCCESS'
+        mock_result.result = {'exit_code': 23, 'output': 'rsync: No such file or directory'}
+        mocker.patch('apps.transfers.views.AsyncResult', return_value=mock_result)
+        response = auth_client.get(reverse('transfers:dry_run_status', args=['fake-id']))
+        assert response.status_code == 200
+        body = response.content.decode()
+        assert 'No such file' in body
+        assert 'msg-error' in body
+
+    def test_status_renders_failure(self, auth_client, mocker):
+        mock_result = mocker.MagicMock()
+        mock_result.state = 'FAILURE'
+        mocker.patch('apps.transfers.views.AsyncResult', return_value=mock_result)
+        response = auth_client.get(reverse('transfers:dry_run_status', args=['fake-id']))
+        assert response.status_code == 200
+        assert 'msg-error' in response.content.decode()

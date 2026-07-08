@@ -1,4 +1,5 @@
 from celery import current_app
+from celery.result import AsyncResult
 from django.contrib import messages
 from django.db import transaction
 from django.shortcuts import render, redirect, get_object_or_404
@@ -63,6 +64,16 @@ def transfer_dry_run(request):
         })
         return render(request, 'transfers/create.html', {'form': form, 'dry_run_task_id': result.id})
     return render(request, 'transfers/create.html', {'form': form})
+
+
+@require_role(ROLE_OPERATOR)
+def transfer_dry_run_status(request, task_id):
+    result = AsyncResult(task_id)
+    return render(request, 'transfers/_dry_run_result.html', {
+        'task_id': task_id,
+        'state': result.state,
+        'result': result.result if result.state == 'SUCCESS' else None,
+    })
 
 
 @require_role(ROLE_READONLY)
