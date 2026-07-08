@@ -491,8 +491,10 @@ class TestTransferDryRunView:
         assert response.status_code == 200
         mock_send.assert_called_once()
         assert mock_send.call_args[0][0] == 'transfers.dry_run_preview'
-        assert 'fake-task-id' in response.content.decode()
+        assert response.context['dry_run_task_id'] == 'fake-task-id'
 ```
+
+**Uwaga (poprawka po samo-review planu, znaleziona podczas implementacji Task 3):** oryginalna wersja tego testu sprawdzała `'fake-task-id' in response.content.decode()` — czyli wymagała, żeby `create.html` faktycznie wyrenderował `task_id` gdzieś w HTML. To nie może przejść na tym etapie: `create.html` nie zostanie dotknięty aż do Task 5 (Task 3 dokłada `dry_run_task_id` tylko do kontekstu widoku, nie do szablonu). Poprawiona wersja testuje kontrakt widoku bezpośrednio przez `response.context` — właściwa granica testu dla Task 3, niezależna od tego, czy/jak szablon go później wyrenderuje.
 
 - [ ] **Step 2: Uruchom testy — sprawdź że padają**
 
