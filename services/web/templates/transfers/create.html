@@ -37,7 +37,11 @@
       </div>
       {% endfor %}
       <button type="submit" class="btn">[ EXECUTE TRANSFER ]</button>
+      <button type="submit" formaction="{% url 'transfers:dry_run' %}" class="btn btn-warn" id="dry-run-btn">[ DRY RUN ]</button>
     </form>
+    {% if dry_run_task_id %}
+    <div hx-get="{% url 'transfers:dry_run_status' dry_run_task_id %}" hx-trigger="load" hx-swap="outerHTML"></div>
+    {% endif %}
   </div>
 
   {% if job %}
@@ -76,4 +80,19 @@
   </div>
   {% endif %}
 </div>
+{{ connection_protocols|json_script:"connection-protocols" }}
+<script>
+(function () {
+  var protocols = JSON.parse(document.getElementById('connection-protocols').textContent);
+  var select = document.getElementById('id_connection');
+  var btn = document.getElementById('dry-run-btn');
+  if (!select || !btn) return;
+  function sync() {
+    var proto = protocols[select.value];
+    btn.style.display = (proto === 'rsync') ? 'inline-block' : 'none';
+  }
+  select.addEventListener('change', sync);
+  sync();
+})();
+</script>
 {% endblock %}

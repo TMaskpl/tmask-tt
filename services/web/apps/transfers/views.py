@@ -6,8 +6,13 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.http import require_POST
 from apps.accounts.permissions import require_role
 from apps.accounts.models import ROLE_OPERATOR, ROLE_READONLY
+from apps.connections.models import Connection
 from .models import TransferJob, STATUS_RUNNING, STATUS_PENDING
 from .forms import TransferForm
+
+
+def _connection_protocols():
+    return dict(Connection.objects.values_list('pk', 'protocol'))
 
 
 @require_role(ROLE_OPERATOR)
@@ -22,7 +27,7 @@ def transfer_create(request):
                     fh.write(chunk)
         except OSError as exc:
             form.add_error(None, f'Nie udało się zapisać pliku: {exc}')
-            return render(request, 'transfers/create.html', {'form': form})
+            return render(request, 'transfers/create.html', {'form': form, 'connection_protocols': _connection_protocols()})
         with transaction.atomic():
             job = form.save(commit=False)
             job.owner = request.user
@@ -35,17 +40,18 @@ def transfer_create(request):
                 TransferJob.objects.filter(pk=job.pk).update(celery_task_id=result.id)
             transaction.on_commit(_dispatch)
         return redirect('transfers:detail', pk=job.pk)
-    return render(request, 'transfers/create.html', {'form': form})
+    return render(request, 'transfers/create.html', {'form': form, 'connection_protocols': _connection_protocols()})
 
 
 @require_role(ROLE_OPERATOR)
 def transfer_dry_run(request):
     form = TransferForm(request.POST or None, request.FILES or None, user=request.user)
+    ctx_base = {'connection_protocols': _connection_protocols()}
     if request.method == 'POST' and form.is_valid():
         connection = form.cleaned_data['connection']
         if connection.protocol != 'rsync':
             form.add_error(None, 'Dry-run jest dostępny tylko dla połączeń rsync.')
-            return render(request, 'transfers/create.html', {'form': form})
+            return render(request, 'transfers/create.html', {**ctx_base, 'form': form})
         uploaded = form.cleaned_data['upload']
         dest = form.cleaned_data['source_path']
         try:
@@ -54,7 +60,7 @@ def transfer_dry_run(request):
                     fh.write(chunk)
         except OSError as exc:
             form.add_error(None, f'Nie udało się zapisać pliku: {exc}')
-            return render(request, 'transfers/create.html', {'form': form})
+            return render(request, 'transfers/create.html', {**ctx_base, 'form': form})
         passphrase = (form.cleaned_data.get('gpg_passphrase') or '').strip() or None
         result = current_app.send_task('transfers.dry_run_preview', kwargs={
             'connection_id': connection.pk,
@@ -62,8 +68,8 @@ def transfer_dry_run(request):
             'destination_path': form.cleaned_data['destination_path'],
             'gpg_passphrase': passphrase,
         })
-        return render(request, 'transfers/create.html', {'form': form, 'dry_run_task_id': result.id})
-    return render(request, 'transfers/create.html', {'form': form})
+        return render(request, 'transfers/create.html', {**ctx_base, 'form': form, 'dry_run_task_id': result.id})
+    return render(request, 'transfers/create.html', {**ctx_base, 'form': form})
 
 
 @require_role(ROLE_OPERATOR)
