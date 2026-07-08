@@ -3,6 +3,7 @@ from unittest.mock import patch, MagicMock
 
 from modules.rsync.handler import RsyncHandler, RsyncTransferError
 from modules.rsync.config import RSYNC_MAX_RETRIES, RSYNC_RETRY_DELAY
+from modules.gpg.handler import GPGEncryptError
 
 
 class TestRsyncHandler:
@@ -541,3 +542,11 @@ class TestRsyncHandlerPreview:
 
         assert len(created_paths) == 1
         assert not __import__('os').path.exists(created_paths[0])
+
+    def test_gpg_encryption_failure_returns_dict_instead_of_raising(self):
+        with patch('modules.rsync.handler.encrypt_file', side_effect=GPGEncryptError('bad passphrase')):
+            result = RsyncHandler(self._make_params(encrypt=True, gpg_passphrase='wrong')).preview(
+                lambda lvl, msg: None
+            )
+            assert result['exit_code'] is None
+            assert 'GPG ENCRYPTION FAILED' in result['output']
