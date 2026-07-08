@@ -172,3 +172,44 @@ class RsyncHandler:
                 os.unlink(encrypted_path)
             if known_hosts_path and os.path.exists(known_hosts_path):
                 os.unlink(known_hosts_path)
+
+    def preview(self, log_callback: Callable[[str, str], None]) -> dict:
+        use_gpg = self.params.get('encrypt') and self.params.get('gpg_passphrase')
+        encrypted_path = None
+        known_hosts_path = None
+        warning_prefix = ''
+
+        try:
+            if self.params.get('strict_host_key_checking') and self.params.get('known_host_key'):
+                with tempfile.NamedTemporaryFile(mode='w', suffix='_known_hosts', delete=False) as f:
+                    f.write(self.params['known_host_key'])
+                    known_hosts_path = f.name
+            else:
+                warning_prefix = 'Host key verification DISABLED — connection is vulnerable to MITM\n'
+                log_callback('warn', 'Host key verification DISABLED — connection is vulnerable to MITM')
+
+            if use_gpg:
+                log_callback('info', 'GPG: szyfrowanie pliku...')
+                try:
+                    encrypted_path = encrypt_file(self.params['source_path'], self.params['gpg_passphrase'])
+                except GPGEncryptError as e:
+                    return {'exit_code': None, 'output': warning_prefix + f'GPG ENCRYPTION FAILED: {e}'}
+                source_override = encrypted_path
+                dest_override = self.params['destination_path'] + '.gpg'
+            else:
+                source_override = None
+                dest_override = None
+
+            dry_cmd = self._build_command(
+                source_override=source_override,
+                dest_override=dest_override,
+                known_hosts_path=known_hosts_path,
+                dry_run=True,
+            )
+            exit_code, output = self._run_attempt(dry_cmd, log_callback)
+            return {'exit_code': exit_code, 'output': warning_prefix + output}
+        finally:
+            if encrypted_path and os.path.exists(encrypted_path):
+                os.unlink(encrypted_path)
+            if known_hosts_path and os.path.exists(known_hosts_path):
+                os.unlink(known_hosts_path)

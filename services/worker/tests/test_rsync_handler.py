@@ -414,3 +414,130 @@ class TestRsyncChecksumVerification:
             )).execute(lambda lvl, msg: logs.append((lvl, msg)))
         mock_verify.assert_not_called()
         assert any('SHA-256' in msg and 'pomijane' in msg for _, msg in logs)
+
+
+class TestRsyncHandlerPreview:
+    def _make_params(self, **kwargs):
+        defaults = {
+            'host': '192.168.1.10',
+            'port': 22,
+            'username': 'deploy',
+            'password': None,
+            'ssh_key': None,
+            'source_path': '/data/',
+            'destination_path': '/backup/',
+            'compress': False,
+            'encrypt': False,
+            'gpg_passphrase': None,
+            'strict_host_key_checking': False,
+            'known_host_key': None,
+        }
+        defaults.update(kwargs)
+        return defaults
+
+    def test_returns_exit_code_and_output_on_success(self):
+        with patch('modules.rsync.handler.subprocess.Popen') as MockPopen:
+            mock_proc = MagicMock()
+            mock_proc.stdout = iter(['sending incremental file list\n', 'file.tar\n'])
+            mock_proc.wait.return_value = 0
+            MockPopen.return_value = mock_proc
+            result = RsyncHandler(self._make_params()).preview(lambda lvl, msg: None)
+            assert result['exit_code'] == 0
+            assert 'file.tar' in result['output']
+
+    def test_returns_nonzero_exit_code_instead_of_raising(self):
+        with patch('modules.rsync.handler.subprocess.Popen') as MockPopen:
+            mock_proc = MagicMock()
+            mock_proc.stdout = iter(['Permission denied (publickey).\n'])
+            mock_proc.wait.return_value = 255
+            MockPopen.return_value = mock_proc
+            result = RsyncHandler(self._make_params()).preview(lambda lvl, msg: None)
+            assert result['exit_code'] == 255
+            assert 'Permission denied' in result['output']
+
+    def test_uses_dry_run_flag_in_command(self):
+        calls = []
+
+        def fake_popen(cmd, **kwargs):
+            calls.append(list(cmd))
+            m = MagicMock()
+            m.stdout = iter([])
+            m.wait.return_value = 0
+            return m
+
+        with patch('modules.rsync.handler.subprocess.Popen', side_effect=fake_popen):
+            RsyncHandler(self._make_params()).preview(lambda lvl, msg: None)
+
+        assert len(calls) == 1
+        assert '--dry-run' in calls[0]
+
+    def test_does_not_execute_real_transfer(self):
+        call_count = [0]
+
+        def fake_popen(cmd, **kwargs):
+            call_count[0] += 1
+            m = MagicMock()
+            m.stdout = iter([])
+            m.wait.return_value = 0
+            return m
+
+        with patch('modules.rsync.handler.subprocess.Popen', side_effect=fake_popen):
+            RsyncHandler(self._make_params()).preview(lambda lvl, msg: None)
+
+        assert call_count[0] == 1  # tylko dry-run, żadnego drugiego wywołania
+
+    def test_prepends_host_key_warning_when_verification_disabled(self):
+        with patch('modules.rsync.handler.subprocess.Popen') as MockPopen:
+            mock_proc = MagicMock()
+            mock_proc.stdout = iter(['sending incremental file list\n'])
+            mock_proc.wait.return_value = 0
+            MockPopen.return_value = mock_proc
+            result = RsyncHandler(self._make_params(strict_host_key_checking=False)).preview(
+                lambda lvl, msg: None
+            )
+            assert 'Host key verification DISABLED' in result['output']
+
+    def test_uses_encrypted_path_when_gpg_enabled(self):
+        encrypted_tmp = '/tmp/data_abc.gpg'
+        calls = []
+
+        def fake_popen(cmd, **kwargs):
+            calls.append(list(cmd))
+            m = MagicMock()
+            m.stdout = iter([])
+            m.wait.return_value = 0
+            return m
+
+        with patch('modules.rsync.handler.encrypt_file', return_value=encrypted_tmp), \
+             patch('modules.rsync.handler.os.path.exists', return_value=True), \
+             patch('modules.rsync.handler.os.unlink'), \
+             patch('modules.rsync.handler.subprocess.Popen', side_effect=fake_popen):
+            RsyncHandler(self._make_params(encrypt=True, gpg_passphrase='secret')).preview(
+                lambda lvl, msg: None
+            )
+
+        assert len(calls) == 1
+        assert encrypted_tmp in calls[0]
+
+    def test_creates_and_cleans_up_known_hosts_tempfile(self):
+        params = self._make_params(
+            strict_host_key_checking=True,
+            known_host_key='192.168.1.10 ssh-rsa AAAA...',
+        )
+        created_paths = []
+
+        def fake_popen(cmd, **kwargs):
+            for part in cmd:
+                if 'UserKnownHostsFile=' in part:
+                    path = part.split('=', 1)[1].strip("'")
+                    created_paths.append(path)
+            m = MagicMock()
+            m.stdout = iter([])
+            m.wait.return_value = 0
+            return m
+
+        with patch('modules.rsync.handler.subprocess.Popen', side_effect=fake_popen):
+            RsyncHandler(params).preview(lambda lvl, msg: None)
+
+        assert len(created_paths) == 1
+        assert not __import__('os').path.exists(created_paths[0])
