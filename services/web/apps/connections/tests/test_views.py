@@ -25,7 +25,7 @@ class TestConnectionList:
 class TestConnectionCreate:
     def test_create_connection(self, admin_client, admin_user):
         response = admin_client.post(reverse('connections:create'), {
-            'name': 'New Server', 'host': '10.0.0.1', 'port': 22,
+            'name': 'New Server', 'kind': 'ssh', 'host': '10.0.0.1', 'port': 22,
             'username': 'root', 'password': 'pass', 'protocol': 'sftp',
             'compress': False, 'encrypt': False, 'strict_host_key_checking': True,
         })
@@ -145,7 +145,7 @@ class TestConnectionEdit:
     def test_edit_saves_changes(self, admin_client, regular_user, make_connection):
         conn = make_connection(regular_user, name='Old Name')
         response = admin_client.post(reverse('connections:edit', args=[conn.pk]), {
-            'name': 'New Name', 'host': '10.0.0.1', 'port': 22,
+            'name': 'New Name', 'kind': 'ssh', 'host': '10.0.0.1', 'port': 22,
             'username': 'root', 'password': 'pass', 'protocol': 'sftp',
             'compress': False, 'encrypt': False, 'strict_host_key_checking': True,
         })
@@ -305,3 +305,28 @@ class TestOrgWideVisibility:
         )
         resp = auth_client.get(f'/connections/{conn.pk}/test/')
         assert resp.status_code == 200
+
+
+@pytest.mark.django_db
+class TestConnectionCreatePostgresKind:
+    def test_create_postgres_connection_requires_db_name(self, admin_client):
+        response = admin_client.post(reverse('connections:create'), {
+            'name': 'PG', 'kind': 'postgres', 'host': '10.0.0.5', 'port': 5432,
+            'username': 'postgres', 'password': 'pass',
+            'protocol': 'sftp', 'compress': False, 'encrypt': False,
+            'strict_host_key_checking': True,
+        })
+        assert response.status_code == 200
+        assert response.context['form'].errors
+
+    def test_create_postgres_connection_success(self, admin_client):
+        response = admin_client.post(reverse('connections:create'), {
+            'name': 'PG', 'kind': 'postgres', 'host': '10.0.0.5', 'port': 5432,
+            'username': 'postgres', 'password': 'pass', 'db_name': 'proddb',
+            'protocol': 'sftp', 'compress': False, 'encrypt': False,
+            'strict_host_key_checking': True,
+        })
+        assert response.status_code == 302
+        conn = Connection.objects.get(name='PG')
+        assert conn.kind == 'postgres'
+        assert conn.db_name == 'proddb'

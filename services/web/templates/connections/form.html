@@ -9,8 +9,24 @@
     <div class="msg-error">{% for e in form.non_field_errors %}> {{ e }}{% endfor %}</div>
     {% endif %}
     {% for field in form %}
-    {% if field.name == 'known_host_key' %}
-    <div class="field" id="known-host-section" style="display:none">
+    {% if field.name == 'db_name' %}
+    <div class="field postgres-only-field">
+      <label>{{ field.label|upper }}:</label>
+      {{ field }}
+      {% if field.errors %}
+      <div style="color:var(--red);font-size:0.8rem;">{% for e in field.errors %}{{ e }}{% endfor %}</div>
+      {% endif %}
+    </div>
+    {% elif field.name == 'ssh_key' or field.name == 'protocol' or field.name == 'compress' or field.name == 'strict_host_key_checking' %}
+    <div class="field ssh-only-field">
+      <label>{{ field.label|upper }}:</label>
+      {{ field }}
+      {% if field.errors %}
+      <div style="color:var(--red);font-size:0.8rem;">{% for e in field.errors %}{{ e }}{% endfor %}</div>
+      {% endif %}
+    </div>
+    {% elif field.name == 'known_host_key' %}
+    <div class="field ssh-only-field" id="known-host-section" style="display:none">
       <label>{{ field.label|upper }}:</label>
       {{ field }}
       {% if conn %}
@@ -25,8 +41,8 @@
       {% endif %}
     </div>
     {% elif field.name == 'dry_run_before_transfer' %}
-    <div class="box-title" style="margin-top:1.2rem;font-size:0.85rem;">[ OPCJE ZAAWANSOWANE ]</div>
-    <div class="field">
+    <div class="box-title ssh-only-field" style="margin-top:1.2rem;font-size:0.85rem;">[ OPCJE ZAAWANSOWANE ]</div>
+    <div class="field ssh-only-field">
       <label>{{ field.label|upper }}:</label>
       {{ field }}
       <span style="font-size:0.75rem;color:var(--dim);">Sprawdza listę plików bez kopiowania. Transfer anulowany jeśli dry-run zakończy się błędem.</span>
@@ -63,16 +79,33 @@
   function toggleKnownHost() {
     var strict = document.getElementById('id_strict_host_key_checking');
     var section = document.getElementById('known-host-section');
-    if (strict && section) {
+    var kind = document.getElementById('id_kind');
+    if (strict && section && kind && kind.value === 'ssh') {
       section.style.display = strict.checked ? 'block' : 'none';
+    }
+  }
+
+  function toggleKind() {
+    var kind = document.getElementById('id_kind');
+    if (!kind) return;
+    var sshFields = document.querySelectorAll('.ssh-only-field');
+    var pgFields = document.querySelectorAll('.postgres-only-field');
+    sshFields.forEach(function (el) { el.style.display = (kind.value === 'ssh') ? '' : 'none'; });
+    pgFields.forEach(function (el) { el.style.display = (kind.value === 'postgres') ? '' : 'none'; });
+    if (kind.value === 'ssh') {
+      toggleKnownHost();
     }
   }
 
   document.addEventListener('DOMContentLoaded', function () {
     var strict = document.getElementById('id_strict_host_key_checking');
+    var kind = document.getElementById('id_kind');
     if (strict) {
       strict.addEventListener('change', toggleKnownHost);
-      toggleKnownHost();
+    }
+    if (kind) {
+      kind.addEventListener('change', toggleKind);
+      toggleKind();
     }
   });
 

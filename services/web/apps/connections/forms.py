@@ -1,18 +1,19 @@
 from django import forms
-from .models import Connection
+from .models import Connection, KIND_POSTGRES
 
 
 class ConnectionForm(forms.ModelForm):
     class Meta:
         model = Connection
         fields = [
-            'name', 'host', 'port', 'username', 'password', 'ssh_key',
+            'name', 'kind', 'host', 'port', 'username', 'password', 'db_name', 'ssh_key',
             'protocol', 'compress', 'encrypt', 'strict_host_key_checking',
             'known_host_key', 'dry_run_before_transfer', 'verify_checksum',
         ]
         labels = {
             'dry_run_before_transfer': 'Dry-run przed transferem (tylko rsync)',
             'verify_checksum':         'Weryfikuj integralność SHA-256 po transferze',
+            'db_name':                 'DB NAME (tylko Postgres)',
         }
         widgets = {
             'password': forms.PasswordInput(render_value=True),
@@ -25,8 +26,15 @@ class ConnectionForm(forms.ModelForm):
 
     def clean(self):
         cleaned = super().clean()
-        if not cleaned.get('password') and not cleaned.get('ssh_key'):
-            raise forms.ValidationError('Podaj hasło lub klucz SSH.')
+        kind = cleaned.get('kind')
+        if kind == KIND_POSTGRES:
+            if not cleaned.get('password'):
+                raise forms.ValidationError('Podaj hasło do bazy Postgres.')
+            if not cleaned.get('db_name'):
+                raise forms.ValidationError('Podaj nazwę bazy danych (DB NAME).')
+        else:
+            if not cleaned.get('password') and not cleaned.get('ssh_key'):
+                raise forms.ValidationError('Podaj hasło lub klucz SSH.')
         return cleaned
 
     def clean_dry_run_before_transfer(self):

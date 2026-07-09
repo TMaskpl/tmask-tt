@@ -12,7 +12,7 @@
   <table>
     <thead>
       <tr>
-        <th>NAME</th><th>HOST</th><th>PORT</th><th>PROTO</th>
+        <th>NAME</th><th>KIND</th><th>HOST</th><th>PORT</th><th>PROTO</th>
         <th>COMPRESS</th><th>ENCRYPT</th><th>UTWORZYŁ</th><th class="col-actions">ACTIONS</th>
       </tr>
     </thead>
@@ -20,6 +20,7 @@
       {% for conn in connections %}
       <tr>
         <td class="glow">{{ conn.name }}</td>
+        <td>{{ conn.kind|upper }}</td>
         <td>{{ conn.host }}</td>
         <td>{{ conn.port }}</td>
         <td>{{ conn.protocol|upper }}</td>
