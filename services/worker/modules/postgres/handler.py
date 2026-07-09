@@ -117,6 +117,8 @@ class PgTransferHandler:
                     log_callback('warn', f'ROW COUNT MISMATCH w "{table}": source={src_count} dest={dst_count}')
                 else:
                     log_callback('info', f'ROW COUNT OK w "{table}": {src_count}')
+        except psycopg2.Error as e:
+            log_callback('warn', f'ROW COUNT VERIFICATION FAILED — {e}')
         finally:
             src_conn.close()
             dst_conn.close()

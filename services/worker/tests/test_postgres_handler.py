@@ -198,3 +198,27 @@ class TestPgTransferHandler:
 
             src_conn.close.assert_called_once()
             assert any(lvl == 'warn' and 'ROW COUNT VERIFICATION SKIPPED' in msg for lvl, msg in logs)
+
+    def test_comparison_loop_error_degrades_to_warn_not_exception(self):
+        # Regression test: a psycopg2.Error raised during table discovery or the
+        # per-table COUNT(*) comparison loop must NOT propagate out of
+        # _verify_row_counts — it must degrade to a warn log line, and both
+        # connections must still be closed via the finally block.
+        with patch('modules.postgres.handler.subprocess.Popen') as MockPopen, \
+             patch('modules.postgres.handler.psycopg2.connect') as mock_connect:
+            MockPopen.side_effect = [self._mock_proc([], 0), self._mock_proc([], 0)]
+
+            src_cursor = MagicMock()
+            src_cursor.execute.side_effect = psycopg2.OperationalError('server closed the connection unexpectedly')
+            src_conn = MagicMock()
+            src_conn.cursor.return_value.__enter__.return_value = src_cursor
+            dst_conn = MagicMock()
+            mock_connect.side_effect = [src_conn, dst_conn]
+
+            logs = []
+            handler = PgTransferHandler(self._make_params(table_name='users', verify_row_count=True))
+            handler.execute(log_callback=lambda lvl, msg: logs.append((lvl, msg)))  # should not raise
+
+            src_conn.close.assert_called_once()
+            dst_conn.close.assert_called_once()
+            assert any(lvl == 'warn' and 'ROW COUNT VERIFICATION FAILED' in msg for lvl, msg in logs)
