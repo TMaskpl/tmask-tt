@@ -25,6 +25,7 @@ INSTALLED_APPS = [
     'apps.api',
     'apps.dashboard',
     'apps.organization',
+    'apps.db_transfers',
 ]
 
 MIDDLEWARE = [
