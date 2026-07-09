@@ -1,5 +1,6 @@
 import os
 import subprocess  # nosec B404
+import threading
 import time
 from typing import Callable
 
@@ -40,21 +41,27 @@ class PgTransferHandler:
             dump_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=dump_env,
         )
         psql_proc = subprocess.Popen(  # nosec B603
-            psql_cmd, stdin=dump_proc.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=psql_env,
+            psql_cmd, stdin=dump_proc.stdout, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, env=psql_env,
         )
         dump_proc.stdout.close()
 
         output_lines = []
-        for line in psql_proc.stderr:
-            line = line.rstrip()
-            if line:
-                output_lines.append(line)
-                log_callback('info', line)
-        for line in dump_proc.stderr:
-            line = line.rstrip()
-            if line:
-                output_lines.append(line)
-                log_callback('info', line)
+        output_lock = threading.Lock()
+
+        def _drain(stream):
+            for line in stream:
+                line = line.rstrip()
+                if line:
+                    with output_lock:
+                        output_lines.append(line)
+                    log_callback('info', line)
+
+        psql_thread = threading.Thread(target=_drain, args=(psql_proc.stderr,))
+        dump_thread = threading.Thread(target=_drain, args=(dump_proc.stderr,))
+        psql_thread.start()
+        dump_thread.start()
+        psql_thread.join()
+        dump_thread.join()
 
         psql_exit = psql_proc.wait()
         dump_exit = dump_proc.wait()
