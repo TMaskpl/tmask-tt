@@ -3,7 +3,7 @@ FROM python:3.12-slim
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    rsync openssh-client libpq-dev gcc gnupg \
+    rsync openssh-client libpq-dev gcc gnupg postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 COPY services/worker/requirements.txt .

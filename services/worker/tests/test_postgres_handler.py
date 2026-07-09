@@ -38,3 +38,65 @@ class TestPgTransferHandler:
         assert cmd[0] == 'psql'
         assert '10.0.0.2' in cmd
         assert 'testdb' in cmd
+
+    def _mock_proc(self, stderr_lines, exit_code):
+        proc = MagicMock()
+        proc.stderr = iter(stderr_lines)
+        proc.wait.return_value = exit_code
+        return proc
+
+    def test_successful_transfer_returns_without_error(self):
+        with patch('modules.postgres.handler.subprocess.Popen') as MockPopen:
+            MockPopen.side_effect = [self._mock_proc([], 0), self._mock_proc([], 0)]
+            handler = PgTransferHandler(self._make_params())
+            handler.execute(log_callback=lambda lvl, msg: None)  # should not raise
+
+    def test_pgpassword_passed_via_env_not_argv(self):
+        with patch('modules.postgres.handler.subprocess.Popen') as MockPopen:
+            MockPopen.side_effect = [self._mock_proc([], 0), self._mock_proc([], 0)]
+            handler = PgTransferHandler(self._make_params())
+            handler.execute(log_callback=lambda lvl, msg: None)
+
+            dump_call = MockPopen.call_args_list[0]
+            psql_call = MockPopen.call_args_list[1]
+            dump_argv = dump_call.args[0]
+            psql_argv = psql_call.args[0]
+            assert not any('srcpass' in str(a) for a in dump_argv)
+            assert not any('dstpass' in str(a) for a in psql_argv)
+            assert dump_call.kwargs['env']['PGPASSWORD'] == 'srcpass'
+            assert psql_call.kwargs['env']['PGPASSWORD'] == 'dstpass'
+
+    def test_auth_failure_raises_without_retry(self):
+        with patch('modules.postgres.handler.subprocess.Popen') as MockPopen, \
+             patch('modules.postgres.handler.time.sleep') as mock_sleep:
+            dump_proc = self._mock_proc(['pg_dump: error: connection to server failed'], 1)
+            psql_proc = self._mock_proc(['psql: error: password authentication failed for user "postgres"'], 1)
+            MockPopen.side_effect = [dump_proc, psql_proc]
+            handler = PgTransferHandler(self._make_params())
+            with pytest.raises(PgTransferError, match='AUTH FAILED'):
+                handler.execute(log_callback=lambda lvl, msg: None)
+            mock_sleep.assert_not_called()
+
+    def test_transient_failure_retries_then_succeeds(self):
+        with patch('modules.postgres.handler.subprocess.Popen') as MockPopen, \
+             patch('modules.postgres.handler.time.sleep'):
+            fail_dump = self._mock_proc(['pg_dump: error: server closed the connection unexpectedly'], 1)
+            fail_psql = self._mock_proc([], 1)
+            ok_dump = self._mock_proc([], 0)
+            ok_psql = self._mock_proc([], 0)
+            MockPopen.side_effect = [fail_dump, fail_psql, ok_dump, ok_psql]
+            handler = PgTransferHandler(self._make_params())
+            handler.execute(log_callback=lambda lvl, msg: None)  # should not raise
+            assert MockPopen.call_count == 4
+
+    def test_exhausted_retries_raises(self):
+        with patch('modules.postgres.handler.subprocess.Popen') as MockPopen, \
+             patch('modules.postgres.handler.time.sleep'):
+            MockPopen.side_effect = [
+                self._mock_proc(['server closed the connection unexpectedly'], 1),
+                self._mock_proc([], 1),
+            ] * PG_DUMP_MAX_RETRIES
+            handler = PgTransferHandler(self._make_params())
+            with pytest.raises(PgTransferError, match='TRANSFER FAILED'):
+                handler.execute(log_callback=lambda lvl, msg: None)
+            assert MockPopen.call_count == PG_DUMP_MAX_RETRIES * 2

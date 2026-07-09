@@ -29,3 +29,62 @@ class PgTransferHandler:
             'psql', '-h', p['dest_host'], '-p', str(p['dest_port']), '-U', p['dest_username'],
             '-v', 'ON_ERROR_STOP=1', p['dest_db_name'],
         ]
+
+    def _run_pipe(self, log_callback: Callable[[str, str], None]) -> tuple:
+        dump_cmd = self._build_pg_dump_cmd()
+        psql_cmd = self._build_psql_cmd()
+        dump_env = {**os.environ, 'PGPASSWORD': self.params['source_password']}
+        psql_env = {**os.environ, 'PGPASSWORD': self.params['dest_password']}
+
+        dump_proc = subprocess.Popen(  # nosec B603 — cmd built from validated connection params, no shell=True
+            dump_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=dump_env,
+        )
+        psql_proc = subprocess.Popen(  # nosec B603
+            psql_cmd, stdin=dump_proc.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=psql_env,
+        )
+        dump_proc.stdout.close()
+
+        output_lines = []
+        for line in psql_proc.stderr:
+            line = line.rstrip()
+            if line:
+                output_lines.append(line)
+                log_callback('info', line)
+        for line in dump_proc.stderr:
+            line = line.rstrip()
+            if line:
+                output_lines.append(line)
+                log_callback('info', line)
+
+        psql_exit = psql_proc.wait()
+        dump_exit = dump_proc.wait()
+        return dump_exit, psql_exit, '\n'.join(output_lines)
+
+    def _check_output(self, output: str) -> None:
+        lowered = output.lower()
+        if 'authentication failed' in lowered:
+            raise PgTransferError('AUTH FAILED — sprawdź dane uwierzytelniania')
+        if self.params.get('table_name') and 'does not exist' in lowered:
+            raise PgTransferError(f'TABLE NOT FOUND: {self.params["table_name"]}')
+        if 'could not connect' in lowered or 'connection refused' in lowered:
+            raise PgTransferError(
+                f'CONNECTION FAILED — sprawdź host/port ({self.params["source_host"]} / {self.params["dest_host"]})'
+            )
+
+    def execute(self, log_callback: Callable[[str, str], None]) -> None:
+        last_dump_exit = last_psql_exit = None
+        for attempt in range(1, PG_DUMP_MAX_RETRIES + 1):
+            log_callback('info', f'Starting pg_dump|psql (attempt {attempt})')
+            last_dump_exit, last_psql_exit, output = self._run_pipe(log_callback)
+            self._check_output(output)
+            if last_dump_exit == 0 and last_psql_exit == 0:
+                log_callback('info', 'Transfer complete')
+                return
+            if attempt < PG_DUMP_MAX_RETRIES:
+                log_callback('warn', f'pg_dump/psql failed (dump={last_dump_exit}, psql={last_psql_exit}), retrying in {PG_DUMP_RETRY_DELAY}s...')
+                time.sleep(PG_DUMP_RETRY_DELAY)
+
+        raise PgTransferError(
+            f'TRANSFER FAILED — pg_dump/psql failed after {PG_DUMP_MAX_RETRIES} attempts '
+            f'(pg_dump exit={last_dump_exit}, psql exit={last_psql_exit})'
+        )
