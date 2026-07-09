@@ -351,3 +351,19 @@ class TestConnectionCreatePostgresKind:
         conn = Connection.objects.get(name='PG')
         assert conn.kind == 'postgres'
         assert conn.db_name == 'proddb'
+
+
+@pytest.mark.django_db
+class TestConnectionPgTables:
+    def test_returns_options_fragment(self, auth_client, regular_user, make_connection):
+        conn = make_connection(regular_user, kind='postgres', db_name='proddb')
+        with patch('apps.connections.views._list_pg_tables', return_value=['users', 'orders']):
+            response = auth_client.get(reverse('connections:pg_tables'), {'source_connection': conn.pk})
+        assert response.status_code == 200
+        assert b'<option value="users">users</option>' in response.content
+        assert b'<option value="orders">orders</option>' in response.content
+
+    def test_empty_when_no_connection_id(self, auth_client):
+        response = auth_client.get(reverse('connections:pg_tables'))
+        assert response.status_code == 200
+        assert b'wybierz' in response.content.lower()

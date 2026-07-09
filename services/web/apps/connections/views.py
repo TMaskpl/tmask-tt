@@ -18,6 +18,7 @@ from .models import Connection, KIND_POSTGRES
 from .sftp_utils import list_directory, build_breadcrumbs
 from .ssh_tester import test_connection as _test_connection
 from .pg_tester import test_connection as _test_pg_connection
+from .pg_utils import list_tables as _list_pg_tables
 
 _CONNECTIONS_LIST = 'connections:list'
 _MAX_IMPORT_BYTES = 1024 * 1024
@@ -124,6 +125,17 @@ def browse_directory(request, pk):
         'current_path': path,
         'field_id': field_id,
     })
+
+
+@require_role(ROLE_READONLY)
+def connection_pg_tables(request):
+    conn_id = request.GET.get('source_connection')
+    tables = []
+    if conn_id:
+        conn = Connection.objects.filter(pk=conn_id, kind=KIND_POSTGRES).first()
+        if conn:
+            tables = _list_pg_tables(conn)
+    return render(request, 'connections/_pg_tables_options.html', {'tables': tables})
 
 
 @require_role(ROLE_ADMIN)
