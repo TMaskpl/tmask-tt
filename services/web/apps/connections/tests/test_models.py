@@ -58,3 +58,26 @@ class TestConnection:
             owner=regular_user, name='X', host='h', username='u', protocol='sftp'
         )
         assert conn.verify_checksum is False
+
+    def test_kind_defaults_to_ssh(self, regular_user):
+        conn = Connection(owner=regular_user, name='X', host='h', username='u', protocol='sftp')
+        assert conn.kind == 'ssh'
+
+    def test_can_create_postgres_kind_connection(self, regular_user):
+        conn = Connection.objects.create(
+            owner=regular_user, name='PG', host='10.0.0.5', port=5432,
+            username='postgres', password='pass', db_name='proddb', kind='postgres',
+        )
+        assert conn.pk is not None
+        assert conn.kind == 'postgres'
+        assert conn.db_name == 'proddb'
+
+    def test_clean_requires_db_name_for_postgres_kind(self, regular_user):
+        from django.core.exceptions import ValidationError
+        conn = Connection(owner=regular_user, name='PG', host='h', username='u', kind='postgres', db_name='')
+        with pytest.raises(ValidationError):
+            conn.clean()
+
+    def test_clean_does_not_require_db_name_for_ssh_kind(self, regular_user):
+        conn = Connection(owner=regular_user, name='X', host='h', username='u', kind='ssh', protocol='sftp')
+        conn.clean()  # should not raise
