@@ -308,6 +308,27 @@ class TestOrgWideVisibility:
 
 
 @pytest.mark.django_db
+class TestConnectionTestBranchesByKind:
+    def test_uses_pg_tester_for_postgres_kind(self, auth_client, regular_user, make_connection):
+        conn = make_connection(regular_user, kind='postgres', db_name='proddb')
+        mock_cursor = MagicMock()
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+        with patch('apps.connections.pg_tester.psycopg2.connect', return_value=mock_conn):
+            response = auth_client.get(reverse('connections:test', args=[conn.pk]))
+        assert response.status_code == 200
+        assert b'CONNECTION OK' in response.content
+
+    def test_uses_ssh_tester_for_ssh_kind(self, auth_client, regular_user, make_connection):
+        conn = make_connection(regular_user)
+        mock_client = MagicMock()
+        with patch('apps.connections.ssh_tester.paramiko.SSHClient', return_value=mock_client):
+            response = auth_client.get(reverse('connections:test', args=[conn.pk]))
+        assert response.status_code == 200
+        assert b'CONNECTION OK' in response.content
+
+
+@pytest.mark.django_db
 class TestConnectionCreatePostgresKind:
     def test_create_postgres_connection_requires_db_name(self, admin_client):
         response = admin_client.post(reverse('connections:create'), {

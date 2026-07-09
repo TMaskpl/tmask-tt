@@ -14,9 +14,10 @@ from apps.accounts.permissions import require_role
 from apps.accounts.models import ROLE_ADMIN, ROLE_READONLY
 from .portability import export_config, import_config, PassphraseError
 from .forms import ConnectionForm
-from .models import Connection
+from .models import Connection, KIND_POSTGRES
 from .sftp_utils import list_directory, build_breadcrumbs
 from .ssh_tester import test_connection as _test_connection
+from .pg_tester import test_connection as _test_pg_connection
 
 _CONNECTIONS_LIST = 'connections:list'
 _MAX_IMPORT_BYTES = 1024 * 1024
@@ -55,7 +56,10 @@ def connection_delete(request, pk):
 @require_role(ROLE_READONLY)
 def connection_test(request, pk):
     conn = get_object_or_404(Connection, pk=pk)
-    result = _test_connection(conn)
+    if conn.kind == KIND_POSTGRES:
+        result = _test_pg_connection(conn)
+    else:
+        result = _test_connection(conn)
     return render(request, 'connections/_test_result.html', {'result': result})
 
 @require_role(ROLE_ADMIN)
