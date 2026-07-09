@@ -4,6 +4,8 @@ import threading
 import time
 from typing import Callable
 
+import psycopg2
+
 from .config import PG_DUMP_BASE_FLAGS, PG_DUMP_MAX_RETRIES, PG_DUMP_RETRY_DELAY
 
 
@@ -78,6 +80,34 @@ class PgTransferHandler:
                 f'CONNECTION FAILED — sprawdź host/port ({self.params["source_host"]} / {self.params["dest_host"]})'
             )
 
+    def _verify_row_counts(self, log_callback: Callable[[str, str], None]) -> None:
+        p = self.params
+        src_conn = psycopg2.connect(host=p['source_host'], port=p['source_port'], user=p['source_username'],
+                                     password=p['source_password'], dbname=p['source_db_name'])
+        dst_conn = psycopg2.connect(host=p['dest_host'], port=p['dest_port'], user=p['dest_username'],
+                                     password=p['dest_password'], dbname=p['dest_db_name'])
+        try:
+            if p.get('table_name'):
+                tables = [p['table_name']]
+            else:
+                with src_conn.cursor() as cur:
+                    cur.execute("SELECT tablename FROM pg_tables WHERE schemaname='public'")
+                    tables = [row[0] for row in cur.fetchall()]
+            for table in tables:
+                with src_conn.cursor() as cur:
+                    cur.execute(f'SELECT COUNT(*) FROM "{table}"')
+                    src_count = cur.fetchone()[0]
+                with dst_conn.cursor() as cur:
+                    cur.execute(f'SELECT COUNT(*) FROM "{table}"')
+                    dst_count = cur.fetchone()[0]
+                if src_count != dst_count:
+                    log_callback('warn', f'ROW COUNT MISMATCH w "{table}": source={src_count} dest={dst_count}')
+                else:
+                    log_callback('info', f'ROW COUNT OK w "{table}": {src_count}')
+        finally:
+            src_conn.close()
+            dst_conn.close()
+
     def execute(self, log_callback: Callable[[str, str], None]) -> None:
         last_dump_exit = last_psql_exit = None
         for attempt in range(1, PG_DUMP_MAX_RETRIES + 1):
@@ -86,6 +116,8 @@ class PgTransferHandler:
             self._check_output(output)
             if last_dump_exit == 0 and last_psql_exit == 0:
                 log_callback('info', 'Transfer complete')
+                if self.params.get('verify_row_count'):
+                    self._verify_row_counts(log_callback)
                 return
             if attempt < PG_DUMP_MAX_RETRIES:
                 log_callback('warn', f'pg_dump/psql failed (dump={last_dump_exit}, psql={last_psql_exit}), retrying in {PG_DUMP_RETRY_DELAY}s...')

@@ -100,3 +100,49 @@ class TestPgTransferHandler:
             with pytest.raises(PgTransferError, match='TRANSFER FAILED'):
                 handler.execute(log_callback=lambda lvl, msg: None)
             assert MockPopen.call_count == PG_DUMP_MAX_RETRIES * 2
+
+    def test_verify_row_count_logs_ok_on_match(self):
+        with patch('modules.postgres.handler.subprocess.Popen') as MockPopen, \
+             patch('modules.postgres.handler.psycopg2.connect') as mock_connect:
+            MockPopen.side_effect = [self._mock_proc([], 0), self._mock_proc([], 0)]
+
+            mock_cursor = MagicMock()
+            mock_cursor.fetchone.return_value = (5,)
+            mock_conn = MagicMock()
+            mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+            mock_connect.return_value = mock_conn
+
+            logs = []
+            handler = PgTransferHandler(self._make_params(table_name='users', verify_row_count=True))
+            handler.execute(log_callback=lambda lvl, msg: logs.append((lvl, msg)))
+
+            assert any(lvl == 'info' and 'ROW COUNT OK' in msg for lvl, msg in logs)
+
+    def test_verify_row_count_logs_warning_on_mismatch(self):
+        with patch('modules.postgres.handler.subprocess.Popen') as MockPopen, \
+             patch('modules.postgres.handler.psycopg2.connect') as mock_connect:
+            MockPopen.side_effect = [self._mock_proc([], 0), self._mock_proc([], 0)]
+
+            src_cursor = MagicMock()
+            src_cursor.fetchone.return_value = (10,)
+            dst_cursor = MagicMock()
+            dst_cursor.fetchone.return_value = (7,)
+            src_conn = MagicMock()
+            src_conn.cursor.return_value.__enter__.return_value = src_cursor
+            dst_conn = MagicMock()
+            dst_conn.cursor.return_value.__enter__.return_value = dst_cursor
+            mock_connect.side_effect = [src_conn, dst_conn]
+
+            logs = []
+            handler = PgTransferHandler(self._make_params(table_name='users', verify_row_count=True))
+            handler.execute(log_callback=lambda lvl, msg: logs.append((lvl, msg)))
+
+            assert any(lvl == 'warn' and 'MISMATCH' in msg for lvl, msg in logs)
+
+    def test_verify_row_count_skipped_when_disabled(self):
+        with patch('modules.postgres.handler.subprocess.Popen') as MockPopen, \
+             patch('modules.postgres.handler.psycopg2.connect') as mock_connect:
+            MockPopen.side_effect = [self._mock_proc([], 0), self._mock_proc([], 0)]
+            handler = PgTransferHandler(self._make_params(verify_row_count=False))
+            handler.execute(log_callback=lambda lvl, msg: None)
+            mock_connect.assert_not_called()
