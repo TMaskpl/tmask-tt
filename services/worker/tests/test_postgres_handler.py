@@ -1,4 +1,6 @@
+import psycopg2
 import pytest
+from psycopg2 import sql
 from unittest.mock import patch, MagicMock
 
 from modules.postgres.handler import PgTransferHandler, PgTransferError
@@ -146,3 +148,53 @@ class TestPgTransferHandler:
             handler = PgTransferHandler(self._make_params(verify_row_count=False))
             handler.execute(log_callback=lambda lvl, msg: None)
             mock_connect.assert_not_called()
+
+    def test_verify_row_count_uses_safe_identifier_quoting_not_fstring(self):
+        # Table name containing a double-quote — would break out of an f-string
+        # f'SELECT COUNT(*) FROM "{table}"' and allow SQL injection.
+        malicious_table = 'users"; DROP TABLE x;--'
+        with patch('modules.postgres.handler.subprocess.Popen') as MockPopen, \
+             patch('modules.postgres.handler.psycopg2.connect') as mock_connect:
+            MockPopen.side_effect = [self._mock_proc([], 0), self._mock_proc([], 0)]
+
+            mock_cursor = MagicMock()
+            mock_cursor.fetchone.return_value = (5,)
+            mock_conn = MagicMock()
+            mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+            mock_connect.return_value = mock_conn
+
+            handler = PgTransferHandler(self._make_params(table_name=malicious_table, verify_row_count=True))
+            handler.execute(log_callback=lambda lvl, msg: None)  # should not raise
+
+            assert mock_cursor.execute.call_count >= 1
+            for call in mock_cursor.execute.call_args_list:
+                executed = call.args[0]
+                # Must be a safely-composed psycopg2.sql object, never a raw string
+                # containing the unescaped table name spliced in (which is what
+                # f'SELECT COUNT(*) FROM "{table}"' would produce).
+                assert isinstance(executed, sql.Composed)
+                assert not isinstance(executed, str)
+                # The table name must be carried as sql.Identifier data — never
+                # concatenated into a plain SQL string fragment.
+                identifiers = [part for part in executed.seq if isinstance(part, sql.Identifier)]
+                assert len(identifiers) == 1
+                assert identifiers[0].strings == (malicious_table,)
+                sql_fragments = [part for part in executed.seq if isinstance(part, sql.SQL)]
+                for frag in sql_fragments:
+                    assert malicious_table not in frag.string
+                    assert 'DROP TABLE' not in frag.string
+
+    def test_dest_connect_failure_degrades_to_warn_not_exception(self):
+        with patch('modules.postgres.handler.subprocess.Popen') as MockPopen, \
+             patch('modules.postgres.handler.psycopg2.connect') as mock_connect:
+            MockPopen.side_effect = [self._mock_proc([], 0), self._mock_proc([], 0)]
+
+            src_conn = MagicMock()
+            mock_connect.side_effect = [src_conn, psycopg2.OperationalError('could not connect to destination')]
+
+            logs = []
+            handler = PgTransferHandler(self._make_params(table_name='users', verify_row_count=True))
+            handler.execute(log_callback=lambda lvl, msg: logs.append((lvl, msg)))  # should not raise
+
+            src_conn.close.assert_called_once()
+            assert any(lvl == 'warn' and 'ROW COUNT VERIFICATION SKIPPED' in msg for lvl, msg in logs)

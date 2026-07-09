@@ -5,6 +5,7 @@ import time
 from typing import Callable
 
 import psycopg2
+from psycopg2 import sql
 
 from .config import PG_DUMP_BASE_FLAGS, PG_DUMP_MAX_RETRIES, PG_DUMP_RETRY_DELAY
 
@@ -82,10 +83,21 @@ class PgTransferHandler:
 
     def _verify_row_counts(self, log_callback: Callable[[str, str], None]) -> None:
         p = self.params
-        src_conn = psycopg2.connect(host=p['source_host'], port=p['source_port'], user=p['source_username'],
-                                     password=p['source_password'], dbname=p['source_db_name'])
-        dst_conn = psycopg2.connect(host=p['dest_host'], port=p['dest_port'], user=p['dest_username'],
-                                     password=p['dest_password'], dbname=p['dest_db_name'])
+        try:
+            src_conn = psycopg2.connect(host=p['source_host'], port=p['source_port'], user=p['source_username'],
+                                         password=p['source_password'], dbname=p['source_db_name'])
+        except psycopg2.Error as e:
+            log_callback('warn', f'ROW COUNT VERIFICATION SKIPPED — nie udało się połączyć ze źródłem: {e}')
+            return
+
+        try:
+            dst_conn = psycopg2.connect(host=p['dest_host'], port=p['dest_port'], user=p['dest_username'],
+                                         password=p['dest_password'], dbname=p['dest_db_name'])
+        except psycopg2.Error as e:
+            src_conn.close()
+            log_callback('warn', f'ROW COUNT VERIFICATION SKIPPED — nie udało się połączyć z celem: {e}')
+            return
+
         try:
             if p.get('table_name'):
                 tables = [p['table_name']]
@@ -94,11 +106,12 @@ class PgTransferHandler:
                     cur.execute("SELECT tablename FROM pg_tables WHERE schemaname='public'")
                     tables = [row[0] for row in cur.fetchall()]
             for table in tables:
+                count_query = sql.SQL('SELECT COUNT(*) FROM {}').format(sql.Identifier(table))
                 with src_conn.cursor() as cur:
-                    cur.execute(f'SELECT COUNT(*) FROM "{table}"')
+                    cur.execute(count_query)
                     src_count = cur.fetchone()[0]
                 with dst_conn.cursor() as cur:
-                    cur.execute(f'SELECT COUNT(*) FROM "{table}"')
+                    cur.execute(count_query)
                     dst_count = cur.fetchone()[0]
                 if src_count != dst_count:
                     log_callback('warn', f'ROW COUNT MISMATCH w "{table}": source={src_count} dest={dst_count}')
