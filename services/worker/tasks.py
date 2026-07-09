@@ -12,9 +12,11 @@ django.setup()
 from django.conf import settings  # noqa: E402
 from apps.connections.models import Connection  # noqa: E402
 from apps.transfers.models import TransferJob, TransferLog  # noqa: E402
+from apps.db_transfers.models import PgTransferJob, PgTransferLog  # noqa: E402
 from modules.sftp.handler import SFTPHandler, SFTPTransferError  # noqa: E402
 from modules.rsync.handler import RsyncHandler, RsyncTransferError  # noqa: E402
 from modules.relay.handler import RelayHandler, RelayTransferError  # noqa: E402
+from modules.postgres.handler import PgTransferHandler, PgTransferError  # noqa: E402
 from notifications import send_email_notification, send_webhook_notification, send_telegram_notification  # noqa: E402
 
 app = Celery('transporter')
@@ -259,3 +261,48 @@ def dry_run_preview(connection_id: int, source_path: str, destination_path: str,
         logger.info(f'[dry-run preview] {level}: {message}') if level != 'warn' else logger.warning(f'[dry-run preview] {message}')
 
     return RsyncHandler(params).preview(log_callback)
+
+
+def _build_pg_params(job) -> dict:
+    return {
+        'source_host': job.source_connection.host,
+        'source_port': job.source_connection.port,
+        'source_username': job.source_connection.username,
+        'source_password': job.source_connection.password,
+        'source_db_name': job.source_connection.db_name,
+        'dest_host': job.dest_connection.host,
+        'dest_port': job.dest_connection.port,
+        'dest_username': job.dest_connection.username,
+        'dest_password': job.dest_connection.password,
+        'dest_db_name': job.dest_connection.db_name,
+        'table_name': job.table_name or None,
+        'verify_row_count': job.verify_row_count,
+    }
+
+
+@app.task(bind=True, name='db_transfers.execute')
+def execute_pg_transfer(self, job_id: int):
+    try:
+        job = PgTransferJob.objects.select_related('source_connection', 'dest_connection').get(pk=job_id)
+    except PgTransferJob.DoesNotExist:
+        logger.error(f'PgTransferJob {job_id} not found — task aborted')
+        return
+
+    job.mark_running(self.request.id)
+
+    def log_callback(level: str, message: str):
+        PgTransferLog.objects.create(job=job, level=level, message=message)
+
+    try:
+        params = _build_pg_params(job)
+        PgTransferHandler(params).execute(log_callback=log_callback)
+        job.mark_done()
+    except PgTransferError as e:
+        job.mark_failed(str(e))
+        log_callback('error', str(e))
+        logger.error(f'PgTransferJob {job.pk} failed: {e}')
+    except Exception as e:
+        job.mark_failed(f'UNEXPECTED ERROR — {e}')
+        log_callback('error', f'UNEXPECTED ERROR — {e}')
+        logger.error(f'PgTransferJob {job.pk} unexpected error: {e}')
+        raise
