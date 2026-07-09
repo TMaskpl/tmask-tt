@@ -573,6 +573,42 @@ class TestExecutePgTransferTask:
             MockHandler.return_value.execute.assert_called_once()
             mock_job.mark_done.assert_called_once()
 
+    def test_builds_params_with_correct_source_dest_field_mapping(self):
+        with patch('tasks.PgTransferHandler') as MockHandler, \
+             patch('tasks.PgTransferJob') as MockJob, \
+             patch('tasks.PgTransferLog') as _:
+            mock_job = MagicMock()
+            MockJob.objects.select_related.return_value.get.return_value = mock_job
+            mock_job.pk = 1
+            mock_job.table_name = 'users'
+            mock_job.verify_row_count = True
+            mock_job.source_connection.host = 'src-host'
+            mock_job.source_connection.port = 5432
+            mock_job.source_connection.username = 'src-user'
+            mock_job.source_connection.password = 'src-pass'
+            mock_job.source_connection.db_name = 'src-db'
+            mock_job.dest_connection.host = 'dst-host'
+            mock_job.dest_connection.port = 5433
+            mock_job.dest_connection.username = 'dst-user'
+            mock_job.dest_connection.password = 'dst-pass'
+            mock_job.dest_connection.db_name = 'dst-db'
+            MockHandler.return_value.execute.return_value = None
+            from tasks import execute_pg_transfer
+            execute_pg_transfer(job_id=1)
+            params = MockHandler.call_args.args[0]
+            assert params['source_host'] == 'src-host'
+            assert params['source_port'] == 5432
+            assert params['source_username'] == 'src-user'
+            assert params['source_password'] == 'src-pass'
+            assert params['source_db_name'] == 'src-db'
+            assert params['dest_host'] == 'dst-host'
+            assert params['dest_port'] == 5433
+            assert params['dest_username'] == 'dst-user'
+            assert params['dest_password'] == 'dst-pass'
+            assert params['dest_db_name'] == 'dst-db'
+            assert params['table_name'] == 'users'
+            assert params['verify_row_count'] is True
+
     def test_marks_job_failed_on_pg_transfer_error(self):
         with patch('tasks.PgTransferHandler') as MockHandler, \
              patch('tasks.PgTransferJob') as MockJob, \

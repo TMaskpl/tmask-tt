@@ -76,10 +76,9 @@ class PgTransferHandler:
             raise PgTransferError('AUTH FAILED — sprawdź dane uwierzytelniania')
         if self.params.get('table_name') and 'does not exist' in lowered:
             raise PgTransferError(f'TABLE NOT FOUND: {self.params["table_name"]}')
-        if 'could not connect' in lowered or 'connection refused' in lowered:
-            raise PgTransferError(
-                f'CONNECTION FAILED — sprawdź host/port ({self.params["source_host"]} / {self.params["dest_host"]})'
-            )
+        # 'could not connect'/'connection refused' are deliberately NOT raised here —
+        # they're transient network conditions (dest restarting, brief outage) and
+        # should retry like any other pg_dump/psql exit-code failure, not fail fast.
 
     def _verify_row_counts(self, log_callback: Callable[[str, str], None]) -> None:
         p = self.params
