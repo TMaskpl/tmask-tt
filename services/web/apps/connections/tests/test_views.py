@@ -2,6 +2,7 @@ import socket
 from unittest.mock import MagicMock, patch
 
 import paramiko
+import psycopg2
 import pytest
 from django.urls import reverse
 from apps.connections.models import Connection
@@ -367,3 +368,26 @@ class TestConnectionPgTables:
         response = auth_client.get(reverse('connections:pg_tables'))
         assert response.status_code == 200
         assert b'wybierz' in response.content.lower()
+
+    def test_non_numeric_connection_id_does_not_500(self, auth_client):
+        response = auth_client.get(reverse('connections:pg_tables'), {'source_connection': 'abc'})
+        assert response.status_code == 200
+        assert 'wybierz najpierw source connection' in response.content.decode().lower()
+
+    def test_connection_error_renders_distinct_message(self, auth_client, regular_user, make_connection):
+        conn = make_connection(regular_user, kind='postgres', db_name='proddb')
+        with patch('apps.connections.views._list_pg_tables', side_effect=psycopg2.OperationalError('unreachable')):
+            response = auth_client.get(reverse('connections:pg_tables'), {'source_connection': conn.pk})
+        assert response.status_code == 200
+        content = response.content.decode().lower()
+        assert 'błąd połączenia' in content
+        assert 'wybierz najpierw source connection' not in content
+
+    def test_empty_table_list_renders_distinct_message(self, auth_client, regular_user, make_connection):
+        conn = make_connection(regular_user, kind='postgres', db_name='proddb')
+        with patch('apps.connections.views._list_pg_tables', return_value=[]):
+            response = auth_client.get(reverse('connections:pg_tables'), {'source_connection': conn.pk})
+        assert response.status_code == 200
+        content = response.content.decode().lower()
+        assert 'brak tabel' in content
+        assert 'wybierz najpierw source connection' not in content

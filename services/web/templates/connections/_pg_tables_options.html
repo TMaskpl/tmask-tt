@@ -1,10 +1,14 @@
 <select id="id_table_name" name="table_name">
-  {% if tables %}
+  {% if not source_connection %}
+  <option value="">— wybierz najpierw SOURCE CONNECTION —</option>
+  {% elif error %}
+  <option value="">— błąd połączenia z bazą źródłową —</option>
+  {% elif tables %}
   <option value="">— wybierz tabelę —</option>
   {% for t in tables %}
   <option value="{{ t }}">{{ t }}</option>
   {% endfor %}
   {% else %}
-  <option value="">— wybierz najpierw SOURCE CONNECTION —</option>
+  <option value="">— brak tabel w tej bazie —</option>
   {% endif %}
 </select>

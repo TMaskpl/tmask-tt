@@ -6,6 +6,7 @@ import socket
 from datetime import date
 
 import paramiko
+import psycopg2
 from django.contrib import messages
 from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
@@ -129,13 +130,30 @@ def browse_directory(request, pk):
 
 @require_role(ROLE_READONLY)
 def connection_pg_tables(request):
-    conn_id = request.GET.get('source_connection')
+    raw_source_connection = request.GET.get('source_connection')
     tables = []
-    if conn_id:
+    error = None
+    conn_id = None
+    if raw_source_connection:
+        try:
+            conn_id = int(raw_source_connection)
+        except ValueError:
+            conn_id = None
+    # A non-numeric/invalid value is treated the same as "nothing selected" —
+    # only a value that actually parsed counts as a real selection for the template.
+    source_connection = conn_id
+    if conn_id is not None:
         conn = Connection.objects.filter(pk=conn_id, kind=KIND_POSTGRES).first()
         if conn:
-            tables = _list_pg_tables(conn)
-    return render(request, 'connections/_pg_tables_options.html', {'tables': tables})
+            try:
+                tables = _list_pg_tables(conn)
+            except psycopg2.Error as e:
+                error = f'Błąd połączenia z bazą źródłową — {e}'.strip()
+    return render(request, 'connections/_pg_tables_options.html', {
+        'tables': tables,
+        'source_connection': source_connection,
+        'error': error,
+    })
 
 
 @require_role(ROLE_ADMIN)
