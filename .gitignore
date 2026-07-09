@@ -21,3 +21,4 @@ transfers/*
 graphify-out/
 .worktrees/
 nginx/certs/
+.superpowers/
