@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}DB TRANSFERS — TMASK-TRANSPORTER{% endblock %}
+{% block content %}
+<div class="box">
+  <span class="box-title">DB TRANSFERS</span>
+  <div class="toolbar">
+    {% if user.can_operate %}
+    <a href="{% url 'db_transfers:create' %}" class="btn">[ + NEW DB TRANSFER ]</a>
+    {% endif %}
+  </div>
+  {% if jobs %}
+  <table>
+    <thead>
+      <tr>
+        <th>#</th><th>SOURCE</th><th>DEST</th><th>SCOPE</th>
+        <th>STATUS</th><th>STARTED</th><th>FINISHED</th><th>ACTIONS</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for job in jobs %}
+      <tr>
+        <td>{{ job.pk }}</td>
+        <td>{{ job.source_connection.name }}</td>
+        <td>{{ job.dest_connection.name }}</td>
+        <td>{% if job.table_name %}{{ job.table_name }}{% else %}CAŁA BAZA{% endif %}</td>
+        <td><span class="status status-{{ job.status }}">{{ job.status|upper }}</span></td>
+        <td>{{ job.started_at|date:"Y-m-d H:i"|default:"—" }}</td>
+        <td>{{ job.finished_at|date:"Y-m-d H:i"|default:"—" }}</td>
+        <td><a href="{% url 'db_transfers:detail' job.pk %}" class="btn">[VIEW]</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:#555;">NO DB TRANSFERS YET</p>
+  {% endif %}
+</div>
+{% endblock %}

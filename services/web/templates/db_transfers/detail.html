@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}DB TRANSFER #{{ job.pk }} — TMASK-TRANSPORTER{% endblock %}
+{% block content %}
+<div class="box">
+  <span class="box-title">DB TRANSFER LOG — #{{ job.pk }}</span>
+  <div style="margin-bottom:0.5rem;">
+    STATUS: <span class="status status-{{ job.status }}">{{ job.status|upper }}</span>
+    {% if job.status == 'running' or job.status == 'pending' %}
+    {% if user.can_operate %}
+    <form method="post" action="{% url 'db_transfers:stop' job.pk %}" style="display:inline"
+      onsubmit="return confirm('Zatrzymać transfer #{{ job.pk }}?')">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-small btn-danger">[ STOP ]</button>
+    </form>
+    {% endif %}
+    {% endif %}
+  </div>
+  <div style="margin-bottom:0.5rem;font-size:0.85rem;">
+    SOURCE: <span class="glow">{{ job.source_connection.name }}</span> ({{ job.source_connection.db_name }})<br>
+    DEST: <span class="glow">{{ job.dest_connection.name }}</span> ({{ job.dest_connection.db_name }})<br>
+    SCOPE: {% if job.table_name %}TABLE — {{ job.table_name }}{% else %}CAŁA BAZA{% endif %}
+  </div>
+  <div
+    id="log-output"
+    class="log-terminal"
+    {% if job.status == 'running' or job.status == 'pending' %}
+      hx-get="{% url 'db_transfers:log_fragment' job.pk %}"
+      hx-trigger="every 2s"
+      hx-swap="innerHTML"
+    {% endif %}
+  >
+    {% include "db_transfers/log_fragment.html" with logs=job.logs.all %}
+  </div>
+</div>
+{% endblock %}

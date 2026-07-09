@@ -1,0 +1,8 @@
+{% for log in logs %}
+<div class="log-line log-{{ log.level }}">
+  [{{ log.timestamp|date:"H:i:s" }}] {{ log.message }}
+</div>
+{% endfor %}
+{% if still_running %}
+<div class="log-line log-info" style="animation: pulse 1s infinite;">&#9607; RUNNING...</div>
+{% endif %}

@@ -18,6 +18,7 @@
     <a href="{% url 'connections:list' %}" class="{% if request.resolver_match.app_name == 'connections' %}active{% endif %}">CONNECTIONS</a>
     <a href="{% url 'flows:list' %}" class="{% if request.resolver_match.app_name == 'flows' %}active{% endif %}">FLOWS</a>
     <a href="{% url 'scheduler:list' %}" class="{% if request.resolver_match.app_name == 'scheduler' %}active{% endif %}">SCHEDULER</a>
+    <a href="{% url 'db_transfers:list' %}" class="{% if request.resolver_match.app_name == 'db_transfers' %}active{% endif %}">DB TRANSFERS</a>
     <a href="{% url 'transfers:logs' %}">LOGS</a>
     {% if user.is_admin %}
     <a href="{% url 'accounts:users' %}">USERS</a>
