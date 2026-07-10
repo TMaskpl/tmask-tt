@@ -34,7 +34,7 @@
           {% if user.is_admin %}
           <a href="{% url 'flows:edit' flow.pk %}" class="btn">[ EDIT ]</a>
           <form method="post" action="{% url 'flows:delete' flow.pk %}" style="display:inline"
-            onsubmit="return confirm('DELETE {{ flow.name }}?')">
+            data-confirm="DELETE {{ flow.name }}?">
             {% csrf_token %}
             <button type="submit" class="btn btn-danger">[ DEL ]</button>
           </form>

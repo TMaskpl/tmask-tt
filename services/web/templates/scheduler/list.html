@@ -29,7 +29,7 @@
           </form>
           <a href="{% url 'scheduler:edit' s.pk %}" class="btn">[EDIT]</a>
           <form method="post" action="{% url 'scheduler:delete' s.pk %}" style="display:inline"
-            onsubmit="return confirm('DELETE schedule?')">{% csrf_token %}
+            data-confirm="DELETE schedule?">{% csrf_token %}
             <button type="submit" class="btn btn-danger">[DEL]</button>
           </form>
           {% else %}

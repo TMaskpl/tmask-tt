@@ -1,9 +1,10 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}NEW DB TRANSFER — TMASK-TRANSPORTER{% endblock %}
 {% block content %}
 <div class="box" style="max-width:600px;">
   <span class="box-title">NEW DB TRANSFER</span>
-  <form method="post" id="pg-transfer-form">
+  <form method="post" id="pg-transfer-form" data-pg-tables-url="{% url 'connections:pg_tables' %}">
     {% csrf_token %}
     {% if form.non_field_errors %}
     <div class="msg-error" style="margin-bottom:1rem;">
@@ -30,44 +31,5 @@
     <button type="submit" class="btn" id="execute-btn">[ EXECUTE TRANSFER ]</button>
   </form>
 </div>
-<script>
-(function () {
-  var sourceSel = document.getElementById('id_source_connection');
-  var tableField = document.getElementById('id_table_name');
-
-  function loadTables() {
-    if (!sourceSel.value) return;
-    fetch('{% url "connections:pg_tables" %}?source_connection=' + encodeURIComponent(sourceSel.value))
-      .then(function (r) { return r.text(); })
-      .then(function (html) {
-        var wrapper = document.createElement('div');
-        wrapper.innerHTML = html.trim();
-        var newSelect = wrapper.firstChild;
-        tableField.parentNode.replaceChild(newSelect, tableField);
-        tableField = newSelect;
-      });
-  }
-  if (sourceSel) {
-    sourceSel.addEventListener('change', loadTables);
-  }
-
-  var form = document.getElementById('pg-transfer-form');
-  form.addEventListener('submit', function (e) {
-    var destSel = document.getElementById('id_dest_connection');
-    var scopeInput = document.querySelector('input[name="scope"]:checked');
-    var sourceName = sourceSel.options[sourceSel.selectedIndex] ? sourceSel.options[sourceSel.selectedIndex].text : '';
-    var destName = destSel.options[destSel.selectedIndex] ? destSel.options[destSel.selectedIndex].text : '';
-    var msg;
-    if (scopeInput && scopeInput.value === 'table') {
-      var tableName = tableField ? tableField.value : '';
-      msg = 'Czy na pewno? Nadpisze tabelę "' + tableName + '" w "' + destName + '" danymi z "' + sourceName + '".';
-    } else {
-      msg = 'Czy na pewno? Nadpisze WSZYSTKIE tabele w bazie docelowej ("' + destName + '") danymi z "' + sourceName + '".';
-    }
-    if (!confirm(msg)) {
-      e.preventDefault();
-    }
-  });
-})();
-</script>
+<script src="{% static 'js/db_transfers_create.js' %}"></script>
 {% endblock %}

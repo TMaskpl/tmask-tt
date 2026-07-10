@@ -237,19 +237,6 @@
   </form>
 </div>
 
-<script>
-(function () {
-  // Kliknięcie przykładu CRON wstawia wartość do inputa
-  document.querySelectorAll('.cron-ex').forEach(function (el) {
-    el.addEventListener('click', function () {
-      var input = document.getElementById('{{ form.cron_expr.id_for_label }}');
-      if (input) {
-        input.value = el.dataset.cron;
-        input.focus();
-      }
-    });
-  });
-})();
-</script>
+<script src="{% static 'js/scheduler_form.js' %}"></script>
 
 {% endblock %}

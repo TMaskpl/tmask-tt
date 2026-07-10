@@ -8,7 +8,7 @@
     {% if job.status == 'running' or job.status == 'pending' %}
     {% if user.can_operate %}
     <form method="post" action="{% url 'db_transfers:stop' job.pk %}" style="display:inline"
-      onsubmit="return confirm('Zatrzymać transfer #{{ job.pk }}?')">
+      data-confirm="Zatrzymać transfer #{{ job.pk }}?">
       {% csrf_token %}
       <button type="submit" class="btn btn-small btn-danger">[ STOP ]</button>
     </form>

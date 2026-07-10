@@ -36,7 +36,7 @@
             {% if user.is_admin %}
             <a href="{% url 'connections:edit' conn.pk %}" class="btn btn-small">[EDIT]</a>
             <form method="post" action="{% url 'connections:delete' conn.pk %}" style="display:inline"
-              onsubmit="return confirm('DELETE {{ conn.name }}?')">
+              data-confirm="DELETE {{ conn.name }}?">
               {% csrf_token %}
               <button type="submit" class="btn btn-small btn-danger">[DEL]</button>
             </form>

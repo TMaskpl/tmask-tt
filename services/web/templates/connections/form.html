@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}{{ action }} CONNECTION{% endblock %}
 {% block content %}
 <div class="box" style="max-width:700px;">
@@ -38,16 +39,18 @@
         {% include "connections/_field.html" with field=form.protocol %}
         {% include "connections/_field.html" with field=form.compress %}
       </div>
-      {% include "connections/_field.html" with field=form.encrypt %}
+      <div class="field-grid">
+        {% include "connections/_field.html" with field=form.encrypt %}
+        {% include "connections/_field.html" with field=form.strict_host_key_checking %}
+      </div>
       {% include "connections/_field.html" with field=form.ssh_key %}
-      {% include "connections/_field.html" with field=form.strict_host_key_checking %}
       <div class="field" id="known-host-section" style="display:none">
         <label>{{ form.known_host_key.label|upper }}:</label>
         {{ form.known_host_key }}
         {% if conn %}
         <div style="margin-top:0.4rem;">
           <button type="button" class="btn btn-warn" id="scan-btn"
-                  onclick="scanHostKey({{ conn.pk }})">[ SCAN HOST KEY ]</button>
+                  data-scan-url="{% url 'connections:scan_hostkey' conn.pk %}">[ SCAN HOST KEY ]</button>
           <span id="scan-result" style="font-size:0.8rem; margin-left:0.5rem;"></span>
         </div>
         {% endif %}
@@ -59,21 +62,23 @@
 
     <div class="box box-nested">
       <span class="box-title">ZAAWANSOWANE</span>
-      <div class="field ssh-only-field">
-        <label>{{ form.dry_run_before_transfer.label|upper }}:</label>
-        {{ form.dry_run_before_transfer }}
-        <span style="font-size:0.75rem;color:var(--dim);">Sprawdza listę plików bez kopiowania. Transfer anulowany jeśli dry-run zakończy się błędem.</span>
-        {% if form.dry_run_before_transfer.errors %}
-        <div style="color:var(--red);font-size:0.8rem;">{% for e in form.dry_run_before_transfer.errors %}{{ e }}{% endfor %}</div>
-        {% endif %}
-      </div>
-      <div class="field ssh-only-field">
-        <label>{{ form.verify_checksum.label|upper }}:</label>
-        {{ form.verify_checksum }}
-        <span style="font-size:0.75rem;color:var(--dim);">Wymaga sha256sum na zdalnym hoście. Ignorowane gdy GPG włączone.</span>
-        {% if form.verify_checksum.errors %}
-        <div style="color:var(--red);font-size:0.8rem;">{% for e in form.verify_checksum.errors %}{{ e }}{% endfor %}</div>
-        {% endif %}
+      <div class="field-grid">
+        <div class="field ssh-only-field">
+          <label>{{ form.dry_run_before_transfer.label|upper }}:</label>
+          {{ form.dry_run_before_transfer }}
+          <span style="font-size:0.75rem;color:var(--dim);">Sprawdza listę plików bez kopiowania. Transfer anulowany jeśli dry-run zakończy się błędem.</span>
+          {% if form.dry_run_before_transfer.errors %}
+          <div style="color:var(--red);font-size:0.8rem;">{% for e in form.dry_run_before_transfer.errors %}{{ e }}{% endfor %}</div>
+          {% endif %}
+        </div>
+        <div class="field ssh-only-field">
+          <label>{{ form.verify_checksum.label|upper }}:</label>
+          {{ form.verify_checksum }}
+          <span style="font-size:0.75rem;color:var(--dim);">Wymaga sha256sum na zdalnym hoście. Ignorowane gdy GPG włączone.</span>
+          {% if form.verify_checksum.errors %}
+          <div style="color:var(--red);font-size:0.8rem;">{% for e in form.verify_checksum.errors %}{{ e }}{% endfor %}</div>
+          {% endif %}
+        </div>
       </div>
     </div>
 
@@ -83,63 +88,5 @@
     </div>
   </form>
 </div>
-<script>
-  function toggleKnownHost() {
-    var strict = document.getElementById('id_strict_host_key_checking');
-    var section = document.getElementById('known-host-section');
-    var kind = document.getElementById('id_kind');
-    if (strict && section && kind && kind.value === 'ssh') {
-      section.style.display = strict.checked ? 'block' : 'none';
-    }
-  }
-
-  function toggleKind() {
-    var kind = document.getElementById('id_kind');
-    if (!kind) return;
-    var sshFields = document.querySelectorAll('.ssh-only-field');
-    var pgFields = document.querySelectorAll('.postgres-only-field');
-    sshFields.forEach(function (el) { el.style.display = (kind.value === 'ssh') ? '' : 'none'; });
-    pgFields.forEach(function (el) { el.style.display = (kind.value === 'postgres') ? '' : 'none'; });
-    if (kind.value === 'ssh') {
-      toggleKnownHost();
-    }
-  }
-
-  document.addEventListener('DOMContentLoaded', function () {
-    var strict = document.getElementById('id_strict_host_key_checking');
-    var kind = document.getElementById('id_kind');
-    if (strict) {
-      strict.addEventListener('change', toggleKnownHost);
-    }
-    if (kind) {
-      kind.addEventListener('change', toggleKind);
-      toggleKind();
-    }
-  });
-
-  function scanHostKey(pk) {
-    var btn = document.getElementById('scan-btn');
-    var result = document.getElementById('scan-result');
-    btn.disabled = true;
-    result.textContent = 'SCANNING...';
-    result.style.color = '';
-    fetch('/connections/' + pk + '/scan-hostkey/')
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        if (data.success) {
-          document.getElementById('id_known_host_key').value = data.known_host_key;
-          result.textContent = 'KEY SCANNED — VERIFY AND SAVE';
-          result.style.color = 'var(--green)';
-        } else {
-          result.textContent = data.message;
-          result.style.color = 'var(--red)';
-        }
-      })
-      .catch(function () {
-        result.textContent = 'SCAN ERROR';
-        result.style.color = 'var(--red)';
-      })
-      .finally(function () { btn.disabled = false; });
-  }
-</script>
+<script src="{% static 'js/connections_form.js' %}"></script>
 {% endblock %}

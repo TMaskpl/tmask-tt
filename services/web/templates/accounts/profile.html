@@ -396,7 +396,7 @@
           <td class="token-date">{{ token.last_used_at|date:"Y-m-d"|default:"—" }}</td>
           <td style="text-align:right;">
             <form method="post" action="{% url 'accounts:revoke_api_token' token.pk %}"
-                  onsubmit="return confirm('Usunąć token {{ token.label|escapejs }}?')">
+                  data-confirm="Usunąć token {{ token.label }}?">
               {% csrf_token %}
               <button type="submit" class="btn btn-danger" style="padding:0.2rem 0.5rem; font-size:0.7rem; letter-spacing:1px;">REVOKE</button>
             </form>
@@ -487,16 +487,12 @@
       <code id="new-token-value">{{ new_token }}</code>
     </div>
     <div style="display:flex; gap:0.75rem;">
-      <button type="button" class="btn" onclick="copyNewToken()">[ COPY ]</button>
-      <button type="button" class="btn" onclick="document.getElementById('token-modal').style.display='none'">[ ZAMKNIJ ]</button>
+      <button type="button" class="btn" id="copy-token-btn">[ COPY ]</button>
+      <button type="button" class="btn" id="close-token-modal">[ ZAMKNIJ ]</button>
     </div>
   </div>
 </div>
-<script>
-function copyNewToken() {
-  navigator.clipboard.writeText('{{ new_token|escapejs }}');
-}
-</script>
+<script src="{% static 'js/profile.js' %}"></script>
 {% endif %}
 
 {% endblock %}

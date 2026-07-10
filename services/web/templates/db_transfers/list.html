@@ -31,7 +31,7 @@
             <a href="{% url 'db_transfers:detail' job.pk %}" class="btn btn-small">[VIEW]</a>
             {% if user.is_admin %}
             <form method="post" action="{% url 'db_transfers:delete' job.pk %}" style="display:inline"
-              onsubmit="return confirm('DELETE transfer #{{ job.pk }}?')">
+              data-confirm="DELETE transfer #{{ job.pk }}?">
               {% csrf_token %}
               <button type="submit" class="btn btn-small btn-danger">[DEL]</button>
             </form>
