@@ -9,4 +9,5 @@ urlpatterns = [
     path('<int:pk>/', views.db_transfer_detail, name='detail'),
     path('<int:pk>/logs/', views.log_fragment, name='log_fragment'),
     path('<int:pk>/stop/', views.db_transfer_stop, name='stop'),
+    path('<int:pk>/delete/', views.db_transfer_delete, name='delete'),
 ]

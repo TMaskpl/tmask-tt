@@ -5,7 +5,7 @@ from django.db import transaction
 from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.http import require_POST
 from apps.accounts.permissions import require_role
-from apps.accounts.models import ROLE_OPERATOR, ROLE_READONLY
+from apps.accounts.models import ROLE_ADMIN, ROLE_OPERATOR, ROLE_READONLY
 from apps.connections.models import Connection
 from .models import TransferJob, STATUS_RUNNING, STATUS_PENDING
 from .forms import TransferForm
@@ -120,3 +120,14 @@ def transfer_stop(request, pk):
         job.mark_cancelled(by=request.user)
     messages.success(request, 'Transfer zatrzymany.')
     return redirect('transfers:detail', pk=job.pk)
+
+
+@require_role(ROLE_ADMIN)
+@require_POST
+def transfer_delete(request, pk):
+    job = get_object_or_404(TransferJob, pk=pk)
+    if job.status in (STATUS_PENDING, STATUS_RUNNING):
+        messages.error(request, 'Nie można usunąć aktywnego transferu — najpierw zatrzymaj.')
+        return redirect('transfers:detail', pk=job.pk)
+    job.delete()
+    return redirect('transfers:logs')

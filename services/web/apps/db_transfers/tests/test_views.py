@@ -65,6 +65,33 @@ class TestDbTransferStop:
 
 
 @pytest.mark.django_db
+class TestDbTransferDelete:
+    def test_admin_can_delete_finished_job(self, admin_client, admin_user, make_connection):
+        src = make_connection(admin_user, kind='postgres', db_name='proddb', name='src')
+        dst = make_connection(admin_user, kind='postgres', db_name='testdb', name='dst')
+        job = PgTransferJob.objects.create(owner=admin_user, source_connection=src, dest_connection=dst, status='done')
+        response = admin_client.post(reverse('db_transfers:delete', args=[job.pk]))
+        assert response.status_code == 302
+        assert not PgTransferJob.objects.filter(pk=job.pk).exists()
+
+    def test_operator_gets_403(self, auth_client, regular_user, make_connection):
+        src = make_connection(regular_user, kind='postgres', db_name='proddb', name='src')
+        dst = make_connection(regular_user, kind='postgres', db_name='testdb', name='dst')
+        job = PgTransferJob.objects.create(owner=regular_user, source_connection=src, dest_connection=dst, status='done')
+        response = auth_client.post(reverse('db_transfers:delete', args=[job.pk]))
+        assert response.status_code == 403
+        assert PgTransferJob.objects.filter(pk=job.pk).exists()
+
+    def test_cannot_delete_running_job(self, admin_client, admin_user, make_connection):
+        src = make_connection(admin_user, kind='postgres', db_name='proddb', name='src')
+        dst = make_connection(admin_user, kind='postgres', db_name='testdb', name='dst')
+        job = PgTransferJob.objects.create(owner=admin_user, source_connection=src, dest_connection=dst, status='running')
+        response = admin_client.post(reverse('db_transfers:delete', args=[job.pk]))
+        assert response.status_code == 302
+        assert PgTransferJob.objects.filter(pk=job.pk).exists()
+
+
+@pytest.mark.django_db
 class TestDbTransferList:
     def test_shows_jobs(self, auth_client, regular_user, make_connection):
         src = make_connection(regular_user, kind='postgres', db_name='proddb', name='src')

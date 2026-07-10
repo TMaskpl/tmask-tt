@@ -273,6 +273,39 @@ class TestTransferStop:
         assert calls == []
 
 
+@pytest.mark.django_db
+class TestTransferDelete:
+    def test_admin_can_delete_finished_job(self, admin_client, admin_user, make_connection):
+        from apps.transfers.models import TransferJob, STATUS_DONE
+        conn = make_connection(admin_user)
+        job = TransferJob.objects.create(
+            owner=admin_user, connection=conn, source_path='/a', destination_path='/b', status=STATUS_DONE,
+        )
+        resp = admin_client.post(reverse('transfers:delete', args=[job.pk]))
+        assert resp.status_code == 302
+        assert not TransferJob.objects.filter(pk=job.pk).exists()
+
+    def test_operator_gets_403(self, auth_client, regular_user, make_connection):
+        from apps.transfers.models import TransferJob, STATUS_DONE
+        conn = make_connection(regular_user)
+        job = TransferJob.objects.create(
+            owner=regular_user, connection=conn, source_path='/a', destination_path='/b', status=STATUS_DONE,
+        )
+        resp = auth_client.post(reverse('transfers:delete', args=[job.pk]))
+        assert resp.status_code == 403
+        assert TransferJob.objects.filter(pk=job.pk).exists()
+
+    def test_cannot_delete_running_job(self, admin_client, admin_user, make_connection):
+        from apps.transfers.models import TransferJob, STATUS_RUNNING
+        conn = make_connection(admin_user)
+        job = TransferJob.objects.create(
+            owner=admin_user, connection=conn, source_path='/a', destination_path='/b', status=STATUS_RUNNING,
+        )
+        resp = admin_client.post(reverse('transfers:delete', args=[job.pk]))
+        assert resp.status_code == 302
+        assert TransferJob.objects.filter(pk=job.pk).exists()
+
+
 class TestValidateTransferPath:
     def test_accepts_normal_absolute_path(self):
         _validate_transfer_path('/data/backups/file.tar')
