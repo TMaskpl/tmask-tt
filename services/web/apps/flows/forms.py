@@ -1,5 +1,5 @@
 from django import forms
-from apps.connections.models import Connection
+from apps.connections.models import Connection, KIND_SSH
 from apps.transfers.forms import _validate_transfer_path
 from .models import Flow
 
@@ -12,7 +12,11 @@ class FlowForm(forms.ModelForm):
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
         if user:
-            qs = Connection.objects.all()
+            # Flow is an SSH/SFTP relay mechanism (source_path/dest_path are
+            # file paths) — Postgres connections can't be used here, they
+            # belong to db_transfers. Filter them out so the dropdown can't
+            # offer a choice that would only fail later, at run time.
+            qs = Connection.objects.filter(kind=KIND_SSH)
             self.fields['source_conn'].queryset = qs
             self.fields['dest_conn'].queryset = qs
 

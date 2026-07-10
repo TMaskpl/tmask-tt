@@ -185,3 +185,12 @@ class TestFlowFormOrgWideConnections:
         form = FlowForm(user=requester)
         assert conn in form.fields['source_conn'].queryset
         assert conn in form.fields['dest_conn'].queryset
+
+    def test_flow_form_excludes_postgres_connections(self, django_user_model, make_connection):
+        from apps.flows.forms import FlowForm
+        owner = django_user_model.objects.create_user(username='connowner2', password='p')
+        pg_conn = make_connection(owner, name='PgConn', kind='postgres', db_name='somedb')
+        requester = django_user_model.objects.create_user(username='requester2', password='p', role='admin')
+        form = FlowForm(user=requester)
+        assert pg_conn not in form.fields['source_conn'].queryset
+        assert pg_conn not in form.fields['dest_conn'].queryset

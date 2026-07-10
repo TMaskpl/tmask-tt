@@ -1,8 +1,14 @@
 {% extends "base.html" %}
 {% block title %}{{ action }} FLOW — TMASK-TRANSPORTER{% endblock %}
 {% block content %}
+{% if action == 'CREATE' %}
+<div class="toolbar" style="margin-bottom:1rem;">
+  <a href="{% url 'flows:create' %}" class="btn">[ PLIK ]</a>
+  <a href="{% url 'db_transfers:create' %}" class="btn">[ BAZA ]</a>
+</div>
+{% endif %}
 <div class="box" style="max-width:700px;">
-  <span class="box-title">{{ action }} RELAY FLOW</span>
+  <span class="box-title">{{ action }} RELAY FLOW (PLIK)</span>
   <form method="post">
     {% csrf_token %}
     {% if form.non_field_errors %}
