@@ -1,74 +1,82 @@
 {% extends "base.html" %}
 {% block title %}{{ action }} CONNECTION{% endblock %}
 {% block content %}
-<div class="box" style="max-width:600px;">
+<div class="box" style="max-width:700px;">
   <span class="box-title">{{ action }} CONNECTION</span>
   <form method="post">
     {% csrf_token %}
     {% if form.non_field_errors %}
     <div class="msg-error">{% for e in form.non_field_errors %}> {{ e }}{% endfor %}</div>
     {% endif %}
-    {% for field in form %}
-    {% if field.name == 'db_name' %}
-    <div class="field postgres-only-field">
-      <label>{{ field.label|upper }}:</label>
-      {{ field }}
-      {% if field.errors %}
-      <div style="color:var(--red);font-size:0.8rem;">{% for e in field.errors %}{{ e }}{% endfor %}</div>
-      {% endif %}
+
+    <div class="box box-nested">
+      <span class="box-title">PODSTAWOWE</span>
+      {% include "connections/_field.html" with field=form.name %}
+      {% include "connections/_field.html" with field=form.kind %}
     </div>
-    {% elif field.name == 'ssh_key' or field.name == 'protocol' or field.name == 'compress' or field.name == 'strict_host_key_checking' %}
-    <div class="field ssh-only-field">
-      <label>{{ field.label|upper }}:</label>
-      {{ field }}
-      {% if field.errors %}
-      <div style="color:var(--red);font-size:0.8rem;">{% for e in field.errors %}{{ e }}{% endfor %}</div>
-      {% endif %}
-    </div>
-    {% elif field.name == 'known_host_key' %}
-    <div class="field ssh-only-field" id="known-host-section" style="display:none">
-      <label>{{ field.label|upper }}:</label>
-      {{ field }}
-      {% if conn %}
-      <div style="margin-top:0.4rem;">
-        <button type="button" class="btn btn-warn" id="scan-btn"
-                onclick="scanHostKey({{ conn.pk }})">[ SCAN HOST KEY ]</button>
-        <span id="scan-result" style="font-size:0.8rem; margin-left:0.5rem;"></span>
+
+    <div class="box box-nested">
+      <span class="box-title">POŁĄCZENIE</span>
+      <div class="field-grid">
+        {% include "connections/_field.html" with field=form.host %}
+        {% include "connections/_field.html" with field=form.port %}
       </div>
-      {% endif %}
-      {% if field.errors %}
-      <div style="color:var(--red);font-size:0.8rem;">{% for e in field.errors %}{{ e }}{% endfor %}</div>
-      {% endif %}
+      <div class="field-grid">
+        {% include "connections/_field.html" with field=form.username %}
+        {% include "connections/_field.html" with field=form.password %}
+      </div>
     </div>
-    {% elif field.name == 'dry_run_before_transfer' %}
-    <div class="box-title ssh-only-field" style="margin-top:1.2rem;font-size:0.85rem;">[ OPCJE ZAAWANSOWANE ]</div>
-    <div class="field ssh-only-field">
-      <label>{{ field.label|upper }}:</label>
-      {{ field }}
-      <span style="font-size:0.75rem;color:var(--dim);">Sprawdza listę plików bez kopiowania. Transfer anulowany jeśli dry-run zakończy się błędem.</span>
-      {% if field.errors %}
-      <div style="color:var(--red);font-size:0.8rem;">{% for e in field.errors %}{{ e }}{% endfor %}</div>
-      {% endif %}
+
+    <div class="box box-nested postgres-only-field">
+      <span class="box-title">POSTGRES</span>
+      {% include "connections/_field.html" with field=form.db_name %}
     </div>
-    {% elif field.name == 'verify_checksum' %}
-    <div class="field">
-      <label>{{ field.label|upper }}:</label>
-      {{ field }}
-      <span style="font-size:0.75rem;color:var(--dim);">Wymaga sha256sum na zdalnym hoście. Ignorowane gdy GPG włączone.</span>
-      {% if field.errors %}
-      <div style="color:var(--red);font-size:0.8rem;">{% for e in field.errors %}{{ e }}{% endfor %}</div>
-      {% endif %}
+
+    <div class="box box-nested ssh-only-field">
+      <span class="box-title">SSH</span>
+      <div class="field-grid">
+        {% include "connections/_field.html" with field=form.protocol %}
+        {% include "connections/_field.html" with field=form.compress %}
+      </div>
+      {% include "connections/_field.html" with field=form.encrypt %}
+      {% include "connections/_field.html" with field=form.ssh_key %}
+      {% include "connections/_field.html" with field=form.strict_host_key_checking %}
+      <div class="field" id="known-host-section" style="display:none">
+        <label>{{ form.known_host_key.label|upper }}:</label>
+        {{ form.known_host_key }}
+        {% if conn %}
+        <div style="margin-top:0.4rem;">
+          <button type="button" class="btn btn-warn" id="scan-btn"
+                  onclick="scanHostKey({{ conn.pk }})">[ SCAN HOST KEY ]</button>
+          <span id="scan-result" style="font-size:0.8rem; margin-left:0.5rem;"></span>
+        </div>
+        {% endif %}
+        {% if form.known_host_key.errors %}
+        <div style="color:var(--red);font-size:0.8rem;">{% for e in form.known_host_key.errors %}{{ e }}{% endfor %}</div>
+        {% endif %}
+      </div>
     </div>
-    {% else %}
-    <div class="field">
-      <label>{{ field.label|upper }}:</label>
-      {{ field }}
-      {% if field.errors %}
-      <div style="color:var(--red);font-size:0.8rem;">{% for e in field.errors %}{{ e }}{% endfor %}</div>
-      {% endif %}
+
+    <div class="box box-nested">
+      <span class="box-title">ZAAWANSOWANE</span>
+      <div class="field ssh-only-field">
+        <label>{{ form.dry_run_before_transfer.label|upper }}:</label>
+        {{ form.dry_run_before_transfer }}
+        <span style="font-size:0.75rem;color:var(--dim);">Sprawdza listę plików bez kopiowania. Transfer anulowany jeśli dry-run zakończy się błędem.</span>
+        {% if form.dry_run_before_transfer.errors %}
+        <div style="color:var(--red);font-size:0.8rem;">{% for e in form.dry_run_before_transfer.errors %}{{ e }}{% endfor %}</div>
+        {% endif %}
+      </div>
+      <div class="field ssh-only-field">
+        <label>{{ form.verify_checksum.label|upper }}:</label>
+        {{ form.verify_checksum }}
+        <span style="font-size:0.75rem;color:var(--dim);">Wymaga sha256sum na zdalnym hoście. Ignorowane gdy GPG włączone.</span>
+        {% if form.verify_checksum.errors %}
+        <div style="color:var(--red);font-size:0.8rem;">{% for e in form.verify_checksum.errors %}{{ e }}{% endfor %}</div>
+        {% endif %}
+      </div>
     </div>
-    {% endif %}
-    {% endfor %}
+
     <div style="display:flex;gap:1rem;margin-top:1.5rem;">
       <button type="submit" class="btn">[ SAVE ]</button>
       <a href="{% url 'connections:list' %}" class="btn btn-danger">[ CANCEL ]</a>
