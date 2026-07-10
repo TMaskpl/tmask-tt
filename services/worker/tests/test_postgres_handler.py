@@ -49,18 +49,18 @@ class TestPgTransferHandler:
 
     def test_successful_transfer_returns_without_error(self):
         with patch('modules.postgres.handler.subprocess.Popen') as MockPopen:
-            MockPopen.side_effect = [self._mock_proc([], 0), self._mock_proc([], 0)]
+            MockPopen.side_effect = [self._mock_proc([], 0), self._mock_proc([], 0), self._mock_proc([], 0)]
             handler = PgTransferHandler(self._make_params())
             handler.execute(log_callback=lambda lvl, msg: None)  # should not raise
 
     def test_pgpassword_passed_via_env_not_argv(self):
         with patch('modules.postgres.handler.subprocess.Popen') as MockPopen:
-            MockPopen.side_effect = [self._mock_proc([], 0), self._mock_proc([], 0)]
+            MockPopen.side_effect = [self._mock_proc([], 0), self._mock_proc([], 0), self._mock_proc([], 0)]
             handler = PgTransferHandler(self._make_params())
             handler.execute(log_callback=lambda lvl, msg: None)
 
             dump_call = MockPopen.call_args_list[0]
-            psql_call = MockPopen.call_args_list[1]
+            psql_call = MockPopen.call_args_list[2]
             dump_argv = dump_call.args[0]
             psql_argv = psql_call.args[0]
             assert not any('srcpass' in str(a) for a in dump_argv)
@@ -68,12 +68,33 @@ class TestPgTransferHandler:
             assert dump_call.kwargs['env']['PGPASSWORD'] == 'srcpass'
             assert psql_call.kwargs['env']['PGPASSWORD'] == 'dstpass'
 
+    def test_filters_incompatible_transaction_timeout_set_via_sed(self):
+        # PG17's pg_dump emits `SET transaction_timeout = 0;` unconditionally, which
+        # older (<17) destination servers reject. A sed filter must sit between
+        # pg_dump and psql to strip it in transit.
+        dump_proc = self._mock_proc([], 0)
+        filter_proc = self._mock_proc([], 0)
+        psql_proc = self._mock_proc([], 0)
+        with patch('modules.postgres.handler.subprocess.Popen') as MockPopen:
+            MockPopen.side_effect = [dump_proc, filter_proc, psql_proc]
+            handler = PgTransferHandler(self._make_params())
+            handler.execute(log_callback=lambda lvl, msg: None)
+
+            filter_call = MockPopen.call_args_list[1]
+            filter_argv = filter_call.args[0]
+            assert filter_argv[0] == 'sed'
+            assert 'transaction_timeout' in ' '.join(filter_argv)
+            assert filter_call.kwargs['stdin'] is dump_proc.stdout
+            psql_call = MockPopen.call_args_list[2]
+            assert psql_call.kwargs['stdin'] is filter_proc.stdout
+
     def test_auth_failure_raises_without_retry(self):
         with patch('modules.postgres.handler.subprocess.Popen') as MockPopen, \
              patch('modules.postgres.handler.time.sleep') as mock_sleep:
             dump_proc = self._mock_proc(['pg_dump: error: connection to server failed'], 1)
+            filter_proc = self._mock_proc([], 0)
             psql_proc = self._mock_proc(['psql: error: password authentication failed for user "postgres"'], 1)
-            MockPopen.side_effect = [dump_proc, psql_proc]
+            MockPopen.side_effect = [dump_proc, filter_proc, psql_proc]
             handler = PgTransferHandler(self._make_params())
             with pytest.raises(PgTransferError, match='AUTH FAILED'):
                 handler.execute(log_callback=lambda lvl, msg: None)
@@ -83,30 +104,33 @@ class TestPgTransferHandler:
         with patch('modules.postgres.handler.subprocess.Popen') as MockPopen, \
              patch('modules.postgres.handler.time.sleep'):
             fail_dump = self._mock_proc(['pg_dump: error: server closed the connection unexpectedly'], 1)
+            fail_filter = self._mock_proc([], 0)
             fail_psql = self._mock_proc([], 1)
             ok_dump = self._mock_proc([], 0)
+            ok_filter = self._mock_proc([], 0)
             ok_psql = self._mock_proc([], 0)
-            MockPopen.side_effect = [fail_dump, fail_psql, ok_dump, ok_psql]
+            MockPopen.side_effect = [fail_dump, fail_filter, fail_psql, ok_dump, ok_filter, ok_psql]
             handler = PgTransferHandler(self._make_params())
             handler.execute(log_callback=lambda lvl, msg: None)  # should not raise
-            assert MockPopen.call_count == 4
+            assert MockPopen.call_count == 6
 
     def test_exhausted_retries_raises(self):
         with patch('modules.postgres.handler.subprocess.Popen') as MockPopen, \
              patch('modules.postgres.handler.time.sleep'):
             MockPopen.side_effect = [
                 self._mock_proc(['server closed the connection unexpectedly'], 1),
+                self._mock_proc([], 0),
                 self._mock_proc([], 1),
             ] * PG_DUMP_MAX_RETRIES
             handler = PgTransferHandler(self._make_params())
             with pytest.raises(PgTransferError, match='TRANSFER FAILED'):
                 handler.execute(log_callback=lambda lvl, msg: None)
-            assert MockPopen.call_count == PG_DUMP_MAX_RETRIES * 2
+            assert MockPopen.call_count == PG_DUMP_MAX_RETRIES * 3
 
     def test_verify_row_count_logs_ok_on_match(self):
         with patch('modules.postgres.handler.subprocess.Popen') as MockPopen, \
              patch('modules.postgres.handler.psycopg2.connect') as mock_connect:
-            MockPopen.side_effect = [self._mock_proc([], 0), self._mock_proc([], 0)]
+            MockPopen.side_effect = [self._mock_proc([], 0), self._mock_proc([], 0), self._mock_proc([], 0)]
 
             mock_cursor = MagicMock()
             mock_cursor.fetchone.return_value = (5,)
@@ -123,7 +147,7 @@ class TestPgTransferHandler:
     def test_verify_row_count_logs_warning_on_mismatch(self):
         with patch('modules.postgres.handler.subprocess.Popen') as MockPopen, \
              patch('modules.postgres.handler.psycopg2.connect') as mock_connect:
-            MockPopen.side_effect = [self._mock_proc([], 0), self._mock_proc([], 0)]
+            MockPopen.side_effect = [self._mock_proc([], 0), self._mock_proc([], 0), self._mock_proc([], 0)]
 
             src_cursor = MagicMock()
             src_cursor.fetchone.return_value = (10,)
@@ -144,7 +168,7 @@ class TestPgTransferHandler:
     def test_verify_row_count_skipped_when_disabled(self):
         with patch('modules.postgres.handler.subprocess.Popen') as MockPopen, \
              patch('modules.postgres.handler.psycopg2.connect') as mock_connect:
-            MockPopen.side_effect = [self._mock_proc([], 0), self._mock_proc([], 0)]
+            MockPopen.side_effect = [self._mock_proc([], 0), self._mock_proc([], 0), self._mock_proc([], 0)]
             handler = PgTransferHandler(self._make_params(verify_row_count=False))
             handler.execute(log_callback=lambda lvl, msg: None)
             mock_connect.assert_not_called()
@@ -155,7 +179,7 @@ class TestPgTransferHandler:
         malicious_table = 'users"; DROP TABLE x;--'
         with patch('modules.postgres.handler.subprocess.Popen') as MockPopen, \
              patch('modules.postgres.handler.psycopg2.connect') as mock_connect:
-            MockPopen.side_effect = [self._mock_proc([], 0), self._mock_proc([], 0)]
+            MockPopen.side_effect = [self._mock_proc([], 0), self._mock_proc([], 0), self._mock_proc([], 0)]
 
             mock_cursor = MagicMock()
             mock_cursor.fetchone.return_value = (5,)
@@ -187,7 +211,7 @@ class TestPgTransferHandler:
     def test_dest_connect_failure_degrades_to_warn_not_exception(self):
         with patch('modules.postgres.handler.subprocess.Popen') as MockPopen, \
              patch('modules.postgres.handler.psycopg2.connect') as mock_connect:
-            MockPopen.side_effect = [self._mock_proc([], 0), self._mock_proc([], 0)]
+            MockPopen.side_effect = [self._mock_proc([], 0), self._mock_proc([], 0), self._mock_proc([], 0)]
 
             src_conn = MagicMock()
             mock_connect.side_effect = [src_conn, psycopg2.OperationalError('could not connect to destination')]
@@ -206,7 +230,7 @@ class TestPgTransferHandler:
         # connections must still be closed via the finally block.
         with patch('modules.postgres.handler.subprocess.Popen') as MockPopen, \
              patch('modules.postgres.handler.psycopg2.connect') as mock_connect:
-            MockPopen.side_effect = [self._mock_proc([], 0), self._mock_proc([], 0)]
+            MockPopen.side_effect = [self._mock_proc([], 0), self._mock_proc([], 0), self._mock_proc([], 0)]
 
             src_cursor = MagicMock()
             src_cursor.execute.side_effect = psycopg2.OperationalError('server closed the connection unexpectedly')

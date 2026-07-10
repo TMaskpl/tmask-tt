@@ -7,7 +7,12 @@ from typing import Callable
 import psycopg2
 from psycopg2 import sql
 
-from .config import PG_DUMP_BASE_FLAGS, PG_DUMP_MAX_RETRIES, PG_DUMP_RETRY_DELAY
+from .config import (
+    PG_DUMP_BASE_FLAGS,
+    PG_DUMP_MAX_RETRIES,
+    PG_DUMP_RETRY_DELAY,
+    SED_STRIP_INCOMPATIBLE_SET,
+)
 
 
 class PgTransferError(Exception):
@@ -43,10 +48,15 @@ class PgTransferHandler:
         dump_proc = subprocess.Popen(  # nosec B603 — cmd built from validated connection params, no shell=True
             dump_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=dump_env,
         )
-        psql_proc = subprocess.Popen(  # nosec B603
-            psql_cmd, stdin=dump_proc.stdout, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, env=psql_env,
+        filter_proc = subprocess.Popen(  # nosec B603 — static sed pattern, no user input
+            ['sed', '-E', SED_STRIP_INCOMPATIBLE_SET],
+            stdin=dump_proc.stdout, stdout=subprocess.PIPE, text=True,
         )
         dump_proc.stdout.close()
+        psql_proc = subprocess.Popen(  # nosec B603
+            psql_cmd, stdin=filter_proc.stdout, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, env=psql_env,
+        )
+        filter_proc.stdout.close()
 
         output_lines = []
         output_lock = threading.Lock()
@@ -67,6 +77,7 @@ class PgTransferHandler:
         dump_thread.join()
 
         psql_exit = psql_proc.wait()
+        filter_proc.wait()
         dump_exit = dump_proc.wait()
         return dump_exit, psql_exit, '\n'.join(output_lines)
 
