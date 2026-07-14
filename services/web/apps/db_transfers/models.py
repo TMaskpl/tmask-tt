@@ -35,11 +35,11 @@ class PgTransferJob(models.Model):
     table_name        = models.CharField(max_length=255, blank=True)
     verify_row_count  = models.BooleanField(default=False)
     status            = models.CharField(max_length=10, choices=STATUS_CHOICES, default=STATUS_PENDING)
-    celery_task_id    = models.CharField(max_length=255, null=True, blank=True)
+    celery_task_id    = models.CharField(max_length=255, blank=True, default='')
     created_at        = models.DateTimeField(auto_now_add=True)
     started_at        = models.DateTimeField(null=True, blank=True)
     finished_at       = models.DateTimeField(null=True, blank=True)
-    error_message     = models.TextField(null=True, blank=True)
+    error_message     = models.TextField(blank=True, default='')
     cancelled_by      = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='cancelled_pg_jobs',

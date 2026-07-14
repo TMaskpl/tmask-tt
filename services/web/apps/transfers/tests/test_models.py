@@ -17,7 +17,7 @@ class TestTransferJob:
         assert job.status == STATUS_PENDING
         assert job.started_at is None
         assert job.finished_at is None
-        assert job.celery_task_id is None
+        assert job.celery_task_id == ''
 
     def test_mark_running_updates_status_and_timestamp(self, regular_user, make_connection):
         job = TransferJob.objects.create(

@@ -22,7 +22,7 @@ class Connection(models.Model):
     compress = models.BooleanField(default=False)
     encrypt  = models.BooleanField(default=False)
     strict_host_key_checking = models.BooleanField(default=True)
-    known_host_key = models.TextField(null=True, blank=True)
+    known_host_key = models.TextField(blank=True, default='')
     dry_run_before_transfer = models.BooleanField(default=False)
     verify_checksum = models.BooleanField(default=False)
     kind     = models.CharField(max_length=10, choices=KIND_CHOICES, default=KIND_SSH)
