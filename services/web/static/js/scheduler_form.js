@@ -1,5 +1,5 @@
 (function () {
-  var input = document.getElementById('id_cron_expr');
+  const input = document.getElementById('id_cron_expr');
   if (!input) return;
   document.querySelectorAll('.cron-ex').forEach(function (el) {
     el.addEventListener('click', function () {

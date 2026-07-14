@@ -1,8 +1,8 @@
 (function () {
-  var copyBtn = document.getElementById('copy-token-btn');
-  var closeBtn = document.getElementById('close-token-modal');
-  var tokenEl = document.getElementById('new-token-value');
-  var modal = document.getElementById('token-modal');
+  const copyBtn = document.getElementById('copy-token-btn');
+  const closeBtn = document.getElementById('close-token-modal');
+  const tokenEl = document.getElementById('new-token-value');
+  const modal = document.getElementById('token-modal');
 
   if (copyBtn && tokenEl) {
     copyBtn.addEventListener('click', function () {
