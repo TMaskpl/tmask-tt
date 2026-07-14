@@ -8,6 +8,8 @@ from apps.accounts.models import ROLE_ADMIN, ROLE_OPERATOR, ROLE_READONLY
 from .models import PgTransferJob, STATUS_RUNNING, STATUS_PENDING
 from .forms import PgTransferForm
 
+DB_TRANSFERS_DETAIL = 'db_transfers:detail'
+
 
 @require_role(ROLE_READONLY)
 def db_transfer_list(request):
@@ -28,7 +30,7 @@ def db_transfer_create(request):
                 result = current_app.send_task('db_transfers.execute', kwargs={'job_id': job.pk})
                 PgTransferJob.objects.filter(pk=job.pk).update(celery_task_id=result.id)
             transaction.on_commit(_dispatch)
-        return redirect('db_transfers:detail', pk=job.pk)
+        return redirect(DB_TRANSFERS_DETAIL, pk=job.pk)
     return render(request, 'db_transfers/create.html', {'form': form})
 
 
@@ -57,12 +59,12 @@ def db_transfer_stop(request, pk):
         job = get_object_or_404(PgTransferJob.objects.select_for_update(), pk=pk)
         if job.status not in (STATUS_PENDING, STATUS_RUNNING):
             messages.error(request, 'Transfer nie jest aktywny.')
-            return redirect('db_transfers:detail', pk=job.pk)
+            return redirect(DB_TRANSFERS_DETAIL, pk=job.pk)
         if job.celery_task_id:
             current_app.control.revoke(job.celery_task_id, terminate=True, signal='SIGTERM')
         job.mark_cancelled(by=request.user)
     messages.success(request, 'Transfer zatrzymany.')
-    return redirect('db_transfers:detail', pk=job.pk)
+    return redirect(DB_TRANSFERS_DETAIL, pk=job.pk)
 
 
 @require_role(ROLE_ADMIN)
@@ -71,6 +73,6 @@ def db_transfer_delete(request, pk):
     job = get_object_or_404(PgTransferJob, pk=pk)
     if job.status in (STATUS_PENDING, STATUS_RUNNING):
         messages.error(request, 'Nie można usunąć aktywnego transferu — najpierw zatrzymaj.')
-        return redirect('db_transfers:detail', pk=job.pk)
+        return redirect(DB_TRANSFERS_DETAIL, pk=job.pk)
     job.delete()
     return redirect('db_transfers:list')

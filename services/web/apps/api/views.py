@@ -91,5 +91,5 @@ def job_status(request, job_id):
         'status': job.status,
         'started_at': job.started_at.isoformat() if job.started_at else None,
         'finished_at': job.finished_at.isoformat() if job.finished_at else None,
-        'error': job.error_message,
+        'error': job.error_message or None,
     })

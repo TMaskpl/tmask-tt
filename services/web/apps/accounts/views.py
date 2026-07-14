@@ -21,6 +21,7 @@ from apps.organization.models import get_organization
 
 PROFILE_URL = 'accounts:profile'
 USERS_LIST = 'accounts:users'
+LOGIN_URL = 'accounts:login'
 
 LOGIN_LOCKOUT_THRESHOLD = 5
 LOGIN_LOCKOUT_MINUTES = 15
@@ -90,7 +91,7 @@ def login_view(request):
 @require_POST
 def logout_view(request):
     logout(request)
-    return redirect('accounts:login')
+    return redirect(LOGIN_URL)
 
 
 @require_role(ROLE_ADMIN)
@@ -263,7 +264,7 @@ MAX_PRE_2FA_ATTEMPTS = 5
 def totp_verify(request):
     user_id = request.session.get('pre_2fa_user_id')
     if not user_id:
-        return redirect('accounts:login')
+        return redirect(LOGIN_URL)
     User = get_user_model()
     user = get_object_or_404(User, pk=user_id)
 
@@ -294,7 +295,7 @@ def totp_verify(request):
             for key in ('pre_2fa_user_id', 'pre_2fa_attempts', 'pre_2fa_next'):
                 request.session.pop(key, None)
             messages.error(request, 'Zbyt wiele nieudanych prób — zaloguj się ponownie.')
-            return redirect('accounts:login')
+            return redirect(LOGIN_URL)
         form.add_error(None, 'Nieprawidłowy kod.')
 
     return render(request, 'accounts/totp_verify.html', {'form': form})

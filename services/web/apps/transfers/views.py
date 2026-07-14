@@ -10,6 +10,9 @@ from apps.connections.models import Connection
 from .models import TransferJob, STATUS_RUNNING, STATUS_PENDING
 from .forms import TransferForm
 
+TRANSFERS_CREATE_TEMPLATE = 'transfers/create.html'
+TRANSFERS_DETAIL = 'transfers:detail'
+
 
 def _connection_protocols():
     return dict(Connection.objects.values_list('pk', 'protocol'))
@@ -27,7 +30,7 @@ def transfer_create(request):
                     fh.write(chunk)
         except OSError as exc:
             form.add_error(None, f'Nie udało się zapisać pliku: {exc}')
-            return render(request, 'transfers/create.html', {'form': form, 'connection_protocols': _connection_protocols()})
+            return render(request, TRANSFERS_CREATE_TEMPLATE, {'form': form, 'connection_protocols': _connection_protocols()})
         with transaction.atomic():
             job = form.save(commit=False)
             job.owner = request.user
@@ -39,8 +42,8 @@ def transfer_create(request):
                 result = current_app.send_task('transfers.execute', kwargs={'job_id': job.pk, 'gpg_passphrase': passphrase})
                 TransferJob.objects.filter(pk=job.pk).update(celery_task_id=result.id)
             transaction.on_commit(_dispatch)
-        return redirect('transfers:detail', pk=job.pk)
-    return render(request, 'transfers/create.html', {'form': form, 'connection_protocols': _connection_protocols()})
+        return redirect(TRANSFERS_DETAIL, pk=job.pk)
+    return render(request, TRANSFERS_CREATE_TEMPLATE, {'form': form, 'connection_protocols': _connection_protocols()})
 
 
 @require_role(ROLE_OPERATOR)
@@ -51,7 +54,7 @@ def transfer_dry_run(request):
         connection = form.cleaned_data['connection']
         if connection.protocol != 'rsync':
             form.add_error(None, 'Dry-run jest dostępny tylko dla połączeń rsync.')
-            return render(request, 'transfers/create.html', {**ctx_base, 'form': form})
+            return render(request, TRANSFERS_CREATE_TEMPLATE, {**ctx_base, 'form': form})
         uploaded = form.cleaned_data['upload']
         dest = form.cleaned_data['source_path']
         try:
@@ -60,7 +63,7 @@ def transfer_dry_run(request):
                     fh.write(chunk)
         except OSError as exc:
             form.add_error(None, f'Nie udało się zapisać pliku: {exc}')
-            return render(request, 'transfers/create.html', {**ctx_base, 'form': form})
+            return render(request, TRANSFERS_CREATE_TEMPLATE, {**ctx_base, 'form': form})
         passphrase = (form.cleaned_data.get('gpg_passphrase') or '').strip() or None
         result = current_app.send_task('transfers.dry_run_preview', kwargs={
             'connection_id': connection.pk,
@@ -68,8 +71,8 @@ def transfer_dry_run(request):
             'destination_path': form.cleaned_data['destination_path'],
             'gpg_passphrase': passphrase,
         })
-        return render(request, 'transfers/create.html', {**ctx_base, 'form': form, 'dry_run_task_id': result.id})
-    return render(request, 'transfers/create.html', {**ctx_base, 'form': form})
+        return render(request, TRANSFERS_CREATE_TEMPLATE, {**ctx_base, 'form': form, 'dry_run_task_id': result.id})
+    return render(request, TRANSFERS_CREATE_TEMPLATE, {**ctx_base, 'form': form})
 
 
 @require_role(ROLE_OPERATOR)
@@ -88,7 +91,7 @@ def transfer_detail(request, pk):
         TransferJob.objects.select_related('connection', 'flow', 'flow__source_conn', 'flow__dest_conn'),
         pk=pk,
     )
-    return render(request, 'transfers/create.html', {'job': job})
+    return render(request, TRANSFERS_CREATE_TEMPLATE, {'job': job})
 
 
 @require_role(ROLE_READONLY)
@@ -114,12 +117,12 @@ def transfer_stop(request, pk):
         job = get_object_or_404(TransferJob.objects.select_for_update(), pk=pk)
         if job.status not in (STATUS_PENDING, STATUS_RUNNING):
             messages.error(request, 'Transfer nie jest aktywny.')
-            return redirect('transfers:detail', pk=job.pk)
+            return redirect(TRANSFERS_DETAIL, pk=job.pk)
         if job.celery_task_id:
             current_app.control.revoke(job.celery_task_id, terminate=True, signal='SIGTERM')
         job.mark_cancelled(by=request.user)
     messages.success(request, 'Transfer zatrzymany.')
-    return redirect('transfers:detail', pk=job.pk)
+    return redirect(TRANSFERS_DETAIL, pk=job.pk)
 
 
 @require_role(ROLE_ADMIN)
@@ -128,6 +131,6 @@ def transfer_delete(request, pk):
     job = get_object_or_404(TransferJob, pk=pk)
     if job.status in (STATUS_PENDING, STATUS_RUNNING):
         messages.error(request, 'Nie można usunąć aktywnego transferu — najpierw zatrzymaj.')
-        return redirect('transfers:detail', pk=job.pk)
+        return redirect(TRANSFERS_DETAIL, pk=job.pk)
     job.delete()
     return redirect('transfers:logs')
