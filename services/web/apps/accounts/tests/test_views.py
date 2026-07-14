@@ -429,3 +429,25 @@ class TestUserCreate:
         })
         assert resp.status_code == 200
         assert not django_user_model.objects.filter(username='mismatched').exists()
+
+    def test_common_password_rejected(self, admin_client, django_user_model):
+        resp = admin_client.post('/accounts/users/new/', {
+            'username': 'weakpass',
+            'email': 'weakpass@example.com',
+            'role': 'operator',
+            'password1': 'password',
+            'password2': 'password',
+        })
+        assert resp.status_code == 200
+        assert not django_user_model.objects.filter(username='weakpass').exists()
+
+    def test_numeric_only_password_rejected(self, admin_client, django_user_model):
+        resp = admin_client.post('/accounts/users/new/', {
+            'username': 'numericpass',
+            'email': 'numericpass@example.com',
+            'role': 'operator',
+            'password1': '48507162534',
+            'password2': '48507162534',
+        })
+        assert resp.status_code == 200
+        assert not django_user_model.objects.filter(username='numericpass').exists()
