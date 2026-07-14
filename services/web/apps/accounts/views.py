@@ -1,9 +1,12 @@
+from datetime import timedelta
+
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import login, logout, authenticate, get_user_model
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.shortcuts import render, redirect, get_object_or_404
+from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 import requests
@@ -19,29 +22,67 @@ from apps.organization.models import get_organization
 PROFILE_URL = 'accounts:profile'
 USERS_LIST = 'accounts:users'
 
+LOGIN_LOCKOUT_THRESHOLD = 5
+LOGIN_LOCKOUT_MINUTES = 15
+LOCKOUT_MESSAGE = (
+    f'Konto tymczasowo zablokowane po zbyt wielu nieudanych próbach logowania. '
+    f'Spróbuj ponownie za {LOGIN_LOCKOUT_MINUTES} minut.'
+)
+
+
+def _is_locked_out(user) -> bool:
+    return bool(user.locked_until and user.locked_until > timezone.now())
+
+
+def _register_failed_login(user) -> None:
+    user.failed_login_attempts += 1
+    if user.failed_login_attempts >= LOGIN_LOCKOUT_THRESHOLD:
+        user.locked_until = timezone.now() + timedelta(minutes=LOGIN_LOCKOUT_MINUTES)
+    user.save(update_fields=['failed_login_attempts', 'locked_until'])
+
+
+def _register_successful_login(user) -> None:
+    if user.failed_login_attempts or user.locked_until:
+        user.failed_login_attempts = 0
+        user.locked_until = None
+        user.save(update_fields=['failed_login_attempts', 'locked_until'])
+
+
+def _complete_login(request, user):
+    next_url = request.GET.get('next', '')
+    safe_next = next_url if next_url and url_has_allowed_host_and_scheme(
+        next_url, allowed_hosts={request.get_host()}
+    ) else ''
+    if user.totp_enabled:
+        request.session['pre_2fa_user_id'] = user.id
+        request.session['pre_2fa_attempts'] = 0
+        if safe_next:
+            request.session['pre_2fa_next'] = safe_next
+        return redirect('accounts:2fa_verify')
+    login(request, user)
+    return redirect(safe_next or settings.LOGIN_REDIRECT_URL)
+
 
 def login_view(request):
     if request.user.is_authenticated:
         return redirect(settings.LOGIN_REDIRECT_URL)
     form = LoginForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
+        User = get_user_model()
+        candidate = User.objects.filter(username=form.cleaned_data['username']).first()
+        if candidate and _is_locked_out(candidate):
+            form.add_error(None, LOCKOUT_MESSAGE)
+            return render(request, 'accounts/login.html', {'form': form})
         user = authenticate(
             request,
             username=form.cleaned_data['username'],
             password=form.cleaned_data['password'],
         )
         if user:
-            next_url = request.GET.get('next', '')
-            if user.totp_enabled:
-                request.session['pre_2fa_user_id'] = user.id
-                request.session['pre_2fa_attempts'] = 0
-                if next_url and url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
-                    request.session['pre_2fa_next'] = next_url
-                return redirect('accounts:2fa_verify')
-            login(request, user)
-            if next_url and url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
-                return redirect(next_url)
-            return redirect(settings.LOGIN_REDIRECT_URL)
+            _register_successful_login(user)
+            return _complete_login(request, user)
+        if candidate:
+            _register_failed_login(candidate)
         form.add_error(None, 'Nieprawidłowa nazwa użytkownika lub hasło.')
     return render(request, 'accounts/login.html', {'form': form})
 

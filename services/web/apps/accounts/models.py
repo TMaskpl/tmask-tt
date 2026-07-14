@@ -21,6 +21,8 @@ class User(AbstractUser):
     telegram_on_failed = models.BooleanField(default=True)
     totp_secret  = EncryptedCharField(max_length=64, blank=True, default='')
     totp_enabled = models.BooleanField(default=False)
+    failed_login_attempts = models.PositiveSmallIntegerField(default=0)
+    locked_until = models.DateTimeField(null=True, blank=True)
 
     @property
     def role_level(self) -> int:

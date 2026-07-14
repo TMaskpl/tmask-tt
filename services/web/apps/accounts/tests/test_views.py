@@ -1,7 +1,12 @@
+from datetime import timedelta
+
 import pytest
 from django.conf import settings
 from django.urls import reverse
+from django.utils import timezone
 from unittest.mock import MagicMock, patch
+
+from apps.accounts.views import LOGIN_LOCKOUT_THRESHOLD
 
 
 @pytest.mark.django_db
@@ -19,6 +24,57 @@ class TestLoginView:
     def test_login_with_invalid_credentials(self, client):
         url = reverse('accounts:login')
         response = client.post(url, {'username': 'wrong', 'password': 'wrong'})
+        assert response.status_code == 200
+        assert '__all__' in response.context['form'].errors
+
+    def test_failed_login_increments_attempt_counter(self, client, regular_user):
+        url = reverse('accounts:login')
+        client.post(url, {'username': 'user_test', 'password': 'wrong'})
+        regular_user.refresh_from_db()
+        assert regular_user.failed_login_attempts == 1
+        assert regular_user.locked_until is None
+
+    def test_successful_login_resets_attempt_counter(self, client, regular_user):
+        url = reverse('accounts:login')
+        client.post(url, {'username': 'user_test', 'password': 'wrong'})
+        client.post(url, {'username': 'user_test', 'password': 'testpass123'})
+        regular_user.refresh_from_db()
+        assert regular_user.failed_login_attempts == 0
+        assert regular_user.locked_until is None
+
+    def test_account_locked_after_threshold_failed_attempts(self, client, regular_user):
+        url = reverse('accounts:login')
+        for _ in range(LOGIN_LOCKOUT_THRESHOLD):
+            client.post(url, {'username': 'user_test', 'password': 'wrong'})
+        regular_user.refresh_from_db()
+        assert regular_user.failed_login_attempts == LOGIN_LOCKOUT_THRESHOLD
+        assert regular_user.locked_until is not None
+        assert regular_user.locked_until > timezone.now()
+
+    def test_locked_account_rejects_correct_password(self, client, regular_user):
+        regular_user.failed_login_attempts = LOGIN_LOCKOUT_THRESHOLD
+        regular_user.locked_until = timezone.now() + timedelta(minutes=15)
+        regular_user.save()
+        url = reverse('accounts:login')
+        response = client.post(url, {'username': 'user_test', 'password': 'testpass123'})
+        assert response.status_code == 200
+        assert '__all__' in response.context['form'].errors
+        assert 'zablokowane' in str(response.context['form'].errors['__all__'])
+
+    def test_lockout_expires_and_correct_password_logs_in(self, client, regular_user):
+        regular_user.failed_login_attempts = LOGIN_LOCKOUT_THRESHOLD
+        regular_user.locked_until = timezone.now() - timedelta(minutes=1)
+        regular_user.save()
+        url = reverse('accounts:login')
+        response = client.post(url, {'username': 'user_test', 'password': 'testpass123'})
+        assert response.status_code == 302
+        regular_user.refresh_from_db()
+        assert regular_user.failed_login_attempts == 0
+        assert regular_user.locked_until is None
+
+    def test_failed_login_for_unknown_username_does_not_error(self, client):
+        url = reverse('accounts:login')
+        response = client.post(url, {'username': 'does-not-exist', 'password': 'wrong'})
         assert response.status_code == 200
         assert '__all__' in response.context['form'].errors
 
