@@ -29,7 +29,7 @@ def trigger_connection(request, connection_id):
 
     try:
         data = json.loads(request.body)
-    except (json.JSONDecodeError, ValueError):
+    except ValueError:
         data = {}
 
     source_path = data.get('source_path', '').strip()

@@ -69,8 +69,8 @@ def login_view(request):
         return redirect(settings.LOGIN_REDIRECT_URL)
     form = LoginForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
-        User = get_user_model()
-        candidate = User.objects.filter(username=form.cleaned_data['username']).first()
+        user_model = get_user_model()
+        candidate = user_model.objects.filter(username=form.cleaned_data['username']).first()
         if candidate and _is_locked_out(candidate):
             form.add_error(None, LOCKOUT_MESSAGE)
             return render(request, 'accounts/login.html', {'form': form})
@@ -96,8 +96,8 @@ def logout_view(request):
 
 @require_role(ROLE_ADMIN)
 def users_list(request):
-    User = get_user_model()
-    users = User.objects.all().order_by('username')
+    user_model = get_user_model()
+    users = user_model.objects.all().order_by('username')
     return render(request, 'users/list.html', {
         'users': users,
         'role_choices': ROLE_CHOICES,
@@ -108,16 +108,16 @@ def users_list(request):
 @require_role(ROLE_ADMIN)
 @require_POST
 def change_user_role(request, pk):
-    User = get_user_model()
+    user_model = get_user_model()
     new_role = request.POST.get('role', '')
     valid_roles = dict(ROLE_CHOICES)
     if new_role not in valid_roles:
         messages.error(request, 'Nieprawidłowa rola.')
         return redirect(USERS_LIST)
     with transaction.atomic():
-        target = get_object_or_404(User.objects.select_for_update(), pk=pk)
+        target = get_object_or_404(user_model.objects.select_for_update(), pk=pk)
         if target.role == ROLE_ADMIN and new_role != ROLE_ADMIN:
-            remaining_admins = User.objects.select_for_update().filter(
+            remaining_admins = user_model.objects.select_for_update().filter(
                 role=ROLE_ADMIN
             ).exclude(pk=target.pk).count()
             if remaining_admins == 0:
@@ -295,8 +295,8 @@ def totp_verify(request):
     user_id = request.session.get('pre_2fa_user_id')
     if not user_id:
         return redirect(LOGIN_URL)
-    User = get_user_model()
-    user = get_object_or_404(User, pk=user_id)
+    user_model = get_user_model()
+    user = get_object_or_404(user_model, pk=user_id)
 
     form = TOTPCodeForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():

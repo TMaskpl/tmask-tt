@@ -54,6 +54,5 @@ document.addEventListener('click', function (e) {
   el = e.target.closest('[data-browse-close]');
   if (el) {
     closeBrowser();
-    return;
   }
 });
