@@ -261,6 +261,36 @@ def totp_recovery_codes(request):
 MAX_PRE_2FA_ATTEMPTS = 5
 
 
+def _check_totp_or_recovery(user, code):
+    if totp.verify_totp(user.totp_secret, code):
+        return True, None
+    recovery_match = totp.check_recovery_code(user, code)
+    return recovery_match is not None, recovery_match
+
+
+def _finish_2fa_login(request, user, recovery_match):
+    next_url = request.session.pop('pre_2fa_next', '')
+    del request.session['pre_2fa_user_id']
+    del request.session['pre_2fa_attempts']
+    login(request, user)
+    if recovery_match:
+        remaining = user.recovery_codes.filter(used_at__isnull=True).count()
+        messages.success(request, f'Zalogowano kodem zapasowym ({remaining} pozostało).')
+    if next_url:
+        return redirect(next_url)
+    return redirect(settings.LOGIN_REDIRECT_URL)
+
+
+def _register_2fa_failure(request):
+    request.session['pre_2fa_attempts'] += 1
+    if request.session['pre_2fa_attempts'] < MAX_PRE_2FA_ATTEMPTS:
+        return None
+    for key in ('pre_2fa_user_id', 'pre_2fa_attempts', 'pre_2fa_next'):
+        request.session.pop(key, None)
+    messages.error(request, 'Zbyt wiele nieudanych prób — zaloguj się ponownie.')
+    return redirect(LOGIN_URL)
+
+
 def totp_verify(request):
     user_id = request.session.get('pre_2fa_user_id')
     if not user_id:
@@ -270,32 +300,12 @@ def totp_verify(request):
 
     form = TOTPCodeForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
-        code = form.cleaned_data['code']
-        recovery_match = None
-        if totp.verify_totp(user.totp_secret, code):
-            valid = True
-        else:
-            recovery_match = totp.check_recovery_code(user, code)
-            valid = recovery_match is not None
-
+        valid, recovery_match = _check_totp_or_recovery(user, form.cleaned_data['code'])
         if valid:
-            next_url = request.session.pop('pre_2fa_next', '')
-            del request.session['pre_2fa_user_id']
-            del request.session['pre_2fa_attempts']
-            login(request, user)
-            if recovery_match:
-                remaining = user.recovery_codes.filter(used_at__isnull=True).count()
-                messages.success(request, f'Zalogowano kodem zapasowym ({remaining} pozostało).')
-            if next_url:
-                return redirect(next_url)
-            return redirect(settings.LOGIN_REDIRECT_URL)
-
-        request.session['pre_2fa_attempts'] += 1
-        if request.session['pre_2fa_attempts'] >= MAX_PRE_2FA_ATTEMPTS:
-            for key in ('pre_2fa_user_id', 'pre_2fa_attempts', 'pre_2fa_next'):
-                request.session.pop(key, None)
-            messages.error(request, 'Zbyt wiele nieudanych prób — zaloguj się ponownie.')
-            return redirect(LOGIN_URL)
+            return _finish_2fa_login(request, user, recovery_match)
+        lockout_redirect = _register_2fa_failure(request)
+        if lockout_redirect:
+            return lockout_redirect
         form.add_error(None, 'Nieprawidłowy kod.')
 
     return render(request, 'accounts/totp_verify.html', {'form': form})

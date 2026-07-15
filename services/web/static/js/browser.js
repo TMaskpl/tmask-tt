@@ -31,7 +31,7 @@ document.addEventListener('change', function (e) {
   if (!input) return;
   const display = document.getElementById(input.dataset.fileDisplay);
   if (display) {
-    display.value = input.files && input.files.length ? input.files[0].name : '';
+    display.value = input.files?.length ? input.files[0].name : '';
   }
 });
 

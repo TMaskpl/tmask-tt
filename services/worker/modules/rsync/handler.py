@@ -19,6 +19,9 @@ class RsyncTransferError(Exception):
     pass
 
 
+HOST_KEY_WARNING = 'Host key verification DISABLED — connection is vulnerable to MITM'
+
+
 class RsyncHandler:
     def __init__(self, params: dict):
         self.params = params
@@ -93,80 +96,91 @@ class RsyncHandler:
         if 'No such file' in output:
             raise RsyncTransferError(f'SOURCE NOT FOUND: {self.params["source_path"]}')
 
+    def _setup_known_hosts(self, log_callback: Callable[[str, str], None]):
+        if self.params.get('strict_host_key_checking') and self.params.get('known_host_key'):
+            with tempfile.NamedTemporaryFile(mode='w', suffix='_known_hosts', delete=False) as f:
+                f.write(self.params['known_host_key'])
+                return f.name
+        log_callback('warn', HOST_KEY_WARNING)
+        return None
+
+    def _encrypt_source_if_needed(self, log_callback: Callable[[str, str], None]):
+        """Returns (use_gpg, source_override, dest_override, encrypted_path). May raise GPGEncryptError."""
+        if not (self.params.get('encrypt') and self.params.get('gpg_passphrase')):
+            return False, None, None, None
+        log_callback('info', 'GPG: szyfrowanie pliku...')
+        encrypted_path = encrypt_file(self.params['source_path'], self.params['gpg_passphrase'])
+        dest_override = self.params['destination_path'] + '.gpg'
+        return True, encrypted_path, dest_override, encrypted_path
+
+    def _run_dry_run_precheck(self, source_override, dest_override, known_hosts_path, log_callback) -> None:
+        log_callback('info', 'Dry-run: sprawdzam transfer...')
+        dry_cmd = self._build_command(
+            source_override=source_override,
+            dest_override=dest_override,
+            known_hosts_path=known_hosts_path,
+            dry_run=True,
+        )
+        exit_code, output = self._run_attempt(dry_cmd, log_callback)
+        self._check_rsync_output(exit_code, output)
+        if exit_code != 0:
+            raise RsyncTransferError(f'DRY-RUN FAILED (exit {exit_code}) — transfer anulowany')
+        log_callback('info', 'Dry-run OK — kontynuuję transfer')
+
+    def _verify_checksum_if_needed(self, use_gpg, source_override, dest_override, known_hosts_path, log_callback) -> None:
+        if not self.params.get('verify_checksum'):
+            return
+        if use_gpg:
+            log_callback('warn', 'SHA-256: pomijane — GPG włączone (encrypted file)')
+            return
+        try:
+            ssh_prefix = self._build_ssh_cmd_prefix(known_hosts_path)
+            verify_rsync(
+                source_override or self.params['source_path'],
+                ssh_prefix,
+                dest_override or self.params['destination_path'],
+                log_callback,
+            )
+        except ChecksumVerificationError as e:
+            raise RsyncTransferError(str(e))
+
+    def _transfer_with_retries(self, cmd, log_callback: Callable[[str, str], None]) -> None:
+        last_exit_code = None
+        for attempt in range(1, RSYNC_MAX_RETRIES + 1):
+            log_callback('info', f'Starting rsync (attempt {attempt}): {" ".join(cmd)}')
+            last_exit_code, output = self._run_attempt(cmd, log_callback)
+            self._check_rsync_output(last_exit_code, output)
+            if last_exit_code == 0:
+                log_callback('info', 'Transfer complete')
+                return
+            if attempt < RSYNC_MAX_RETRIES:
+                log_callback('warn', f'rsync failed (exit {last_exit_code}), retrying in {RSYNC_RETRY_DELAY}s...')
+                time.sleep(RSYNC_RETRY_DELAY)
+        raise RsyncTransferError(
+            f'TRANSFER FAILED — rsync failed after {RSYNC_MAX_RETRIES} attempts (last exit code: {last_exit_code})'
+        )
+
     def execute(self, log_callback: Callable[[str, str], None]) -> None:
-        use_gpg = self.params.get('encrypt') and self.params.get('gpg_passphrase')
         encrypted_path = None
         known_hosts_path = None
 
         try:
-            if self.params.get('strict_host_key_checking') and self.params.get('known_host_key'):
-                with tempfile.NamedTemporaryFile(mode='w', suffix='_known_hosts', delete=False) as f:
-                    f.write(self.params['known_host_key'])
-                    known_hosts_path = f.name
-            else:
-                log_callback('warn', 'Host key verification DISABLED — connection is vulnerable to MITM')
-
-            if use_gpg:
-                log_callback('info', 'GPG: szyfrowanie pliku...')
-                try:
-                    encrypted_path = encrypt_file(self.params['source_path'], self.params['gpg_passphrase'])
-                except GPGEncryptError as e:
-                    raise RsyncTransferError(str(e))
-                source_override = encrypted_path
-                dest_override = self.params['destination_path'] + '.gpg'
-            else:
-                source_override = None
-                dest_override = None
+            known_hosts_path = self._setup_known_hosts(log_callback)
+            try:
+                use_gpg, source_override, dest_override, encrypted_path = self._encrypt_source_if_needed(log_callback)
+            except GPGEncryptError as e:
+                raise RsyncTransferError(str(e))
 
             if self.params.get('dry_run'):
-                log_callback('info', 'Dry-run: sprawdzam transfer...')
-                dry_cmd = self._build_command(
-                    source_override=source_override,
-                    dest_override=dest_override,
-                    known_hosts_path=known_hosts_path,
-                    dry_run=True,
-                )
-                exit_code, output = self._run_attempt(dry_cmd, log_callback)
-                self._check_rsync_output(exit_code, output)
-                if exit_code != 0:
-                    raise RsyncTransferError(f'DRY-RUN FAILED (exit {exit_code}) — transfer anulowany')
-                log_callback('info', 'Dry-run OK — kontynuuję transfer')
+                self._run_dry_run_precheck(source_override, dest_override, known_hosts_path, log_callback)
 
             cmd = self._build_command(
                 source_override=source_override,
                 dest_override=dest_override,
                 known_hosts_path=known_hosts_path,
             )
-            last_exit_code = None
-
-            for attempt in range(1, RSYNC_MAX_RETRIES + 1):
-                log_callback('info', f'Starting rsync (attempt {attempt}): {" ".join(cmd)}')
-                last_exit_code, output = self._run_attempt(cmd, log_callback)
-                self._check_rsync_output(last_exit_code, output)
-                if last_exit_code == 0:
-                    log_callback('info', 'Transfer complete')
-                    if self.params.get('verify_checksum'):
-                        if use_gpg:
-                            log_callback('warn', 'SHA-256: pomijane — GPG włączone (encrypted file)')
-                        else:
-                            try:
-                                ssh_prefix = self._build_ssh_cmd_prefix(known_hosts_path)
-                                verify_rsync(
-                                    source_override or self.params['source_path'],
-                                    ssh_prefix,
-                                    dest_override or self.params['destination_path'],
-                                    log_callback,
-                                )
-                            except ChecksumVerificationError as e:
-                                raise RsyncTransferError(str(e))
-                    return
-                if attempt < RSYNC_MAX_RETRIES:
-                    log_callback('warn', f'rsync failed (exit {last_exit_code}), retrying in {RSYNC_RETRY_DELAY}s...')
-                    time.sleep(RSYNC_RETRY_DELAY)
-
-            raise RsyncTransferError(
-                f'TRANSFER FAILED — rsync failed after {RSYNC_MAX_RETRIES} attempts (last exit code: {last_exit_code})'
-            )
+            self._transfer_with_retries(cmd, log_callback)
+            self._verify_checksum_if_needed(use_gpg, source_override, dest_override, known_hosts_path, log_callback)
         finally:
             if encrypted_path and os.path.exists(encrypted_path):
                 os.unlink(encrypted_path)
@@ -174,31 +188,17 @@ class RsyncHandler:
                 os.unlink(known_hosts_path)
 
     def preview(self, log_callback: Callable[[str, str], None]) -> dict:
-        use_gpg = self.params.get('encrypt') and self.params.get('gpg_passphrase')
         encrypted_path = None
         known_hosts_path = None
-        warning_prefix = ''
 
         try:
-            if self.params.get('strict_host_key_checking') and self.params.get('known_host_key'):
-                with tempfile.NamedTemporaryFile(mode='w', suffix='_known_hosts', delete=False) as f:
-                    f.write(self.params['known_host_key'])
-                    known_hosts_path = f.name
-            else:
-                warning_prefix = 'Host key verification DISABLED — connection is vulnerable to MITM\n'
-                log_callback('warn', 'Host key verification DISABLED — connection is vulnerable to MITM')
+            known_hosts_path = self._setup_known_hosts(log_callback)
+            warning_prefix = '' if known_hosts_path else HOST_KEY_WARNING + '\n'
 
-            if use_gpg:
-                log_callback('info', 'GPG: szyfrowanie pliku...')
-                try:
-                    encrypted_path = encrypt_file(self.params['source_path'], self.params['gpg_passphrase'])
-                except GPGEncryptError as e:
-                    return {'exit_code': None, 'output': warning_prefix + f'GPG ENCRYPTION FAILED: {e}'}
-                source_override = encrypted_path
-                dest_override = self.params['destination_path'] + '.gpg'
-            else:
-                source_override = None
-                dest_override = None
+            try:
+                _, source_override, dest_override, encrypted_path = self._encrypt_source_if_needed(log_callback)
+            except GPGEncryptError as e:
+                return {'exit_code': None, 'output': warning_prefix + f'GPG ENCRYPTION FAILED: {e}'}
 
             dry_cmd = self._build_command(
                 source_override=source_override,

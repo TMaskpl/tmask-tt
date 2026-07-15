@@ -22,8 +22,6 @@
   Chart.defaults.plugins.legend.labels.boxWidth = 12;
   Chart.defaults.plugins.legend.labels.usePointStyle = true;
 
-  const glow = { shadowColor: 'rgba(0, 255, 65, 0.35)', shadowBlur: 8 };
-
   new Chart(document.getElementById('chart-per-day'), {
     type: 'bar',
     data: {

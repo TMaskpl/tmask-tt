@@ -86,6 +86,50 @@ def export_config(user, passphrase: str) -> dict:
     }
 
 
+def _import_connections(user, rows, fernet: Fernet, result: ImportResult) -> None:
+    existing = set(
+        Connection.objects.filter(owner=user).values_list('name', flat=True)
+    )
+    for row in rows:
+        if row['name'] in existing:
+            result.conn_skipped += 1
+            continue
+        conn = Connection(owner=user)
+        for f in CONNECTION_FIELDS:
+            setattr(conn, f, row.get(f))
+        try:
+            conn.password = _decrypt_secret(row.get('password_enc'), fernet)
+            conn.ssh_key = _decrypt_secret(row.get('ssh_key_enc'), fernet)
+        except InvalidToken:
+            raise PassphraseError('Błędne hasło lub uszkodzony plik')
+        conn.save()
+        existing.add(row['name'])
+        result.conn_added += 1
+
+
+def _import_flows(user, rows, conn_map: dict, result: ImportResult) -> None:
+    existing_flows = set(
+        Flow.objects.filter(owner=user).values_list('name', flat=True)
+    )
+    for row in rows:
+        if row['name'] in existing_flows:
+            result.flow_skipped += 1
+            continue
+        src = conn_map.get(row['source_conn'])
+        dst = conn_map.get(row['dest_conn'])
+        if src is None or dst is None:
+            result.flow_unresolved += 1
+            continue
+        Flow.objects.create(
+            owner=user, name=row['name'],
+            source_conn=src, source_path=row['source_path'],
+            dest_conn=dst, dest_path=row['dest_path'],
+            verify_checksum=row.get('verify_checksum', False),
+        )
+        existing_flows.add(row['name'])
+        result.flow_added += 1
+
+
 def import_config(user, data: dict, passphrase: str) -> ImportResult:
     if data.get('format') != FORMAT or data.get('version') != VERSION:
         raise ValueError('Nieprawidłowy format pliku')
@@ -99,44 +143,7 @@ def import_config(user, data: dict, passphrase: str) -> ImportResult:
 
     result = ImportResult()
     with transaction.atomic():
-        existing = set(
-            Connection.objects.filter(owner=user).values_list('name', flat=True)
-        )
-        for row in data.get('connections', []):
-            if row['name'] in existing:
-                result.conn_skipped += 1
-                continue
-            conn = Connection(owner=user)
-            for f in CONNECTION_FIELDS:
-                setattr(conn, f, row.get(f))
-            try:
-                conn.password = _decrypt_secret(row.get('password_enc'), fernet)
-                conn.ssh_key = _decrypt_secret(row.get('ssh_key_enc'), fernet)
-            except InvalidToken:
-                raise PassphraseError('Błędne hasło lub uszkodzony plik')
-            conn.save()
-            existing.add(row['name'])
-            result.conn_added += 1
-
+        _import_connections(user, data.get('connections', []), fernet, result)
         conn_map = {c.name: c for c in Connection.objects.filter(owner=user)}
-        existing_flows = set(
-            Flow.objects.filter(owner=user).values_list('name', flat=True)
-        )
-        for row in data.get('flows', []):
-            if row['name'] in existing_flows:
-                result.flow_skipped += 1
-                continue
-            src = conn_map.get(row['source_conn'])
-            dst = conn_map.get(row['dest_conn'])
-            if src is None or dst is None:
-                result.flow_unresolved += 1
-                continue
-            Flow.objects.create(
-                owner=user, name=row['name'],
-                source_conn=src, source_path=row['source_path'],
-                dest_conn=dst, dest_path=row['dest_path'],
-                verify_checksum=row.get('verify_checksum', False),
-            )
-            existing_flows.add(row['name'])
-            result.flow_added += 1
+        _import_flows(user, data.get('flows', []), conn_map, result)
     return result
