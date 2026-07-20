@@ -73,10 +73,10 @@ docker compose build web && docker compose up -d web
 ## Testy
 
 ```bash
-# Web (225 testów)
-docker compose run --rm web python -m pytest apps/ -v
+# Web (453 testów)
+docker compose --profile test run --rm web-test python -m pytest apps/ -v
 
-# Worker (114 testów)
+# Worker (170 testów)
 docker compose run --rm worker python -m pytest tests/ -v
 
 # Konkretny test
@@ -158,10 +158,38 @@ Obrazy do skanowania: `nginx:stable-alpine`, `tmask-tt-web`, `tmask-tt-beat`, `t
 
 ## Dokumentacja (Obsidian vault)
 
-- `11-Apps/CSCS/tmask-transporter/Projekt-tmask-transporter.md` — architektura, decyzje, historia
-- `11-Apps/CSCS/tmask-transporter/audyt/` — audyty bezpieczeństwa (DevSecOps, ZAP, Trivy)
-- `11-Apps/CSCS/tmask-transporter/audyt/Projekt-tmask-transporter-Trivy-2026-05-30.md` — Trivy: 1859 CVE w 6 obrazach, 82 HIGH
-- `11-Apps/CSCS/tmask-transporter/testy/Projekt-tmask-transporter-Testy.md` — historia wyników testów
+Struktura rozdziela "stan obecny" (czytany przy każdej sesji) od historii (czytana na żądanie) — patrz sekcja niżej "Zasady dokumentacji vault".
+
+- `11-Apps/CSCS/tmask-transporter/Projekt-tmask-transporter.md` — **stan obecny**: architektura, stack, status, linki. Krótki, nie rośnie z każdą funkcją.
+- `11-Apps/CSCS/tmask-transporter/Projekt-tmask-transporter-HISTORIA.md` — pełna chronologia zrealizowanych funkcji, bugów, incydentów (append-only)
+- `11-Apps/CSCS/tmask-transporter/audyt/INDEKS.md` — wskaźnik na najnowszy audyt każdego typu (DevSecOps/Trivy/Semgrep/Linter/ZAP); reszta plików w `audyt/` to historia (data w nazwie)
+- `11-Apps/CSCS/tmask-transporter/testy/Projekt-tmask-transporter-Testy.md` — aktualny stan testów (nadpisywany) + kompaktowa tabela trendu
 - `08-Migracje-Projekty/Projekt-TMask-Relay-Flows.md` — specyfikacja trybu relay
 - `docs/superpowers/specs/` — design specs (transporter + relay flows)
 - `docs/superpowers/plans/` — plany implementacji (transporter + relay flows)
+
+## Zasady dokumentacji vault (nadpisują domyślne zachowanie skilli `obsidian-*`)
+
+Wyłącznie dla tego projektu (pilotaż od 2026-07-20) — domyślne zachowanie skilli `obsidian-testy`/`obsidian-aktualizuj`/`audyt-devsecops` (dopisuj wszystko do jednego rosnącego pliku) jest tu **nadpisane**, żeby sesje nie musiały czytać coraz większego pliku przy każdej pracy nad projektem:
+
+| Sytuacja | Co robić |
+|----------|----------|
+| Nowa funkcja / bugfix / incydent | Wpis `### N. Nazwa ✅ ZREALIZOWANE (data)` trafia do `Projekt-tmask-transporter-HISTORIA.md`, **nie** do `Projekt-tmask-transporter.md`. Główny plik dostaje co najwyżej aktualizację sekcji "Status" (1 zdanie), jeśli w ogóle. |
+| Nowy audyt bezpieczeństwa (`/audyt-devsecops`, `/trivy-sonar`, `/tmask-semgrep`, `/tmask-python-linter`) | Nowy plik z datą w `audyt/` jak dotychczas (bez zmian) + zaktualizuj 1 wiersz w `audyt/INDEKS.md`. Nie kopiuj streszczenia raportu do `Projekt-tmask-transporter.md`. |
+| Nowy wynik testów (`/obsidian-testy` lub ręcznie) | **Nadpisz** sekcję "Aktualny stan" w pliku testów (nie dopisuj nowej pełnej sekcji na górze). Dodaj jeden wiersz do tabeli "Historia (trend)" (data, web, worker, razem, 1 zdanie kontekstu) — nie pełną tabelę ze szczegółami jak przed 2026-07-20. |
+| `Projekt-tmask-transporter-brainstorming.md` | Nie czytać ani nie edytować przy zwykłej pracy — czysto archiwalne. |
+
+## Standardowy workflow dla nowej funkcjonalności
+
+Dla nietrywialnych zmian (nowa funkcja, zmiana modelu danych, zmiana bezpieczeństwa) stosuj pełny cykl, mapowany na istniejące skille `superpowers`:
+
+1. **Plan** — `superpowers:brainstorming` → `superpowers:writing-plans` (spec + plan w `docs/superpowers/`)
+2. **Branch/worktree** — `superpowers:using-git-worktrees`, osobny branch per funkcja (unika kolizji, gdyby pracowało więcej sesji/osób równolegle)
+3. **Implementacja + testy nowej funkcji** — `superpowers:subagent-driven-development` (TDD per zadanie, review spec+jakość po każdym)
+4. **Pełna regresja** — cały suite (web + worker) musi przejść po każdej zmianie, nie tylko nowe testy
+5. **Testy bezpieczeństwa** — `/audyt-devsecops` (SonarQube + ZAP + code review); przy zmianach zależności/obrazów też `/trivy-sonar`
+6. **Naprawa rekomendacji** — jeśli audyt/review coś zgłosi: fix → pełna regresja ponownie → powtórka kroku 5 jeśli zmiana była istotna; wszystkie testy muszą przejść zanim dalej
+7. **Dokumentacja + push** — `superpowers:finishing-a-development-branch` (merge/PR, rozwiązanie konfliktów) + aktualizacja HISTORIA/testy/audyt jak w sekcji wyżej
+
+**Kiedy branch jest obowiązkowy:** nowa funkcja, zmiana modelu danych, zmiana bezpieczeństwa.
+**Kiedy można iść bezpośrednio na `main`:** drobne bugfixy, sprzątanie code smells, aktualizacje dokumentacji — zakres nieuzasadniający pełnego cyklu (dotychczasowa praktyka w tym repo, np. poprawki UX #17b czy sprzątanie audytu z 2026-07-14/15).
