@@ -42,6 +42,21 @@ class TestImportConfig:
         assert c.password == 'topsecret'
         assert c.ssh_key == 'KEYDATA'
 
+    def test_roundtrip_restores_ssh_key_passphrase(self, regular_user, admin_user, make_connection):
+        make_connection(regular_user, name='Prod', ssh_key='KEYDATA', ssh_key_passphrase='hunter2')
+        data = portability.export_config(regular_user, 'pw')
+        assert 'hunter2' not in str(data)
+        portability.import_config(admin_user, data, 'pw')
+        c = Connection.objects.get(owner=admin_user, name='Prod')
+        assert c.ssh_key_passphrase == 'hunter2'
+
+    def test_roundtrip_without_passphrase_leaves_it_empty(self, regular_user, admin_user, make_connection):
+        make_connection(regular_user, name='Prod', ssh_key='KEYDATA')
+        data = portability.export_config(regular_user, 'pw')
+        portability.import_config(admin_user, data, 'pw')
+        c = Connection.objects.get(owner=admin_user, name='Prod')
+        assert c.ssh_key_passphrase == ''
+
     def test_import_wrong_passphrase_raises(self, regular_user, admin_user, make_connection):
         make_connection(regular_user, name='Prod', password='x')
         data = portability.export_config(regular_user, 'right')

@@ -9,7 +9,7 @@ from apps.connections.sftp_utils import build_breadcrumbs, list_directory
 def _conn(**kwargs):
     defaults = dict(
         host='localhost', port=22, username='u', password='pass',
-        ssh_key=None, strict_host_key_checking=False, known_host_key=None,
+        ssh_key=None, ssh_key_passphrase=None, strict_host_key_checking=False, known_host_key=None,
     )
     defaults.update(kwargs)
     return SimpleNamespace(**defaults)
@@ -94,7 +94,7 @@ class TestListDirectory:
         mock_client = mocker.MagicMock()
         mocker.patch('apps.connections.sftp_utils.paramiko.SSHClient', return_value=mock_client)
         mock_pkey = mocker.MagicMock()
-        mocker.patch('apps.connections.sftp_utils.paramiko.PKey.from_private_key', return_value=mock_pkey)
+        mocker.patch('apps.connections.sftp_utils.load_private_key', return_value=mock_pkey)
         mock_sftp = mocker.MagicMock()
         mock_client.open_sftp.return_value = mock_sftp
         mock_sftp.listdir_attr.return_value = []

@@ -44,6 +44,7 @@
         {% include "connections/_field.html" with field=form.strict_host_key_checking %}
       </div>
       {% include "connections/_field.html" with field=form.ssh_key %}
+      {% include "connections/_field.html" with field=form.ssh_key_passphrase %}
       <div class="field" id="known-host-section" style="display:none">
         <label>{{ form.known_host_key.label|upper }}:</label>
         {{ form.known_host_key }}

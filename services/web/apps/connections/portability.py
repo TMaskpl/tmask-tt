@@ -61,6 +61,7 @@ def export_config(user, passphrase: str) -> dict:
         row = {f: getattr(c, f) for f in CONNECTION_FIELDS}
         row['password_enc'] = _encrypt_secret(c.password, fernet)
         row['ssh_key_enc'] = _encrypt_secret(c.ssh_key, fernet)
+        row['ssh_key_passphrase_enc'] = _encrypt_secret(c.ssh_key_passphrase, fernet)
         connections.append(row)
     flows = []
     for fl in Flow.objects.filter(owner=user):
@@ -100,6 +101,7 @@ def _import_connections(user, rows, fernet: Fernet, result: ImportResult) -> Non
         try:
             conn.password = _decrypt_secret(row.get('password_enc'), fernet)
             conn.ssh_key = _decrypt_secret(row.get('ssh_key_enc'), fernet)
+            conn.ssh_key_passphrase = _decrypt_secret(row.get('ssh_key_passphrase_enc'), fernet) or ''
         except InvalidToken:
             raise PassphraseError('Błędne hasło lub uszkodzony plik')
         conn.save()

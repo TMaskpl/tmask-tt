@@ -6,6 +6,7 @@ import tempfile
 import paramiko
 
 from modules.checksum.handler import verify_relay, ChecksumVerificationError
+from modules.ssh_keys import load_private_key
 
 from .config import RELAY_STREAM_THRESHOLD, RELAY_TEMP_DIR
 
@@ -48,9 +49,7 @@ class RelayHandler:
             'allow_agent': False,
         }
         if params.get('ssh_key'):
-            connect_kwargs['pkey'] = paramiko.PKey.from_private_key(
-                io.StringIO(params['ssh_key'])
-            )
+            connect_kwargs['pkey'] = load_private_key(params['ssh_key'], params.get('ssh_key_passphrase') or None)
         elif params.get('password'):
             connect_kwargs['password'] = params['password']
         client.connect(**connect_kwargs)

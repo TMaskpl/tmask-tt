@@ -18,6 +18,7 @@ class Connection(models.Model):
     username = models.CharField(max_length=100)
     password = EncryptedCharField(max_length=500, null=True, blank=True)
     ssh_key  = EncryptedTextField(null=True, blank=True)
+    ssh_key_passphrase = EncryptedCharField(max_length=500, blank=True, default='')
     protocol = models.CharField(max_length=10, choices=PROTOCOL_CHOICES, default=PROTOCOL_SFTP)
     compress = models.BooleanField(default=False)
     encrypt  = models.BooleanField(default=False)

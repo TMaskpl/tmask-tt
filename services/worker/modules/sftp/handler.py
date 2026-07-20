@@ -1,5 +1,4 @@
 # services/worker/modules/sftp/handler.py
-import io
 import os
 import socket
 import time
@@ -9,6 +8,7 @@ import paramiko
 from .config import SFTP_TIMEOUT, SFTP_MAX_RETRIES, SFTP_RETRY_DELAY
 from modules.gpg.handler import encrypt_file, GPGEncryptError
 from modules.checksum.handler import verify_sftp, ChecksumVerificationError
+from modules.ssh_keys import load_private_key
 
 
 class SFTPTransferError(Exception):
@@ -49,8 +49,8 @@ class SFTPHandler:
             'allow_agent': False,
         }
         if self.params.get('ssh_key'):
-            connect_kwargs['pkey'] = paramiko.PKey.from_private_key(
-                io.StringIO(self.params['ssh_key'])
+            connect_kwargs['pkey'] = load_private_key(
+                self.params['ssh_key'], self.params.get('ssh_key_passphrase') or None
             )
         elif self.params.get('password'):
             connect_kwargs['password'] = self.params['password']

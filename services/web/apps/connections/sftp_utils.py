@@ -1,10 +1,11 @@
-import io
 import os
 import stat
 import tempfile
 from types import SimpleNamespace
 
 import paramiko
+
+from .ssh_keys import load_private_key
 
 
 def _build_client(connection):
@@ -42,7 +43,7 @@ def list_directory(connection, path):
         }
         if connection.ssh_key:
             try:
-                connect_kwargs['pkey'] = paramiko.PKey.from_private_key(io.StringIO(connection.ssh_key))
+                connect_kwargs['pkey'] = load_private_key(connection.ssh_key, connection.ssh_key_passphrase or None)
             except paramiko.SSHException as e:
                 raise ValueError(f'Błąd klucza SSH: {e}') from e
         else:

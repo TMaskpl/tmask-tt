@@ -1,10 +1,11 @@
-import io
 import os
 import socket
 import tempfile
 from dataclasses import dataclass
 
 import paramiko
+
+from .ssh_keys import load_private_key
 
 
 @dataclass
@@ -38,7 +39,7 @@ def test_connection(connection) -> SSHTestResult:
             'allow_agent': False,
         }
         if connection.ssh_key:
-            connect_kwargs['pkey'] = paramiko.PKey.from_private_key(io.StringIO(connection.ssh_key))
+            connect_kwargs['pkey'] = load_private_key(connection.ssh_key, connection.ssh_key_passphrase or None)
         elif connection.password:
             connect_kwargs['password'] = connection.password
         else:

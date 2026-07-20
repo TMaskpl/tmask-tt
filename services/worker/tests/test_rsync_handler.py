@@ -1,9 +1,33 @@
+import os
+
+import paramiko
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 from unittest.mock import patch, MagicMock
 
 from modules.rsync.handler import RsyncHandler, RsyncTransferError
 from modules.rsync.config import RSYNC_MAX_RETRIES, RSYNC_RETRY_DELAY
 from modules.gpg.handler import GPGEncryptError
+
+
+def _generate_key_str(password=None) -> str:
+    """Generates a real RSA key in modern OpenSSH format (the format `ssh-keygen`
+    has used by default since 2018). paramiko's own `RSAKey.write_private_key()`
+    only writes the legacy encrypted-PEM format, which the currently installed
+    `cryptography` no longer decrypts — using the same helper the real app
+    would encounter avoids testing against a format nobody actually has."""
+    priv = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    encryption = (
+        serialization.BestAvailableEncryption(password.encode()) if password
+        else serialization.NoEncryption()
+    )
+    pem = priv.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.OpenSSH,
+        encryption_algorithm=encryption,
+    )
+    return pem.decode()
 
 
 class TestRsyncHandler:
@@ -13,7 +37,8 @@ class TestRsyncHandler:
             'port': 22,
             'username': 'deploy',
             'password': None,
-            'ssh_key': '/tmp/id_rsa',
+            'ssh_key': None,
+            'ssh_key_passphrase': None,
             'source_path': '/data/',
             'destination_path': '/backup/',
             'compress': False,
@@ -43,10 +68,15 @@ class TestRsyncHandler:
         cmd = handler._build_command()
         assert '--compress' not in cmd
 
-    def test_ssh_key_included_in_ssh_options(self):
-        handler = RsyncHandler(self._make_params(ssh_key='/tmp/key.pem'))
-        opts = handler._build_ssh_options()
+    def test_ssh_key_path_included_in_ssh_options(self):
+        handler = RsyncHandler(self._make_params())
+        opts = handler._build_ssh_options(ssh_key_path='/tmp/key.pem')
         assert '-i /tmp/key.pem' in opts
+
+    def test_no_ssh_key_path_omits_dash_i(self):
+        handler = RsyncHandler(self._make_params())
+        opts = handler._build_ssh_options()
+        assert '-i' not in opts
 
     def test_auth_failure_raises_error(self):
         with patch('modules.rsync.handler.subprocess.Popen') as MockPopen:
@@ -201,6 +231,7 @@ class TestRsyncDryRun:
             'username': 'deploy',
             'password': None,
             'ssh_key': None,
+            'ssh_key_passphrase': None,
             'source_path': '/data/',
             'destination_path': '/backup/',
             'compress': False,
@@ -307,6 +338,7 @@ class TestBuildSshCmdPrefix:
             'username': 'deploy',
             'password': None,
             'ssh_key': None,
+            'ssh_key_passphrase': None,
             'source_path': '/data/file.tar',
             'destination_path': '/backup/file.tar',
             'compress': False,
@@ -328,9 +360,9 @@ class TestBuildSshCmdPrefix:
         assert '22' in prefix
         assert 'deploy@192.168.1.10' in prefix
 
-    def test_ssh_key_included(self):
-        handler = RsyncHandler(self._make_params(ssh_key='/home/user/.ssh/id_rsa'))
-        prefix = handler._build_ssh_cmd_prefix()
+    def test_ssh_key_path_included(self):
+        handler = RsyncHandler(self._make_params())
+        prefix = handler._build_ssh_cmd_prefix(ssh_key_path='/home/user/.ssh/id_rsa')
         assert '-i' in prefix
         assert '/home/user/.ssh/id_rsa' in prefix
 
@@ -360,6 +392,7 @@ class TestRsyncChecksumVerification:
             'username': 'deploy',
             'password': None,
             'ssh_key': None,
+            'ssh_key_passphrase': None,
             'source_path': '/data/file.tar',
             'destination_path': '/backup/file.tar',
             'compress': False,
@@ -425,6 +458,7 @@ class TestRsyncHandlerPreview:
             'username': 'deploy',
             'password': None,
             'ssh_key': None,
+            'ssh_key_passphrase': None,
             'source_path': '/data/',
             'destination_path': '/backup/',
             'compress': False,
@@ -550,3 +584,90 @@ class TestRsyncHandlerPreview:
             )
             assert result['exit_code'] is None
             assert 'GPG ENCRYPTION FAILED' in result['output']
+
+
+class TestSetupSshKey:
+    def _make_params(self, **kwargs):
+        defaults = {
+            'host': '192.168.1.10',
+            'port': 22,
+            'username': 'deploy',
+            'password': None,
+            'ssh_key': None,
+            'ssh_key_passphrase': None,
+            'source_path': '/data/',
+            'destination_path': '/backup/',
+            'compress': False,
+            'encrypt': False,
+            'strict_host_key_checking': False,
+            'known_host_key': None,
+        }
+        defaults.update(kwargs)
+        return defaults
+
+    def test_returns_none_when_no_key_configured(self):
+        handler = RsyncHandler(self._make_params())
+        assert handler._setup_ssh_key() is None
+
+    def test_writes_decrypted_key_to_mode_600_tempfile(self):
+        key_str = _generate_key_str()
+        handler = RsyncHandler(self._make_params(ssh_key=key_str))
+        path = handler._setup_ssh_key()
+        try:
+            assert os.path.exists(path)
+            assert oct(os.stat(path).st_mode & 0o777) == '0o600'
+            # written-back key must be loadable without a passphrase
+            with open(path) as f:
+                paramiko.RSAKey.from_private_key(f)
+        finally:
+            os.unlink(path)
+
+    def test_passphrase_protected_key_with_correct_passphrase_succeeds(self):
+        key_str = _generate_key_str(password='correct-horse')
+        handler = RsyncHandler(self._make_params(ssh_key=key_str, ssh_key_passphrase='correct-horse'))
+        path = handler._setup_ssh_key()
+        try:
+            with open(path) as f:
+                paramiko.RSAKey.from_private_key(f)  # no password needed — written back decrypted
+        finally:
+            os.unlink(path)
+
+    def test_passphrase_protected_key_with_wrong_passphrase_raises(self):
+        key_str = _generate_key_str(password='correct-horse')
+        handler = RsyncHandler(self._make_params(ssh_key=key_str, ssh_key_passphrase='wrong'))
+        with pytest.raises(RsyncTransferError, match='SSH KEY ERROR'):
+            handler._setup_ssh_key()
+
+    def test_passphrase_protected_key_without_passphrase_raises(self):
+        key_str = _generate_key_str(password='correct-horse')
+        handler = RsyncHandler(self._make_params(ssh_key=key_str))
+        with pytest.raises(RsyncTransferError, match='SSH KEY ERROR'):
+            handler._setup_ssh_key()
+
+    def test_execute_uses_ssh_key_tempfile_and_cleans_up(self):
+        key_str = _generate_key_str(password='correct-horse')
+        params = self._make_params(ssh_key=key_str, ssh_key_passphrase='correct-horse')
+        seen_paths = []
+
+        def fake_popen(cmd, **kwargs):
+            for part in cmd:
+                if part.startswith('ssh ') and '-i ' in part:
+                    seen_paths.append(part.split('-i ', 1)[1].split()[0])
+            m = MagicMock()
+            m.stdout = iter([])
+            m.wait.return_value = 0
+            return m
+
+        with patch('modules.rsync.handler.subprocess.Popen', side_effect=fake_popen):
+            RsyncHandler(params).execute(lambda lvl, msg: None)
+
+        assert len(seen_paths) == 1
+        assert key_str[:20] not in seen_paths[0]  # not the raw key content
+        assert not os.path.exists(seen_paths[0])  # cleaned up after transfer
+
+    def test_preview_returns_error_dict_on_wrong_passphrase_instead_of_raising(self):
+        key_str = _generate_key_str(password='correct-horse')
+        params = self._make_params(ssh_key=key_str, ssh_key_passphrase='wrong')
+        result = RsyncHandler(params).preview(lambda lvl, msg: None)
+        assert result['exit_code'] is None
+        assert 'SSH KEY ERROR' in result['output']

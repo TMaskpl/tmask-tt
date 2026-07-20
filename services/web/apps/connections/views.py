@@ -1,4 +1,3 @@
-import io
 import json
 import posixpath
 import re
@@ -17,6 +16,7 @@ from .portability import export_config, import_config, PassphraseError
 from .forms import ConnectionForm
 from .models import Connection, KIND_POSTGRES
 from .sftp_utils import list_directory, build_breadcrumbs
+from .ssh_keys import load_private_key
 from .ssh_tester import test_connection as _test_connection
 from .pg_tester import test_connection as _test_pg_connection
 from .pg_utils import list_tables as _list_pg_tables
@@ -80,7 +80,7 @@ def connection_scan_hostkey(request, pk):
             'allow_agent': False,
         }
         if conn.ssh_key:
-            connect_kwargs['pkey'] = paramiko.PKey.from_private_key(io.StringIO(conn.ssh_key))
+            connect_kwargs['pkey'] = load_private_key(conn.ssh_key, conn.ssh_key_passphrase or None)
         elif conn.password:
             connect_kwargs['password'] = conn.password
         try:
