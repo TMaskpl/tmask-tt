@@ -12,7 +12,7 @@ django.setup()
 from django.conf import settings  # noqa: E402
 from apps.connections.models import Connection  # noqa: E402
 from apps.transfers.models import TransferJob, TransferLog  # noqa: E402
-from apps.db_transfers.models import PgTransferJob, PgTransferLog  # noqa: E402
+from apps.db_transfers.models import DbTransferJob, DbTransferLog  # noqa: E402
 from apps.webhook_deliveries.models import WebhookDeliveryLog  # noqa: E402
 from apps.webhook_deliveries.services import (  # noqa: E402
     circuit_is_open, record_success, record_failure, CIRCUIT_SKIPPED_MESSAGE,
@@ -314,15 +314,15 @@ def _build_pg_params(job) -> dict:
 @app.task(bind=True, name='db_transfers.execute')
 def execute_pg_transfer(self, job_id: int):
     try:
-        job = PgTransferJob.objects.select_related('source_connection', 'dest_connection').get(pk=job_id)
-    except PgTransferJob.DoesNotExist:
-        logger.error(f'PgTransferJob {job_id} not found — task aborted')
+        job = DbTransferJob.objects.select_related('source_connection', 'dest_connection').get(pk=job_id)
+    except DbTransferJob.DoesNotExist:
+        logger.error(f'DbTransferJob {job_id} not found — task aborted')
         return
 
     job.mark_running(self.request.id)
 
     def log_callback(level: str, message: str):
-        PgTransferLog.objects.create(job=job, level=level, message=message)
+        DbTransferLog.objects.create(job=job, level=level, message=message)
 
     try:
         params = _build_pg_params(job)
@@ -331,9 +331,9 @@ def execute_pg_transfer(self, job_id: int):
     except PgTransferError as e:
         job.mark_failed(str(e))
         log_callback('error', str(e))
-        logger.error(f'PgTransferJob {job.pk} failed: {e}')
+        logger.error(f'DbTransferJob {job.pk} failed: {e}')
     except Exception as e:
         job.mark_failed(f'UNEXPECTED ERROR — {e}')
         log_callback('error', f'UNEXPECTED ERROR — {e}')
-        logger.error(f'PgTransferJob {job.pk} unexpected error: {e}')
+        logger.error(f'DbTransferJob {job.pk} unexpected error: {e}')
         raise

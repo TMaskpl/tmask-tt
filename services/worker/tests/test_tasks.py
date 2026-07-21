@@ -652,8 +652,8 @@ class TestDryRunPreviewTask:
 class TestExecutePgTransferTask:
     def test_dispatches_to_postgres_handler_and_marks_done(self):
         with patch('tasks.PgTransferHandler') as MockHandler, \
-             patch('tasks.PgTransferJob') as MockJob, \
-             patch('tasks.PgTransferLog') as _:
+             patch('tasks.DbTransferJob') as MockJob, \
+             patch('tasks.DbTransferLog') as _:
             mock_job = MagicMock()
             MockJob.objects.select_related.return_value.get.return_value = mock_job
             mock_job.pk = 1
@@ -669,8 +669,8 @@ class TestExecutePgTransferTask:
 
     def test_builds_params_with_correct_source_dest_field_mapping(self):
         with patch('tasks.PgTransferHandler') as MockHandler, \
-             patch('tasks.PgTransferJob') as MockJob, \
-             patch('tasks.PgTransferLog') as _:
+             patch('tasks.DbTransferJob') as MockJob, \
+             patch('tasks.DbTransferLog') as _:
             mock_job = MagicMock()
             MockJob.objects.select_related.return_value.get.return_value = mock_job
             mock_job.pk = 1
@@ -705,8 +705,8 @@ class TestExecutePgTransferTask:
 
     def test_marks_job_failed_on_pg_transfer_error(self):
         with patch('tasks.PgTransferHandler') as MockHandler, \
-             patch('tasks.PgTransferJob') as MockJob, \
-             patch('tasks.PgTransferLog') as _:
+             patch('tasks.DbTransferJob') as MockJob, \
+             patch('tasks.DbTransferLog') as _:
             mock_job = MagicMock()
             MockJob.objects.select_related.return_value.get.return_value = mock_job
             mock_job.pk = 1
@@ -718,8 +718,8 @@ class TestExecutePgTransferTask:
             mock_job.mark_failed.assert_called_once_with('AUTH FAILED')
 
     def test_job_not_found_returns_without_error(self):
-        with patch('tasks.PgTransferJob') as MockJob, \
-             patch('tasks.PgTransferLog') as _:
+        with patch('tasks.DbTransferJob') as MockJob, \
+             patch('tasks.DbTransferLog') as _:
             MockJob.DoesNotExist = Exception
             MockJob.objects.select_related.return_value.get.side_effect = MockJob.DoesNotExist
             from tasks import execute_pg_transfer
