@@ -1,5 +1,5 @@
 from django import forms
-from .models import Connection, KIND_POSTGRES
+from .models import Connection, KIND_DB_KINDS
 
 
 class ConnectionForm(forms.ModelForm):
@@ -14,7 +14,7 @@ class ConnectionForm(forms.ModelForm):
         labels = {
             'dry_run_before_transfer': 'Dry-run przed transferem (tylko rsync)',
             'verify_checksum':         'Weryfikuj integralność SHA-256 po transferze',
-            'db_name':                 'DB NAME (tylko Postgres)',
+            'db_name':                 'DB NAME (Postgres/MySQL/MSSQL)',
             'ssh_key_passphrase':      'Hasło klucza SSH (jeśli klucz jest zaszyfrowany)',
         }
         widgets = {
@@ -30,9 +30,9 @@ class ConnectionForm(forms.ModelForm):
     def clean(self):
         cleaned = super().clean()
         kind = cleaned.get('kind')
-        if kind == KIND_POSTGRES:
+        if kind in KIND_DB_KINDS:
             if not cleaned.get('password'):
-                raise forms.ValidationError('Podaj hasło do bazy Postgres.')
+                raise forms.ValidationError('Podaj hasło do bazy danych.')
             if not cleaned.get('db_name'):
                 raise forms.ValidationError('Podaj nazwę bazy danych (DB NAME).')
         else:
