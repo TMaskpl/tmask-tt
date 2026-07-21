@@ -1,6 +1,6 @@
 from django import forms
 from apps.connections.models import Connection, KIND_POSTGRES
-from .models import PgTransferJob
+from .models import DbTransferJob
 
 
 class PgTransferForm(forms.ModelForm):
@@ -11,7 +11,7 @@ class PgTransferForm(forms.ModelForm):
     scope = forms.ChoiceField(choices=SCOPE_CHOICES, widget=forms.RadioSelect, initial=SCOPE_WHOLE_DB)
 
     class Meta:
-        model = PgTransferJob
+        model = DbTransferJob
         fields = ['source_connection', 'table_name', 'dest_connection', 'verify_row_count']
         labels = {'verify_row_count': 'Weryfikuj liczbę wierszy po transferze (COUNT)'}
 
