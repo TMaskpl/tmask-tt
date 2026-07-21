@@ -2,7 +2,6 @@
 
 **Data:** 2026-07-21
 **Status:** Zaakceptowany, do implementacji
-**Aktualizacja 2026-07-21 (w trakcie implementacji):** sekcja MSSQL poniżej zmieniona po Task 7 implementacji (infrastruktura Dockera) — `mssql-scripter` okazał się niedziałający na arm64 (brak stabilnego wydania od 2018, natywny backend `mssqltoolsservice` tylko x86_64, potwierdzony crash pod Rosettą na hoście deweloperskim). Produkcja tego projektu to amd64, więc narzędzie by tam prawdopodobnie działało, ale użytkownik zdecydował się zabezpieczyć na obu architekturach i zastąpić `mssql-scripter` własną introspekcją schematu przez `pyodbc` + `bcp`/`sqlcmd` (oba dostępne i potwierdzone działające na arm64 w ramach `mssql-tools18`). Sekcja "3. MSSQL" poniżej zaktualizowana do nowego podejścia; oryginalny opis oparty o `mssql-scripter` zachowany tylko w historii git tego pliku.
 
 ## Kontekst i cel
 
@@ -12,7 +11,7 @@ Rozszerzenie istniejącego modułu transferu baz danych (dziś tylko Postgres→
 
 **Zakres (ustalony przez pytania doprecyzowujące):**
 - Tylko **ten sam silnik** po obu stronach — MySQL↔MySQL, MSSQL↔MSSQL, tak jak dziś Postgres↔Postgres. **Nie** ma tłumaczenia schematu/typów między różnymi silnikami (MySQL→MSSQL poza zakresem).
-- MSSQL realizowany przez własną introspekcję schematu (`pyodbc`) + `bcp`/`sqlcmd` (zmiana z pierwotnie planowanego `mssql-scripter` — patrz aktualizacja wyżej).
+- MSSQL realizowany przez `mssql-scripter` (generuje przenośny T-SQL), nie własny mechanizm po ODBC.
 - Appka `db_transfers` przestaje być Postgres-specyficzna — jedna wspólna appka/model/strona dla wszystkich trzech silników, nie osobne appki per silnik.
 
 ## Model danych
@@ -82,22 +81,18 @@ Hasła przez `MYSQL_PWD` env var per subprocess (source dla `mysqldump`, dest dl
 
 ### `MssqlTransferHandler` (`services/worker/modules/mssql/handler.py`)
 
-**Zmiana z pierwotnego projektu (patrz aktualizacja na górze dokumentu):** zamiast `mssql-scripter` (niedziałający na arm64), handler sam introspektuje schemat źródła przez `pyodbc` i generuje `CREATE TABLE`, a do przesłania danych używa `bcp` (bulk copy, część `mssql-tools18`, obecny obok `sqlcmd`, potwierdzony działający na arm64).
+Dwuetapowy, nie prosty pipe jak Postgres/MySQL — `mssql-scripter` nie strumieniuje bezpośrednio do `sqlcmd` równie naturalnie jak `pg_dump`/`mysqldump` do swoich klientów, więc: `mssql-scripter` generuje plik `.sql` do tymczasowej lokalizacji (schema + `--data-only` insert dla danych), następnie `sqlcmd -i <plik>` wykonuje go na celu.
 
-Ponieważ transfer jest zawsze między tym samym silnikiem (MSSQL↔MSSQL, decyzja o zakresie), introspekcja nie musi tłumaczyć typów — nazwa typu, długość/precyzja i nullability ze źródła są odtwarzane 1:1 na celu. To **eliminuje potrzebę wykrywania wersji docelowego serwera i flagi `--target-server-version`** z pierwotnego projektu — generujemy zwykłe, stabilne składniowo T-SQL (`CREATE TABLE` z podstawowymi typami), które działa bez zmian na każdej rozsądnie nowoczesnej wersji SQL Server (2012+), zamiast polegać na tym, że output nowszego narzędzia przypadkiem zadziała na starszym serwerze. To w praktyce prostsze i solidniejsze niż pierwotny projekt.
+**Kluczowa przewaga nad Postgres/MySQL:** `mssql-scripter` ma wbudowaną flagę `--target-server-version` (np. `2017`, `2019`, `2022`) — handler odpytuje wersję serwera **docelowego** przez `pyodbc` (`SELECT @@VERSION`) *przed* uruchomieniem scriptera i jawnie przekazuje ją jako target, zamiast (jak w Postgres/MySQL) liczyć że output nowszego narzędzia przypadkiem zadziała na starszym serwerze. To realnie najsolidniejsza część tego zestawu pod kątem wymagania "nie zależy od wersji".
 
 Przebieg:
-1. **Introspekcja schematu (source, przez `pyodbc`):** `SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, NUMERIC_SCALE, IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = ? ORDER BY ORDINAL_POSITION` per tabela (jedna tabela albo wszystkie z `INFORMATION_SCHEMA.TABLES` gdy `table_name` puste); klucz główny z `INFORMATION_SCHEMA.TABLE_CONSTRAINTS`/`KEY_COLUMN_USAGE` (`CONSTRAINT_TYPE='PRIMARY KEY'`)
-2. **Generowanie DDL:** `DROP TABLE IF EXISTS [tbl]; CREATE TABLE [tbl] (...)` z odtworzonymi kolumnami + `PRIMARY KEY` (analogicznie do `--clean --if-exists` w Postgres/MySQL) — zapisane do pliku tymczasowego
-3. **Wykonanie DDL na celu:** `sqlcmd -S dest_host,port -d db_name -U user -P password -i <plik_ddl>`
-4. **Kopiowanie danych, per tabela:** `bcp [tbl] out <tmpfile> -S source_host,port -U user -P password -d db_name -n` (format natywny — `bcp` sam poprawnie koduje typy, bez ręcznego escape'owania literałów w `INSERT`), następnie `bcp [tbl] in <tmpfile> -S dest_host,port -U user -P password -d db_name -n` na cel
-5. Pliki tymczasowe usuwane w `finally`, tak jak istniejące tymczasowe pliki kluczy SSH/known_hosts w innych modułach
+1. `mssql-scripter -S source_host,port -d db_name -U user -P password --schema-and-data --target-server-version <wersja_celu> [--include-objects table_name] -f /tmp/<job>.sql`
+2. `sqlcmd -S dest_host,port -d db_name -U user -P password -i /tmp/<job>.sql`
+3. Plik tymczasowy usuwany w `finally`, tak jak istniejące tymczasowe pliki kluczy SSH/known_hosts w innych modułach
 
-**Świadomie poza zakresem tej iteracji** (redukcja względem pierwotnego projektu opartego o `mssql-scripter`, który odtworzyłby pełne DDL): klucze obce, indeksy niebędące PK, triggery, computed columns — nieodtwarzane. Dokumentowane ograniczenie, nie cichy brak.
+Hasła przez argumenty `-P` są nieuniknione przy `mssql-scripter`/`sqlcmd` (nie obsługują env var na hasło jak `PGPASSWORD`/`MYSQL_PWD`) — **ryzyko do zaakceptowania i udokumentowania**: proces widoczny chwilowo w `ps aux` na hoście workera. Alternatywa (plik konfiguracyjny z hasłem, czyszczony po użyciu) rozważona jako możliwe dalsze utwardzenie, nie blokuje pierwszej iteracji.
 
-Hasła przez argumenty `-P` są nieuniknione przy `sqlcmd`/`bcp` (nie obsługują env var na hasło jak `PGPASSWORD`/`MYSQL_PWD`) — **ryzyko do zaakceptowania i udokumentowania**: proces widoczny chwilowo w `ps aux` na hoście workera. Alternatywa (plik konfiguracyjny z hasłem, czyszczony po użyciu) rozważona jako możliwe dalsze utwardzenie, nie blokuje pierwszej iteracji.
-
-**Wymagania obrazu:** repozytorium apt Microsoftu (nie ma w domyślnych repo Debiana) dla `mssql-tools18` (`sqlcmd` + `bcp`) + `msodbcsql18` (ODBC driver, wymagany też przez `pyodbc`) — **już zrealizowane w Task 7**, potwierdzone działające na arm64. Brak zależności od `mssql-scripter`.
+**Wymagania obrazu:** repozytorium apt Microsoftu (nie ma w domyślnych repo Debiana) dla `mssql-tools18` (`sqlcmd`) + `msodbcsql18` (ODBC driver, wymagany też przez `pyodbc`); `pip install mssql-scripter`.
 
 **Introspekcja (web):** nowy `apps/connections/mssql_utils.py::list_tables()` — `pyodbc`, `SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'`.
 
@@ -134,7 +129,7 @@ VERIFY ROW COUNT:       [ ] (checkbox)
 - Budowa komendy: cała baza vs pojedyncza tabela, obecność `--set-gtid-purged=OFF`/`--single-transaction` (MySQL)
 - `MYSQL_PWD`/hasło nigdy w liście argumentów subprocess dla MySQL (test kontraktowy, wzorzec z `PGPASSWORD`) — dla MSSQL odwrotnie: test **potwierdzający świadomie zaakceptowane** przekazanie hasła przez `-P` (dokumentuje ryzyko, nie ukrywa go)
 - Filtr kolacji MySQL: mock wersji serwera docelowego < 8.0 → `COLLATE utf8mb4_0900_ai_ci` usunięty ze strumienia; wersja >= 8.0 → strumień nietknięty
-- Introspekcja schematu MSSQL: mock `pyodbc` zwracający kolumny + PK → poprawnie wygenerowany `CREATE TABLE`
+- `--target-server-version` (MSSQL): mock wersji serwera docelowego → poprawna wartość przekazana do `mssql-scripter`
 - Retry przy symulowanym błędzie sieciowym (mock `Popen`), dla obu silników
 - `verify_row_count`: zgodność/niezgodność, jak w Postgres
 
