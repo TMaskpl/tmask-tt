@@ -70,18 +70,18 @@ class TestTransfersCSPSafe:
 @pytest.mark.django_db
 class TestDbTransfersCSPSafe:
     def test_list_uses_data_confirm(self, admin_client, admin_user, make_connection):
-        from apps.db_transfers.models import PgTransferJob
+        from apps.db_transfers.models import DbTransferJob
         src = make_connection(admin_user, kind='postgres', db_name='a', name='src')
         dst = make_connection(admin_user, kind='postgres', db_name='b', name='dst')
-        PgTransferJob.objects.create(owner=admin_user, source_connection=src, dest_connection=dst, status='done')
+        DbTransferJob.objects.create(owner=admin_user, source_connection=src, dest_connection=dst, engine='postgres', status='done')
         resp = admin_client.get(reverse('db_transfers:list'))
         _no_inline_js(resp.content.decode())
 
     def test_detail_stop_form_uses_data_confirm(self, auth_client, regular_user, make_connection):
-        from apps.db_transfers.models import PgTransferJob
+        from apps.db_transfers.models import DbTransferJob
         src = make_connection(regular_user, kind='postgres', db_name='a', name='src')
         dst = make_connection(regular_user, kind='postgres', db_name='b', name='dst')
-        job = PgTransferJob.objects.create(owner=regular_user, source_connection=src, dest_connection=dst, status='running')
+        job = DbTransferJob.objects.create(owner=regular_user, source_connection=src, dest_connection=dst, engine='postgres', status='running')
         resp = auth_client.get(reverse('db_transfers:detail', args=[job.pk]))
         html = resp.content.decode()
         _no_inline_js(html)
