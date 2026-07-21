@@ -1,5 +1,6 @@
 from celery import current_app
 from celery.result import AsyncResult
+from django.conf import settings
 from django.contrib import messages
 from django.db import transaction
 from django.shortcuts import render, redirect, get_object_or_404
@@ -18,32 +19,78 @@ def _connection_protocols():
     return dict(Connection.objects.values_list('pk', 'protocol'))
 
 
+def _write_upload(local_path: str, uploaded) -> str | None:
+    """Writes an uploaded file to local_path. Returns an error string on
+    failure (OSError message), or None on success."""
+    try:
+        with open(local_path, 'wb') as fh:
+            for chunk in uploaded.chunks():
+                fh.write(chunk)
+        return None
+    except OSError as exc:
+        return str(exc)
+
+
+def _dispatch_transfer(job, passphrase):
+    result = current_app.send_task('transfers.execute', kwargs={'job_id': job.pk, 'gpg_passphrase': passphrase})
+    TransferJob.objects.filter(pk=job.pk).update(celery_task_id=result.id)
+
+
 @require_role(ROLE_OPERATOR)
 def transfer_create(request):
     form = TransferForm(request.POST or None, request.FILES or None, user=request.user)
+    ctx = {'form': form, 'connection_protocols': _connection_protocols()}
     if request.method == 'POST' and form.is_valid():
-        uploaded = form.cleaned_data['upload']
-        dest = form.cleaned_data['source_path']
-        try:
-            with open(dest, 'wb') as fh:
-                for chunk in uploaded.chunks():
-                    fh.write(chunk)
-        except OSError as exc:
-            form.add_error(None, f'Nie udało się zapisać pliku: {exc}')
-            return render(request, TRANSFERS_CREATE_TEMPLATE, {'form': form, 'connection_protocols': _connection_protocols()})
-        with transaction.atomic():
-            job = form.save(commit=False)
-            job.owner = request.user
-            job.source_path = form.cleaned_data['source_path']
-            job.save()
-            passphrase = (form.cleaned_data.get('gpg_passphrase') or '').strip() or None
+        uploads = form.cleaned_data['upload']
+        passphrase = (form.cleaned_data.get('gpg_passphrase') or '').strip() or None
 
-            def _dispatch():
-                result = current_app.send_task('transfers.execute', kwargs={'job_id': job.pk, 'gpg_passphrase': passphrase})
-                TransferJob.objects.filter(pk=job.pk).update(celery_task_id=result.id)
-            transaction.on_commit(_dispatch)
-        return redirect(TRANSFERS_DETAIL, pk=job.pk)
-    return render(request, TRANSFERS_CREATE_TEMPLATE, {'form': form, 'connection_protocols': _connection_protocols()})
+        if len(uploads) == 1:
+            uploaded = uploads[0]
+            local_path = form.cleaned_data['source_path']
+            err = _write_upload(local_path, uploaded)
+            if err:
+                form.add_error(None, f'Nie udało się zapisać pliku: {err}')
+                return render(request, TRANSFERS_CREATE_TEMPLATE, ctx)
+            with transaction.atomic():
+                job = form.save(commit=False)
+                job.owner = request.user
+                job.source_path = local_path
+                job.save()
+                transaction.on_commit(lambda: _dispatch_transfer(job, passphrase))
+            return redirect(TRANSFERS_DETAIL, pk=job.pk)
+
+        # Batch upload: destination_path is validated as a directory in
+        # TransferForm.clean() — each file lands at destination_path/<filename>,
+        # one independent TransferJob per file (same infra as single-file:
+        # own log, own progress bar, own notifications).
+        connection = form.cleaned_data['connection']
+        dest_dir = form.cleaned_data['destination_path']
+        to_create = []
+        for uploaded in uploads:
+            local_path = f'{settings.TRANSFERS_DIR}/{uploaded.name}'
+            err = _write_upload(local_path, uploaded)
+            if err:
+                form.add_error(None, f'Nie udało się zapisać pliku {uploaded.name}: {err}')
+                return render(request, TRANSFERS_CREATE_TEMPLATE, ctx)
+            to_create.append((local_path, f'{dest_dir}{uploaded.name}'))
+
+        with transaction.atomic():
+            jobs = [
+                TransferJob.objects.create(
+                    owner=request.user, connection=connection,
+                    source_path=local_path, destination_path=job_dest,
+                )
+                for local_path, job_dest in to_create
+            ]
+
+            def _dispatch_all():
+                for job in jobs:
+                    _dispatch_transfer(job, passphrase)
+            transaction.on_commit(_dispatch_all)
+
+        messages.success(request, f'Uruchomiono {len(jobs)} transferów.')
+        return redirect('transfers:logs')
+    return render(request, TRANSFERS_CREATE_TEMPLATE, ctx)
 
 
 @require_role(ROLE_OPERATOR)
@@ -51,18 +98,19 @@ def transfer_dry_run(request):
     form = TransferForm(request.POST or None, request.FILES or None, user=request.user)
     ctx_base = {'connection_protocols': _connection_protocols()}
     if request.method == 'POST' and form.is_valid():
+        uploads = form.cleaned_data['upload']
+        if len(uploads) > 1:
+            form.add_error(None, 'Dry-run obsługuje tylko jeden plik na raz.')
+            return render(request, TRANSFERS_CREATE_TEMPLATE, {**ctx_base, 'form': form})
         connection = form.cleaned_data['connection']
         if connection.protocol != 'rsync':
             form.add_error(None, 'Dry-run jest dostępny tylko dla połączeń rsync.')
             return render(request, TRANSFERS_CREATE_TEMPLATE, {**ctx_base, 'form': form})
-        uploaded = form.cleaned_data['upload']
+        uploaded = uploads[0]
         dest = form.cleaned_data['source_path']
-        try:
-            with open(dest, 'wb') as fh:
-                for chunk in uploaded.chunks():
-                    fh.write(chunk)
-        except OSError as exc:
-            form.add_error(None, f'Nie udało się zapisać pliku: {exc}')
+        err = _write_upload(dest, uploaded)
+        if err:
+            form.add_error(None, f'Nie udało się zapisać pliku: {err}')
             return render(request, TRANSFERS_CREATE_TEMPLATE, {**ctx_base, 'form': form})
         passphrase = (form.cleaned_data.get('gpg_passphrase') or '').strip() or None
         result = current_app.send_task('transfers.dry_run_preview', kwargs={

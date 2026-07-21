@@ -52,6 +52,85 @@ class TestTransferFormUpload:
         form = TransferForm(user=regular_user)
         assert 'local' in form.fields['upload'].label.lower()
 
+    def test_single_upload_is_wrapped_in_list(self, regular_user, make_connection):
+        form = self._form('backup.tar', regular_user, make_connection(regular_user))
+        assert form.is_valid(), form.errors
+        uploads = form.cleaned_data['upload']
+        assert isinstance(uploads, list)
+        assert len(uploads) == 1
+        assert uploads[0].name == 'backup.tar'
+
+    def test_multiple_uploads_all_present_in_cleaned_data(self, regular_user, make_connection):
+        conn = make_connection(regular_user)
+        form = TransferForm(
+            {'connection': conn.pk, 'destination_path': '/dst/'},
+            {'upload': [SimpleUploadedFile('a.tar', b'1'), SimpleUploadedFile('b.tar', b'2')]},
+            user=regular_user,
+        )
+        assert form.is_valid(), form.errors
+        names = [f.name for f in form.cleaned_data['upload']]
+        assert names == ['a.tar', 'b.tar']
+
+    def test_multiple_uploads_no_source_path_in_cleaned_data(self, regular_user, make_connection):
+        conn = make_connection(regular_user)
+        form = TransferForm(
+            {'connection': conn.pk, 'destination_path': '/dst/'},
+            {'upload': [SimpleUploadedFile('a.tar', b'1'), SimpleUploadedFile('b.tar', b'2')]},
+            user=regular_user,
+        )
+        assert form.is_valid(), form.errors
+        assert 'source_path' not in form.cleaned_data
+
+    def test_multiple_uploads_require_directory_destination(self, regular_user, make_connection):
+        conn = make_connection(regular_user)
+        form = TransferForm(
+            {'connection': conn.pk, 'destination_path': '/dst/archive.tar'},
+            {'upload': [SimpleUploadedFile('a.tar', b'1'), SimpleUploadedFile('b.tar', b'2')]},
+            user=regular_user,
+        )
+        assert not form.is_valid()
+
+    def test_multiple_uploads_with_trailing_slash_destination_is_valid(self, regular_user, make_connection):
+        conn = make_connection(regular_user)
+        form = TransferForm(
+            {'connection': conn.pk, 'destination_path': '/dst/'},
+            {'upload': [SimpleUploadedFile('a.tar', b'1'), SimpleUploadedFile('b.tar', b'2')]},
+            user=regular_user,
+        )
+        assert form.is_valid(), form.errors
+
+    def test_multiple_uploads_each_file_validated_for_size(self, regular_user, make_connection):
+        conn = make_connection(regular_user)
+        too_big = SimpleUploadedFile('big.tar', b'x')
+        too_big.size = settings.MAX_UPLOAD_BYTES + 1
+        form = TransferForm(
+            {'connection': conn.pk, 'destination_path': '/dst/'},
+            {'upload': [SimpleUploadedFile('a.tar', b'1'), too_big]},
+            user=regular_user,
+        )
+        assert not form.is_valid()
+        assert 'upload' in form.errors
+
+    def test_multiple_uploads_each_file_validated_for_name(self, regular_user, make_connection):
+        conn = make_connection(regular_user)
+        form = TransferForm(
+            {'connection': conn.pk, 'destination_path': '/dst/'},
+            {'upload': [SimpleUploadedFile('a.tar', b'1'), SimpleUploadedFile('-flag', b'2')]},
+            user=regular_user,
+        )
+        assert not form.is_valid()
+        assert 'upload' in form.errors
+
+    def test_no_files_selected_rejected(self, regular_user, make_connection):
+        conn = make_connection(regular_user)
+        form = TransferForm(
+            {'connection': conn.pk, 'destination_path': '/dst/'},
+            {'upload': []},
+            user=regular_user,
+        )
+        assert not form.is_valid()
+        assert 'upload' in form.errors
+
 
 class TestValidateSourceFilename:
     def test_accepts_simple_filename(self):

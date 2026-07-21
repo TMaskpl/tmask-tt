@@ -143,6 +143,126 @@ class TestTransferCreateView:
 
 
 @pytest.mark.django_db
+class TestTransferCreateBatchUpload:
+    def test_creates_one_job_per_file(
+        self, auth_client, regular_user, make_connection, mocker,
+        django_capture_on_commit_callbacks, settings, tmp_path,
+    ):
+        settings.TRANSFERS_DIR = str(tmp_path)
+        mocker.patch(
+            'apps.transfers.views.current_app.send_task',
+            return_value=SimpleNamespace(id='fake-task-id'),
+        )
+        conn = make_connection(regular_user)
+        with django_capture_on_commit_callbacks(execute=True):
+            response = auth_client.post(reverse('transfers:create'), {
+                'connection': conn.pk,
+                'destination_path': '/backup/',
+                'upload': [
+                    SimpleUploadedFile('a.tar', b'aaa'),
+                    SimpleUploadedFile('b.tar', b'bbb'),
+                ],
+            })
+        assert response.status_code == 302
+        jobs = list(TransferJob.objects.filter(owner=regular_user).order_by('source_path'))
+        assert len(jobs) == 2
+        assert jobs[0].source_path == f'{tmp_path}/a.tar'
+        assert jobs[0].destination_path == '/backup/a.tar'
+        assert jobs[1].source_path == f'{tmp_path}/b.tar'
+        assert jobs[1].destination_path == '/backup/b.tar'
+        assert (tmp_path / 'a.tar').read_bytes() == b'aaa'
+        assert (tmp_path / 'b.tar').read_bytes() == b'bbb'
+
+    def test_dispatches_one_task_per_job(
+        self, auth_client, regular_user, make_connection, mocker,
+        django_capture_on_commit_callbacks, settings, tmp_path,
+    ):
+        settings.TRANSFERS_DIR = str(tmp_path)
+        mock_delay = mocker.patch(
+            'apps.transfers.views.current_app.send_task',
+            return_value=SimpleNamespace(id='fake-task-id'),
+        )
+        conn = make_connection(regular_user)
+        with django_capture_on_commit_callbacks(execute=True):
+            auth_client.post(reverse('transfers:create'), {
+                'connection': conn.pk,
+                'destination_path': '/backup/',
+                'upload': [
+                    SimpleUploadedFile('a.tar', b'aaa'),
+                    SimpleUploadedFile('b.tar', b'bbb'),
+                ],
+            })
+        assert mock_delay.call_count == 2
+        job_ids = {c.kwargs['kwargs']['job_id'] for c in mock_delay.call_args_list}
+        assert job_ids == set(TransferJob.objects.filter(owner=regular_user).values_list('pk', flat=True))
+
+    def test_redirects_to_logs_with_success_message(
+        self, auth_client, regular_user, make_connection, mocker,
+        django_capture_on_commit_callbacks, settings, tmp_path,
+    ):
+        settings.TRANSFERS_DIR = str(tmp_path)
+        mocker.patch(
+            'apps.transfers.views.current_app.send_task',
+            return_value=SimpleNamespace(id='fake-task-id'),
+        )
+        conn = make_connection(regular_user)
+        with django_capture_on_commit_callbacks(execute=True):
+            response = auth_client.post(reverse('transfers:create'), {
+                'connection': conn.pk,
+                'destination_path': '/backup/',
+                'upload': [
+                    SimpleUploadedFile('a.tar', b'aaa'),
+                    SimpleUploadedFile('b.tar', b'bbb'),
+                ],
+            }, follow=True)
+        assert response.redirect_chain[0][0] == reverse('transfers:logs')
+        assert any('2' in str(m) for m in response.context['messages'])
+
+    def test_non_directory_destination_rejected_no_jobs_created(
+        self, auth_client, regular_user, make_connection, settings, tmp_path,
+    ):
+        settings.TRANSFERS_DIR = str(tmp_path)
+        conn = make_connection(regular_user)
+        response = auth_client.post(reverse('transfers:create'), {
+            'connection': conn.pk,
+            'destination_path': '/backup/archive.tar',
+            'upload': [
+                SimpleUploadedFile('a.tar', b'aaa'),
+                SimpleUploadedFile('b.tar', b'bbb'),
+            ],
+        })
+        assert response.status_code == 200
+        assert not TransferJob.objects.filter(owner=regular_user).exists()
+
+    def test_write_failure_on_second_file_aborts_before_creating_jobs(
+        self, auth_client, regular_user, make_connection, mocker, settings, tmp_path,
+    ):
+        settings.TRANSFERS_DIR = str(tmp_path)
+        mock_delay = mocker.patch('apps.transfers.views.current_app.send_task')
+        conn = make_connection(regular_user)
+        real_open = open
+
+        def _boom_on_second(path, mode):
+            if path.endswith('b.tar'):
+                raise OSError('disk full')
+            return real_open(path, mode)
+        mocker.patch('apps.transfers.views.open', side_effect=_boom_on_second)
+
+        response = auth_client.post(reverse('transfers:create'), {
+            'connection': conn.pk,
+            'destination_path': '/backup/',
+            'upload': [
+                SimpleUploadedFile('a.tar', b'aaa'),
+                SimpleUploadedFile('b.tar', b'bbb'),
+            ],
+        })
+        assert response.status_code == 200
+        assert 'Nie udało się zapisać pliku' in response.content.decode()
+        assert not TransferJob.objects.filter(owner=regular_user).exists()
+        mock_delay.assert_not_called()
+
+
+@pytest.mark.django_db
 class TestTransferDetailView:
     def test_detail_renders(self, auth_client, regular_user, make_connection):
         job = TransferJob.objects.create(

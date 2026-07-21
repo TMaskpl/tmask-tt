@@ -18,7 +18,7 @@
         {% if field.html_name == 'upload' %}
         <div class="field-with-btn">
           <label for="{{ field.auto_id }}" class="btn btn-small">[ WYBIERZ ]</label>
-          <span id="upload-file-name" class="file-name">— brak pliku —</span>
+          <input type="text" class="file-name" readonly placeholder="— brak pliku —" id="upload-file-name">
           <div class="file-hidden">{{ field }}</div>
         </div>
         {% elif field.html_name == 'destination_path' %}

@@ -27,10 +27,35 @@ def _validate_source_filename(value: str) -> None:
         raise ValidationError('Nazwa pliku zawiera niedozwolone znaki kontrolne.')
 
 
+class MultipleFileInput(forms.ClearableFileInput):
+    allow_multiple_selected = True
+
+
+class MultipleFileField(forms.FileField):
+    """Cleans each selected file individually (size/name validators still
+    apply per-file) and always returns a list, even for a single file —
+    the batch-upload code path relies on that to distinguish 1 vs N files
+    without special-casing the non-list shape everywhere."""
+
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault('widget', MultipleFileInput())
+        super().__init__(*args, **kwargs)
+
+    def clean(self, data, initial=None):
+        single_file_clean = super().clean
+        if not isinstance(data, (list, tuple)):
+            return [single_file_clean(data, initial)]
+        if not data:
+            if self.required:
+                raise ValidationError(self.error_messages['required'], code='required')
+            return []
+        return [single_file_clean(d, initial) for d in data]
+
+
 class TransferForm(forms.ModelForm):
-    upload = forms.FileField(
-        label='Local file',
-        widget=forms.ClearableFileInput(attrs={'data-file-display': 'upload-file-name'}),
+    upload = MultipleFileField(
+        label='Local file(s)',
+        widget=MultipleFileInput(attrs={'multiple': True, 'data-file-display': 'upload-file-name'}),
     )
     gpg_passphrase = forms.CharField(
         required=False,
@@ -48,17 +73,24 @@ class TransferForm(forms.ModelForm):
             self.fields['connection'].queryset = Connection.objects.all()
 
     def clean_upload(self):
-        uploaded = self.cleaned_data['upload']
-        if uploaded.size > settings.MAX_UPLOAD_BYTES:
-            raise ValidationError('Plik przekracza limit 100 MB.')
-        _validate_source_filename(uploaded.name)
-        return uploaded
+        uploads = self.cleaned_data['upload']
+        for uploaded in uploads:
+            if uploaded.size > settings.MAX_UPLOAD_BYTES:
+                raise ValidationError(f'Plik {uploaded.name} przekracza limit 100 MB.')
+            _validate_source_filename(uploaded.name)
+        return uploads
 
     def clean(self):
         cleaned = super().clean()
-        uploaded = cleaned.get('upload')
-        if uploaded is not None:
-            cleaned['source_path'] = f'{settings.TRANSFERS_DIR}/{uploaded.name}'
+        uploads = cleaned.get('upload')
+        dest = cleaned.get('destination_path')
+        if uploads:
+            if len(uploads) == 1:
+                cleaned['source_path'] = f'{settings.TRANSFERS_DIR}/{uploads[0].name}'
+            elif dest and not dest.endswith('/'):
+                raise ValidationError(
+                    'Przy wielu plikach docelowa ścieżka musi być katalogiem (zakończonym "/").'
+                )
         return cleaned
 
     def clean_destination_path(self):

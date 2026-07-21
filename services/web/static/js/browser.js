@@ -25,13 +25,19 @@ function closeBrowser() {
   document.getElementById('file-browser-content').innerHTML = '';
 }
 
-// Stylizowany file input — pokaż nazwę wybranego pliku w polu tekstowym
+// Stylizowany file input — pokaż nazwę(-y) wybranego pliku/plików w polu tekstowym
 document.addEventListener('change', function (e) {
   const input = e.target.closest('input[type="file"][data-file-display]');
   if (!input) return;
   const display = document.getElementById(input.dataset.fileDisplay);
-  if (display) {
-    display.value = input.files?.length ? input.files[0].name : '';
+  if (!display) return;
+  const names = input.files ? Array.from(input.files).map(f => f.name) : [];
+  if (!names.length) {
+    display.value = '';
+  } else if (names.length === 1) {
+    display.value = names[0];
+  } else {
+    display.value = `${names.length} plików: ${names.join(', ')}`;
   }
 });
 
