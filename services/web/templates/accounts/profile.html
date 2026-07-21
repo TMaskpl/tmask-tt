@@ -315,6 +315,7 @@
         {% if user.webhook_url %}
         <div class="cf-status">&gt; AKTYWNY — <span class="active-val">{{ user.webhook_url|truncatechars:45 }}</span></div>
         {% endif %}
+        <div class="cf-status"><a href="{% url 'webhook_deliveries:list' %}">[ HISTORIA DOSTARCZEŃ ]</a></div>
       </div>
 
       {# TELEGRAM #}

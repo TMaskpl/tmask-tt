@@ -27,6 +27,7 @@ INSTALLED_APPS = [
     'apps.organization',
     'apps.db_transfers',
     'apps.audit_log',
+    'apps.webhook_deliveries',
 ]
 
 MIDDLEWARE = [

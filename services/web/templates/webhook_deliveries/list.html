@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}WEBHOOK DELIVERIES — TMASK-TRANSPORTER{% endblock %}
+{% block content %}
+<div class="box">
+  <span class="box-title">HISTORIA DOSTARCZEŃ WEBHOOKA (OSTATNIE {{ deliveries|length }})</span>
+  {% if circuit_open %}
+  <div class="msg-error" style="margin-bottom:1rem;">
+    &gt; CIRCUIT BREAKER OTWARTY — dostarczenia wstrzymane do {{ circuit_open_until|date:"Y-m-d H:i:s" }}
+    (zbyt wiele kolejnych błędów pod rząd)
+  </div>
+  {% endif %}
+  {% if deliveries %}
+  <table>
+    <thead>
+      <tr>
+        <th>DATA</th><th>TRANSFER</th><th>STATUS</th><th>URL</th><th>BŁĄD</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for d in deliveries %}
+      <tr>
+        <td>{{ d.created_at|date:"Y-m-d H:i:s" }}</td>
+        <td>{% if d.job %}<a href="{% url 'transfers:detail' d.job.pk %}">#{{ d.job.pk }}</a>{% else %}—{% endif %}</td>
+        <td>
+          {% if d.skipped %}
+          <span class="status status-pending">SKIPPED</span>
+          {% elif d.success %}
+          <span class="status status-done">OK</span>
+          {% else %}
+          <span class="status status-failed">FAILED</span>
+          {% endif %}
+        </td>
+        <td>{{ d.url|truncatechars:45 }}</td>
+        <td>{{ d.error_message|default:"—"|truncatechars:80 }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>Brak dostarczeń webhooka.</p>
+  {% endif %}
+</div>
+{% endblock %}

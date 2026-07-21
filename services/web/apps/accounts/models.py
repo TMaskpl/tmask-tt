@@ -23,6 +23,8 @@ class User(AbstractUser):
     totp_enabled = models.BooleanField(default=False)
     failed_login_attempts = models.PositiveSmallIntegerField(default=0)
     locked_until = models.DateTimeField(null=True, blank=True)
+    webhook_failure_count = models.PositiveSmallIntegerField(default=0)
+    webhook_circuit_open_until = models.DateTimeField(null=True, blank=True)
 
     @property
     def role_level(self) -> int:

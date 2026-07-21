@@ -13,6 +13,10 @@ from django.conf import settings  # noqa: E402
 from apps.connections.models import Connection  # noqa: E402
 from apps.transfers.models import TransferJob, TransferLog  # noqa: E402
 from apps.db_transfers.models import PgTransferJob, PgTransferLog  # noqa: E402
+from apps.webhook_deliveries.models import WebhookDeliveryLog  # noqa: E402
+from apps.webhook_deliveries.services import (  # noqa: E402
+    circuit_is_open, record_success, record_failure, CIRCUIT_SKIPPED_MESSAGE,
+)
 from modules.sftp.handler import SFTPHandler, SFTPTransferError  # noqa: E402
 from modules.rsync.handler import RsyncHandler, RsyncTransferError  # noqa: E402
 from modules.relay.handler import RelayHandler, RelayTransferError  # noqa: E402
@@ -135,10 +139,26 @@ def send_webhook(self, job_id: int):
     except Exception:
         logger.error(f'TransferJob {job_id} not found — webhook skipped')
         return
+    user = job.owner
+    if not user.webhook_url:
+        return
+    if circuit_is_open(user):
+        WebhookDeliveryLog.objects.create(
+            user=user, job=job, url=user.webhook_url,
+            success=False, skipped=True, error_message=CIRCUIT_SKIPPED_MESSAGE,
+        )
+        return
     try:
-        send_webhook_notification(job)
+        sent = send_webhook_notification(job)
     except Exception as exc:
+        record_failure(user)
+        WebhookDeliveryLog.objects.create(
+            user=user, job=job, url=user.webhook_url, success=False, error_message=str(exc),
+        )
         raise self.retry(exc=exc)
+    if sent:
+        record_success(user)
+        WebhookDeliveryLog.objects.create(user=user, job=job, url=user.webhook_url, success=True)
 
 
 @app.task(bind=True, name='transfers.send_telegram', max_retries=3, default_retry_delay=60)

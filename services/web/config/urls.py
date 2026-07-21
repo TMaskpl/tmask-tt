@@ -14,5 +14,6 @@ urlpatterns = [
     path('dashboard/', include('apps.dashboard.urls')),
     path('organization/', include('apps.organization.urls')),
     path('audit-log/', include('apps.audit_log.urls')),
+    path('webhook-deliveries/', include('apps.webhook_deliveries.urls')),
     path('', RedirectView.as_view(url='/transfers/', permanent=False)),
 ]

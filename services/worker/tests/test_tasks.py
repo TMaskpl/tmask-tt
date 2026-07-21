@@ -236,11 +236,22 @@ class TestCleanupOrphanJobs:
 
 
 class TestSendWebhookTask:
+    def _mock_job(self, MockJob, **owner_attrs):
+        mock_job = MagicMock()
+        mock_job.owner.webhook_url = 'http://hooks.example.com/'
+        mock_job.owner.webhook_circuit_open_until = None
+        for k, v in owner_attrs.items():
+            setattr(mock_job.owner, k, v)
+        MockJob.objects.select_related.return_value.get.return_value = mock_job
+        return mock_job
+
     def test_calls_send_webhook_notification(self):
         with patch('tasks.TransferJob') as MockJob, \
-             patch('tasks.send_webhook_notification') as mock_notif:
-            mock_job = MagicMock()
-            MockJob.objects.select_related.return_value.get.return_value = mock_job
+             patch('tasks.send_webhook_notification') as mock_notif, \
+             patch('tasks.WebhookDeliveryLog') as MockLog, \
+             patch('tasks.circuit_is_open', return_value=False):
+            mock_job = self._mock_job(MockJob)
+            mock_notif.return_value = True
             from tasks import send_webhook
             send_webhook(job_id=42)
             mock_notif.assert_called_once_with(mock_job)
@@ -252,6 +263,70 @@ class TestSendWebhookTask:
             from tasks import send_webhook
             send_webhook(job_id=999)
             mock_logger.error.assert_called()
+
+    def test_skips_when_no_webhook_url_configured(self):
+        with patch('tasks.TransferJob') as MockJob, \
+             patch('tasks.send_webhook_notification') as mock_notif, \
+             patch('tasks.WebhookDeliveryLog') as MockLog:
+            self._mock_job(MockJob, webhook_url='')
+            from tasks import send_webhook
+            send_webhook(job_id=42)
+            mock_notif.assert_not_called()
+            MockLog.objects.create.assert_not_called()
+
+    def test_skips_and_logs_when_circuit_open(self):
+        with patch('tasks.TransferJob') as MockJob, \
+             patch('tasks.send_webhook_notification') as mock_notif, \
+             patch('tasks.WebhookDeliveryLog') as MockLog, \
+             patch('tasks.circuit_is_open', return_value=True):
+            mock_job = self._mock_job(MockJob)
+            from tasks import send_webhook
+            send_webhook(job_id=42)
+            mock_notif.assert_not_called()
+            MockLog.objects.create.assert_called_once()
+            kwargs = MockLog.objects.create.call_args.kwargs
+            assert kwargs['success'] is False
+            assert kwargs['skipped'] is True
+
+    def test_records_success_and_logs_delivery_on_success(self):
+        with patch('tasks.TransferJob') as MockJob, \
+             patch('tasks.send_webhook_notification', return_value=True), \
+             patch('tasks.WebhookDeliveryLog') as MockLog, \
+             patch('tasks.record_success') as mock_record_success, \
+             patch('tasks.circuit_is_open', return_value=False):
+            mock_job = self._mock_job(MockJob)
+            from tasks import send_webhook
+            send_webhook(job_id=42)
+            mock_record_success.assert_called_once_with(mock_job.owner)
+            kwargs = MockLog.objects.create.call_args.kwargs
+            assert kwargs['success'] is True
+
+    def test_no_log_entry_when_notification_returns_false(self):
+        with patch('tasks.TransferJob') as MockJob, \
+             patch('tasks.send_webhook_notification', return_value=False), \
+             patch('tasks.WebhookDeliveryLog') as MockLog, \
+             patch('tasks.record_success') as mock_record_success, \
+             patch('tasks.circuit_is_open', return_value=False):
+            self._mock_job(MockJob)
+            from tasks import send_webhook
+            send_webhook(job_id=42)
+            MockLog.objects.create.assert_not_called()
+            mock_record_success.assert_not_called()
+
+    def test_records_failure_and_logs_delivery_on_exception_then_retries(self):
+        with patch('tasks.TransferJob') as MockJob, \
+             patch('tasks.send_webhook_notification', side_effect=ValueError('boom')), \
+             patch('tasks.WebhookDeliveryLog') as MockLog, \
+             patch('tasks.record_failure') as mock_record_failure, \
+             patch('tasks.circuit_is_open', return_value=False):
+            mock_job = self._mock_job(MockJob)
+            from tasks import send_webhook
+            with pytest.raises(ValueError, match='boom'):
+                send_webhook(job_id=42)
+            mock_record_failure.assert_called_once_with(mock_job.owner)
+            kwargs = MockLog.objects.create.call_args.kwargs
+            assert kwargs['success'] is False
+            assert 'boom' in kwargs['error_message']
 
 
 class TestExecuteTransferDispatchesWebhook:
