@@ -15,11 +15,13 @@ from apps.accounts.models import ROLE_ADMIN, ROLE_READONLY
 from apps.audit_log.services import log_created, log_updated, log_deleted, diff_fields
 from .portability import export_config, import_config, PassphraseError
 from .forms import ConnectionForm
-from .models import Connection, KIND_POSTGRES
+from .models import Connection, KIND_POSTGRES, KIND_MYSQL, KIND_MSSQL
 from .sftp_utils import list_directory, build_breadcrumbs
 from .ssh_keys import load_private_key
 from .ssh_tester import test_connection as _test_connection
 from .pg_tester import test_connection as _test_pg_connection
+from .mysql_tester import test_connection as _test_mysql_connection
+from .mssql_tester import test_connection as _test_mssql_connection
 from .pg_utils import list_tables as _list_pg_tables
 
 _CONNECTIONS_LIST = 'connections:list'
@@ -73,6 +75,10 @@ def connection_test(request, pk):
     conn = get_object_or_404(Connection, pk=pk)
     if conn.kind == KIND_POSTGRES:
         result = _test_pg_connection(conn)
+    elif conn.kind == KIND_MYSQL:
+        result = _test_mysql_connection(conn)
+    elif conn.kind == KIND_MSSQL:
+        result = _test_mssql_connection(conn)
     else:
         result = _test_connection(conn)
     return render(request, 'connections/_test_result.html', {'result': result})

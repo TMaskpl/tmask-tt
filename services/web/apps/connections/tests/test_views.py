@@ -5,7 +5,7 @@ import paramiko
 import psycopg2
 import pytest
 from django.urls import reverse
-from apps.connections.models import Connection
+from apps.connections.models import Connection, KIND_MYSQL, KIND_MSSQL
 
 @pytest.mark.django_db
 class TestConnectionList:
@@ -440,3 +440,20 @@ class TestConnectionPgTables:
         content = response.content.decode().lower()
         assert 'brak tabel' in content
         assert 'wybierz najpierw source connection' not in content
+
+
+@pytest.mark.django_db
+class TestConnectionTestDispatchDbKinds:
+    def test_mysql_kind_calls_mysql_tester(self, admin_client, make_connection, admin_user):
+        conn = make_connection(admin_user, kind=KIND_MYSQL, db_name='d')
+        with patch('apps.connections.views._test_mysql_connection') as mock_test:
+            mock_test.return_value = None
+            admin_client.get(reverse('connections:test', args=[conn.pk]))
+            mock_test.assert_called_once()
+
+    def test_mssql_kind_calls_mssql_tester(self, admin_client, make_connection, admin_user):
+        conn = make_connection(admin_user, kind=KIND_MSSQL, db_name='d')
+        with patch('apps.connections.views._test_mssql_connection') as mock_test:
+            mock_test.return_value = None
+            admin_client.get(reverse('connections:test', args=[conn.pk]))
+            mock_test.assert_called_once()
