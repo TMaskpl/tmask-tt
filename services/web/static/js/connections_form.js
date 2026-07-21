@@ -8,16 +8,25 @@
     }
   }
 
+  const DB_KINDS = ['postgres', 'mysql', 'mssql'];
+  const DEFAULT_PORTS = { postgres: 5432, mysql: 3306, mssql: 1433, ssh: 22 };
+
   function toggleKind() {
     const kind = document.getElementById('id_kind');
     if (!kind) return;
     const sshFields = document.querySelectorAll('.ssh-only-field');
-    const pgFields = document.querySelectorAll('.postgres-only-field');
+    const dbFields = document.querySelectorAll('.db-kind-field');
     sshFields.forEach(function (el) { el.style.display = (kind.value === 'ssh') ? '' : 'none'; });
-    pgFields.forEach(function (el) { el.style.display = (kind.value === 'postgres') ? '' : 'none'; });
-    if (kind.value === 'ssh') {
-      toggleKnownHost();
-    }
+    dbFields.forEach(function (el) { el.style.display = DB_KINDS.includes(kind.value) ? '' : 'none'; });
+    if (kind.value === 'ssh') toggleKnownHost();
+  }
+
+  function suggestPort() {
+    const kind = document.getElementById('id_kind');
+    const port = document.getElementById('id_port');
+    if (!kind || !port) return;
+    // Only overwrite an empty/default-looking port — never clobber a value the user already typed.
+    if (!port.dataset.touched) port.value = DEFAULT_PORTS[kind.value] || '';
   }
 
   function scanHostKey(url) {
@@ -48,13 +57,17 @@
   document.addEventListener('DOMContentLoaded', function () {
     const strict = document.getElementById('id_strict_host_key_checking');
     const kind = document.getElementById('id_kind');
+    const port = document.getElementById('id_port');
     const scanBtn = document.getElementById('scan-btn');
     if (strict) {
       strict.addEventListener('change', toggleKnownHost);
     }
     if (kind) {
-      kind.addEventListener('change', toggleKind);
+      kind.addEventListener('change', function () { toggleKind(); suggestPort(); });
       toggleKind();
+    }
+    if (port) {
+      port.addEventListener('input', function () { port.dataset.touched = 'true'; });
     }
     if (scanBtn) {
       scanBtn.addEventListener('click', function () {
