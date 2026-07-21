@@ -6,14 +6,14 @@
 
 **Architecture:** Generalize `apps/db_transfers` from Postgres-only to a three-engine app (`DbTransferJob`/`DbTransferLog` with an `engine` field, data-preserving rename from `PgTransferJob`/`PgTransferLog`). Add two new worker modules (`modules/mysql`, `modules/mssql`) mirroring the existing `modules/postgres` handler contract (`execute(log_callback)`), dispatched by `job.engine` in `tasks.py`. Add two new introspection modules on the web side (`mysql_utils.py`, `mssql_utils.py`) mirroring `pg_utils.py`.
 
-**Tech Stack:** `mysqldump`/`mysql` CLI (MySQL, apt `default-mysql-client`), `mssql-scripter` + `sqlcmd` (MSSQL, pip + apt Microsoft repo `mssql-tools18`/`msodbcsql18`), `pymysql` (MySQL introspection), `pyodbc` (MSSQL introspection).
+**Tech Stack:** `mysqldump`/`mysql` CLI (MySQL, apt `default-mysql-client`), `sqlcmd`/`bcp` + `pyodbc`-based own schema introspection (MSSQL, apt Microsoft repo `mssql-tools18`/`msodbcsql18` — revised 2026-07-21, see Task 4's header note: `mssql-scripter` has no arm64-compatible release), `pymysql` (MySQL introspection).
 
 ## Global Constraints
 
 - Same-engine only: `source_connection.kind == dest_connection.kind` enforced in `DbTransferJob.clean()` — no MySQL→MSSQL translation in this plan.
 - MySQL base flags always include `--single-transaction --set-gtid-purged=OFF --skip-lock-tables` (GTID incompatibility is a certain failure mode across instances/versions, not an edge case).
 - MySQL collation compatibility: before transfer, detect destination server version via `pymysql`; if destination major version < 8, strip `COLLATE utf8mb4_0900_ai_ci` from the dump stream via `sed` before it reaches `mysql`.
-- MSSQL: detect destination server version via `pyodbc` (`SELECT SERVERPROPERTY('ProductVersion')`) before running `mssql-scripter`, and pass the corresponding `--target-server-version` value explicitly. Passwords go through `-P` CLI args for `mssql-scripter`/`sqlcmd` (no env-var support in these tools) — this is an accepted, documented risk, not silently swept under the rug.
+- MSSQL: schema is introspected from the source via `pyodbc` (`INFORMATION_SCHEMA.COLUMNS`/`KEY_COLUMN_USAGE`) and reproduced as plain `CREATE TABLE` T-SQL on the destination via `sqlcmd`; data is moved per-table via `bcp out`/`bcp in` (native format). No destination-version detection needed — the generated DDL is deliberately simple, stable T-SQL that works unchanged across modern SQL Server versions, so there's no tool-version-targeting flag to get right. Passwords go through `-P`/`-U` CLI args for `sqlcmd`/`bcp` (no env-var support in these tools) — this is an accepted, documented risk, not silently swept under the rug. Foreign keys, non-PK indexes, triggers, and computed columns are not recreated (documented scope reduction, see Task 4).
 - Passwords for MySQL: `MYSQL_PWD` env var per subprocess, never as a CLI argument (mirrors the existing `PGPASSWORD` pattern).
 - Every new/modified Python file gets tests in the same commit as the code (TDD): write failing test → verify fail → implement → verify pass → commit.
 - Full regression (web + worker) after every task, not just at the end — this project's established discipline (see `CLAUDE.md`).
@@ -915,6 +915,8 @@ git commit -m "feat(mysql-transfer): pipe execution, retries, row-count verifica
 
 ### Task 4: MSSQL worker handler
 
+> **Revised 2026-07-21, before dispatch** — the plan originally specified `mssql-scripter` for MSSQL scripting. Task 7's implementer confirmed `mssql-scripter` has no arm64-compatible release (PyPI has only pre-2018 pre-releases, and its native backend `mssqltoolsservice` is x86_64-only with no arm64 build anywhere — confirmed crash under Rosetta on the arm64 dev host). Production runs amd64 (so the tool would likely have worked there), but the user chose to make this architecture-independent instead. This task now implements MSSQL support via the handler's own schema introspection (`pyodbc`) + `bcp` for data movement, both already confirmed working natively on arm64 in Task 7. See the updated design doc (`docs/superpowers/specs/2026-07-21-mysql-mssql-transfer-design.md`) for the full rationale — this task brief reflects the new approach directly, no need to cross-reference further.
+
 **Files:**
 - Create: `services/worker/modules/mssql/__init__.py`
 - Create: `services/worker/modules/mssql/config.py`
@@ -922,10 +924,12 @@ git commit -m "feat(mysql-transfer): pipe execution, retries, row-count verifica
 - Test: `services/worker/tests/test_mssql_handler.py`
 
 **Interfaces:**
-- Produces: `MssqlTransferHandler(params).execute(log_callback)` — same contract, same `params` shape as Task 3.
-- Consumes: `pyodbc` for version detection and row-count verification (new dependency, Task 7).
+- Produces: `MssqlTransferHandler(params).execute(log_callback)` — same contract, same `params` shape as Task 3 (`source_host`, `source_port`, `source_username`, `source_password`, `source_db_name`, `dest_host`, `dest_port`, `dest_username`, `dest_password`, `dest_db_name`, `table_name`, `verify_row_count`).
+- Consumes: `pyodbc` for schema introspection and row-count verification (installed in Task 7, already confirmed working on both `web` and `worker` images).
 
-- [ ] **Step 1: Write failing tests for target-version mapping**
+**Scope note (explicit, documented reduction vs. the original `mssql-scripter`-based design):** only column definitions and the primary key are introspected and recreated. Foreign keys, non-PK indexes, triggers, and computed columns are **not** recreated in this iteration — this is an intentional trade-off, not an oversight, and must be called out in the report and eventually in the vault docs (Task 9), the same way the plan already documents the MSSQL password-via-`-P` risk elsewhere.
+
+- [ ] **Step 1: Write failing tests for schema introspection**
 
 ```python
 # services/worker/tests/test_mssql_handler.py
@@ -936,7 +940,7 @@ from modules.mssql.handler import MssqlTransferHandler, MssqlTransferError
 from modules.mssql.config import MSSQL_MAX_RETRIES
 
 
-class TestMssqlTargetVersionMapping:
+class TestMssqlSchemaIntrospection:
     def _make_params(self, **kwargs):
         defaults = {
             'source_host': 'a', 'source_port': 1433, 'source_username': 'sa', 'source_password': 'srcpw',
@@ -946,29 +950,35 @@ class TestMssqlTargetVersionMapping:
         defaults.update(kwargs)
         return defaults
 
-    @pytest.mark.parametrize('product_version,expected_target', [
-        ('12.0.2000.8', '2014'),
-        ('13.0.1000.0', '2016'),
-        ('14.0.1000.0', '2017'),
-        ('15.0.2000.5', '2019'),
-        ('16.0.1000.6', '2019'),  # SQL Server 2022 — mssql-scripter has no '2022' target, cap at newest known
-    ])
-    def test_maps_product_version_to_target(self, product_version, expected_target):
+    def test_lists_all_tables_when_table_name_not_set(self):
         handler = MssqlTransferHandler(self._make_params())
         with patch('modules.mssql.handler.pyodbc.connect') as mock_connect:
             cur = MagicMock()
-            cur.fetchone.return_value = (product_version,)
+            cur.fetchall.return_value = [('users',), ('orders',)]
             mock_connect.return_value.__enter__.return_value.cursor.return_value.__enter__.return_value = cur
-            assert handler._dest_target_server_version() == expected_target
+            assert handler._source_table_names() == ['users', 'orders']
 
-    def test_unreachable_dest_defaults_to_newest_known_and_warns(self):
-        import pyodbc
+    def test_single_table_when_table_name_set(self):
+        handler = MssqlTransferHandler(self._make_params(table_name='users'))
+        assert handler._source_table_names() == ['users']
+
+    def test_introspects_columns_and_primary_key(self):
         handler = MssqlTransferHandler(self._make_params())
-        with patch('modules.mssql.handler.pyodbc.connect', side_effect=pyodbc.OperationalError('down')):
-            logs = []
-            result = handler._dest_target_server_version(log_callback=lambda lvl, msg: logs.append((lvl, msg)))
-            assert result == '2019'
-            assert any('VERSION' in msg.upper() for _, msg in logs)
+        with patch('modules.mssql.handler.pyodbc.connect') as mock_connect:
+            columns_cur = MagicMock()
+            columns_cur.fetchall.return_value = [
+                ('id', 'int', None, 10, 0, 'NO'),
+                ('name', 'varchar', 100, None, None, 'YES'),
+            ]
+            pk_cur = MagicMock()
+            pk_cur.fetchall.return_value = [('id',)]
+            conn = mock_connect.return_value.__enter__.return_value
+            conn.cursor.return_value.__enter__.side_effect = [columns_cur, pk_cur]
+            schema = handler._introspect_table('users')
+            assert schema['columns'][0]['name'] == 'id'
+            assert schema['columns'][0]['data_type'] == 'int'
+            assert schema['columns'][1]['character_maximum_length'] == 100
+            assert schema['primary_key'] == ['id']
 ```
 
 - [ ] **Step 2: Run to verify failure**
@@ -976,24 +986,12 @@ class TestMssqlTargetVersionMapping:
 Run: `docker compose run --rm -v "$PWD/services/worker:/app" worker python -m pytest tests/test_mssql_handler.py -q`
 Expected: `ModuleNotFoundError: No module named 'modules.mssql'`
 
-- [ ] **Step 3: Implement config + version mapping**
+- [ ] **Step 3: Implement config + introspection**
 
 ```python
 # services/worker/modules/mssql/config.py
 MSSQL_MAX_RETRIES = 3
 MSSQL_RETRY_DELAY = 5
-
-# mssql-scripter's --target-server-version accepts a fixed set of values and has not
-# been updated for SQL Server 2022 (major version 16) — the tool itself is the
-# constraint here, not our code. Any detected major version at or above 15 (2019)
-# is capped at '2019', the newest value the tool understands; this is the same
-# "newer client, older/differently-versioned server" compatibility problem already
-# solved for Postgres (SED_STRIP_INCOMPATIBLE_SET) and MySQL (collation stripping),
-# just solved by the tool's own targeting flag instead of a manual filter.
-MSSQL_VERSION_MAP = {
-    9: '2005', 10: '2008', 11: '2012', 12: '2014', 13: '2016', 14: '2017',
-}
-MSSQL_NEWEST_KNOWN_TARGET = '2019'
 ```
 
 ```python
@@ -1006,7 +1004,7 @@ from typing import Callable
 
 import pyodbc
 
-from .config import MSSQL_MAX_RETRIES, MSSQL_RETRY_DELAY, MSSQL_VERSION_MAP, MSSQL_NEWEST_KNOWN_TARGET
+from .config import MSSQL_MAX_RETRIES, MSSQL_RETRY_DELAY
 
 
 class MssqlTransferError(Exception):
@@ -1023,24 +1021,47 @@ class MssqlTransferHandler:
             f'UID={user};PWD={password};TrustServerCertificate=yes;'
         )
 
-    def _dest_target_server_version(self, log_callback: Callable[[str, str], None] = None) -> str:
+    def _source_conn_string(self) -> str:
         p = self.params
-        try:
-            with pyodbc.connect(
-                self._conn_string(p['dest_host'], p['dest_port'], p['dest_db_name'], p['dest_username'], p['dest_password']),
-                timeout=10,
-            ) as conn:
-                with conn.cursor() as cur:
-                    cur.execute("SELECT SERVERPROPERTY('ProductVersion')")
-                    product_version = cur.fetchone()[0]
-            major = int(product_version.split('.')[0])
-            if major >= 15:
-                return MSSQL_NEWEST_KNOWN_TARGET
-            return MSSQL_VERSION_MAP.get(major, MSSQL_NEWEST_KNOWN_TARGET)
-        except (pyodbc.Error, ValueError, IndexError) as e:
-            if log_callback:
-                log_callback('warn', f'Nie udało się wykryć VERSION serwera docelowego — {e}. Używam najnowszego znanego celu ({MSSQL_NEWEST_KNOWN_TARGET}).')
-            return MSSQL_NEWEST_KNOWN_TARGET
+        return self._conn_string(p['source_host'], p['source_port'], p['source_db_name'], p['source_username'], p['source_password'])
+
+    def _dest_conn_string(self) -> str:
+        p = self.params
+        return self._conn_string(p['dest_host'], p['dest_port'], p['dest_db_name'], p['dest_username'], p['dest_password'])
+
+    def _source_table_names(self) -> list:
+        if self.params.get('table_name'):
+            return [self.params['table_name']]
+        with pyodbc.connect(self._source_conn_string(), timeout=10) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE' ORDER BY TABLE_NAME")
+                return [row[0] for row in cur.fetchall()]
+
+    def _introspect_table(self, table_name: str) -> dict:
+        with pyodbc.connect(self._source_conn_string(), timeout=10) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, '
+                    'NUMERIC_SCALE, IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS '
+                    'WHERE TABLE_NAME = ? ORDER BY ORDINAL_POSITION',
+                    table_name,
+                )
+                columns = [
+                    {
+                        'name': row[0], 'data_type': row[1], 'character_maximum_length': row[2],
+                        'numeric_precision': row[3], 'numeric_scale': row[4], 'is_nullable': row[5] == 'YES',
+                    }
+                    for row in cur.fetchall()
+                ]
+            with conn.cursor() as cur:
+                cur.execute(
+                    'SELECT kcu.COLUMN_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc '
+                    'JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu ON tc.CONSTRAINT_NAME = kcu.CONSTRAINT_NAME '
+                    "WHERE tc.TABLE_NAME = ? AND tc.CONSTRAINT_TYPE = 'PRIMARY KEY' ORDER BY kcu.ORDINAL_POSITION",
+                    table_name,
+                )
+                primary_key = [row[0] for row in cur.fetchall()]
+        return {'columns': columns, 'primary_key': primary_key}
 ```
 
 - [ ] **Step 4: Run to verify pass, commit**
@@ -1048,10 +1069,100 @@ class MssqlTransferHandler:
 ```bash
 docker compose run --rm -v "$PWD/services/worker:/app" worker python -m pytest tests/test_mssql_handler.py -q
 git add services/worker/modules/mssql/config.py services/worker/modules/mssql/handler.py services/worker/tests/test_mssql_handler.py
-git commit -m "feat(mssql-transfer): target-server-version detection and mapping"
+git commit -m "feat(mssql-transfer): schema introspection (columns + primary key) via pyodbc"
 ```
 
-- [ ] **Step 5: Write failing tests for `mssql-scripter`/`sqlcmd` command building and the two-step execute**
+- [ ] **Step 5: Write failing tests for DDL generation**
+
+```python
+# services/worker/tests/test_mssql_handler.py (add)
+class TestMssqlDdlGeneration:
+    def _make_params(self):
+        return {
+            'source_host': 'a', 'source_port': 1433, 'source_username': 'sa', 'source_password': 'p',
+            'source_db_name': 'src', 'dest_host': 'b', 'dest_port': 1433, 'dest_username': 'sa',
+            'dest_password': 'p', 'dest_db_name': 'dst', 'table_name': None, 'verify_row_count': False,
+        }
+
+    def test_generates_create_table_with_columns_and_pk(self):
+        handler = MssqlTransferHandler(self._make_params())
+        schema = {
+            'columns': [
+                {'name': 'id', 'data_type': 'int', 'character_maximum_length': None,
+                 'numeric_precision': 10, 'numeric_scale': 0, 'is_nullable': False},
+                {'name': 'name', 'data_type': 'varchar', 'character_maximum_length': 100,
+                 'numeric_precision': None, 'numeric_scale': None, 'is_nullable': True},
+            ],
+            'primary_key': ['id'],
+        }
+        ddl = handler._build_create_table_sql('users', schema)
+        assert 'DROP TABLE IF EXISTS [users]' in ddl
+        assert 'CREATE TABLE [users]' in ddl
+        assert '[id] int NOT NULL' in ddl
+        assert '[name] varchar(100) NULL' in ddl
+        assert 'PRIMARY KEY ([id])' in ddl
+
+    def test_no_primary_key_clause_when_table_has_none(self):
+        handler = MssqlTransferHandler(self._make_params())
+        schema = {
+            'columns': [{'name': 'id', 'data_type': 'int', 'character_maximum_length': None,
+                         'numeric_precision': 10, 'numeric_scale': 0, 'is_nullable': False}],
+            'primary_key': [],
+        }
+        ddl = handler._build_create_table_sql('log_events', schema)
+        assert 'PRIMARY KEY' not in ddl
+
+    def test_decimal_type_includes_precision_and_scale(self):
+        handler = MssqlTransferHandler(self._make_params())
+        schema = {
+            'columns': [{'name': 'amount', 'data_type': 'decimal', 'character_maximum_length': None,
+                         'numeric_precision': 18, 'numeric_scale': 2, 'is_nullable': False}],
+            'primary_key': [],
+        }
+        ddl = handler._build_create_table_sql('payments', schema)
+        assert '[amount] decimal(18,2) NOT NULL' in ddl
+```
+
+- [ ] **Step 6: Run to verify failure, then implement**
+
+```python
+# services/worker/modules/mssql/handler.py — add method
+    _TYPES_WITH_LENGTH = {'varchar', 'nvarchar', 'char', 'nchar', 'varbinary', 'binary'}
+    _TYPES_WITH_PRECISION_SCALE = {'decimal', 'numeric'}
+
+    def _column_type_sql(self, col: dict) -> str:
+        data_type = col['data_type']
+        if data_type in self._TYPES_WITH_LENGTH and col['character_maximum_length']:
+            length = col['character_maximum_length']
+            return f'{data_type}({"max" if length == -1 else length})'
+        if data_type in self._TYPES_WITH_PRECISION_SCALE and col['numeric_precision'] is not None:
+            return f'{data_type}({col["numeric_precision"]},{col["numeric_scale"]})'
+        return data_type
+
+    def _build_create_table_sql(self, table_name: str, schema: dict) -> str:
+        column_lines = []
+        for col in schema['columns']:
+            nullability = 'NULL' if col['is_nullable'] else 'NOT NULL'
+            column_lines.append(f'[{col["name"]}] {self._column_type_sql(col)} {nullability}')
+        if schema['primary_key']:
+            pk_cols = ', '.join(f'[{c}]' for c in schema['primary_key'])
+            column_lines.append(f'PRIMARY KEY ({pk_cols})')
+        columns_sql = ',\n    '.join(column_lines)
+        return (
+            f'DROP TABLE IF EXISTS [{table_name}];\n'
+            f'CREATE TABLE [{table_name}] (\n    {columns_sql}\n);\n'
+        )
+```
+
+- [ ] **Step 7: Run to verify pass, commit**
+
+```bash
+docker compose run --rm -v "$PWD/services/worker:/app" worker python -m pytest tests/test_mssql_handler.py -q
+git add services/worker/modules/mssql/handler.py services/worker/tests/test_mssql_handler.py
+git commit -m "feat(mssql-transfer): CREATE TABLE DDL generation from introspected schema"
+```
+
+- [ ] **Step 8: Write failing tests for `sqlcmd`/`bcp` command building and the full execute flow**
 
 ```python
 # services/worker/tests/test_mssql_handler.py (add)
@@ -1065,24 +1176,23 @@ class TestMssqlCommandBuilding:
         defaults.update(kwargs)
         return defaults
 
-    def test_builds_scripter_command_whole_db(self, tmp_path):
-        handler = MssqlTransferHandler(self._make_params())
-        cmd = handler._build_scripter_cmd(str(tmp_path / 'out.sql'), target_version='2019')
-        assert cmd[0] == 'mssql-scripter'
-        assert '--target-server-version' in cmd and '2019' in cmd
-        assert '--include-objects' not in cmd
-
-    def test_builds_scripter_command_single_table(self, tmp_path):
-        handler = MssqlTransferHandler(self._make_params(table_name='users'))
-        cmd = handler._build_scripter_cmd(str(tmp_path / 'out.sql'), target_version='2019')
-        assert '--include-objects' in cmd
-        assert cmd[cmd.index('--include-objects') + 1] == 'users'
-
     def test_builds_sqlcmd_command(self, tmp_path):
         handler = MssqlTransferHandler(self._make_params())
-        cmd = handler._build_sqlcmd_cmd(str(tmp_path / 'out.sql'))
+        cmd = handler._build_sqlcmd_cmd(str(tmp_path / 'ddl.sql'))
         assert cmd[0] == 'sqlcmd'
         assert 'dst' in cmd
+
+    def test_builds_bcp_out_command(self, tmp_path):
+        handler = MssqlTransferHandler(self._make_params())
+        cmd = handler._build_bcp_out_cmd('users', str(tmp_path / 'users.dat'))
+        assert cmd[0] == 'bcp'
+        assert 'users' in cmd and 'out' in cmd and 'src' in cmd and '-n' in cmd
+
+    def test_builds_bcp_in_command(self, tmp_path):
+        handler = MssqlTransferHandler(self._make_params())
+        cmd = handler._build_bcp_in_cmd('users', str(tmp_path / 'users.dat'))
+        assert cmd[0] == 'bcp'
+        assert 'users' in cmd and 'in' in cmd and 'dst' in cmd and '-n' in cmd
 
 
 class TestMssqlExecute:
@@ -1099,59 +1209,74 @@ class TestMssqlExecute:
         proc.wait.return_value = exit_code
         return proc
 
-    def test_successful_transfer_and_temp_file_cleaned_up(self):
+    def test_successful_transfer_and_temp_files_cleaned_up(self):
         handler = MssqlTransferHandler(self._make_params())
-        with patch('modules.mssql.handler.MssqlTransferHandler._dest_target_server_version', return_value='2019'), \
+        with patch('modules.mssql.handler.MssqlTransferHandler._source_table_names', return_value=['users']), \
+             patch('modules.mssql.handler.MssqlTransferHandler._introspect_table',
+                   return_value={'columns': [{'name': 'id', 'data_type': 'int', 'character_maximum_length': None,
+                                               'numeric_precision': 10, 'numeric_scale': 0, 'is_nullable': False}],
+                                 'primary_key': ['id']}), \
              patch('modules.mssql.handler.subprocess.Popen') as MockPopen, \
              patch('modules.mssql.handler.os.path.exists', return_value=True), \
              patch('modules.mssql.handler.os.unlink') as mock_unlink:
-            MockPopen.side_effect = [self._mock_proc([], 0), self._mock_proc([], 0)]
+            MockPopen.side_effect = [self._mock_proc([], 0), self._mock_proc([], 0), self._mock_proc([], 0)]
             handler.execute(log_callback=lambda lvl, msg: None)
-            mock_unlink.assert_called_once()
+            assert mock_unlink.call_count >= 1
 
     def test_password_passed_via_argv_documented_risk(self):
-        # mssql-scripter/sqlcmd have no env-var password option — this test pins
-        # the accepted, documented trade-off rather than silently assuming otherwise.
+        # sqlcmd/bcp have no env-var password option — this test pins the accepted,
+        # documented trade-off rather than silently assuming otherwise.
         handler = MssqlTransferHandler(self._make_params())
-        with patch('modules.mssql.handler.MssqlTransferHandler._dest_target_server_version', return_value='2019'), \
+        with patch('modules.mssql.handler.MssqlTransferHandler._source_table_names', return_value=['users']), \
+             patch('modules.mssql.handler.MssqlTransferHandler._introspect_table',
+                   return_value={'columns': [{'name': 'id', 'data_type': 'int', 'character_maximum_length': None,
+                                               'numeric_precision': 10, 'numeric_scale': 0, 'is_nullable': False}],
+                                 'primary_key': ['id']}), \
              patch('modules.mssql.handler.subprocess.Popen') as MockPopen, \
              patch('modules.mssql.handler.os.path.exists', return_value=False):
-            MockPopen.side_effect = [self._mock_proc([], 0), self._mock_proc([], 0)]
+            MockPopen.side_effect = [self._mock_proc([], 0), self._mock_proc([], 0), self._mock_proc([], 0)]
             handler.execute(log_callback=lambda lvl, msg: None)
             all_args = [arg for call in MockPopen.call_args_list for arg in call.args[0]]
             assert 'srcpw' in all_args or 'dstpw' in all_args
 
-    def test_retries_on_failure_then_raises(self):
+    def test_retries_on_ddl_failure_then_raises(self):
         handler = MssqlTransferHandler(self._make_params())
-        with patch('modules.mssql.handler.MssqlTransferHandler._dest_target_server_version', return_value='2019'), \
+        with patch('modules.mssql.handler.MssqlTransferHandler._source_table_names', return_value=['users']), \
+             patch('modules.mssql.handler.MssqlTransferHandler._introspect_table',
+                   return_value={'columns': [{'name': 'id', 'data_type': 'int', 'character_maximum_length': None,
+                                               'numeric_precision': 10, 'numeric_scale': 0, 'is_nullable': False}],
+                                 'primary_key': ['id']}), \
              patch('modules.mssql.handler.subprocess.Popen') as MockPopen, \
              patch('modules.mssql.handler.os.path.exists', return_value=False), \
              patch('modules.mssql.handler.time.sleep'):
-            MockPopen.side_effect = [self._mock_proc([], 1), self._mock_proc([], 0)] * MSSQL_MAX_RETRIES
+            MockPopen.side_effect = [self._mock_proc([], 1)] * (MSSQL_MAX_RETRIES * 3)
             with pytest.raises(MssqlTransferError):
                 handler.execute(log_callback=lambda lvl, msg: None)
 ```
 
-- [ ] **Step 6: Run to verify failure, then implement command building + execute**
+- [ ] **Step 9: Run to verify failure, then implement command building + execute**
 
 ```python
 # services/worker/modules/mssql/handler.py — add methods
-    def _build_scripter_cmd(self, out_path: str, target_version: str) -> list:
-        p = self.params
-        cmd = [
-            'mssql-scripter', '-S', f'{p["source_host"]},{p["source_port"]}', '-d', p['source_db_name'],
-            '-U', p['source_username'], '-P', p['source_password'],
-            '--schema-and-data', '--target-server-version', target_version, '-f', out_path,
-        ]
-        if p.get('table_name'):
-            cmd += ['--include-objects', p['table_name']]
-        return cmd
-
-    def _build_sqlcmd_cmd(self, in_path: str) -> list:
+    def _build_sqlcmd_cmd(self, ddl_path: str) -> list:
         p = self.params
         return [
             'sqlcmd', '-S', f'{p["dest_host"]},{p["dest_port"]}', '-d', p['dest_db_name'],
-            '-U', p['dest_username'], '-P', p['dest_password'], '-i', in_path,
+            '-U', p['dest_username'], '-P', p['dest_password'], '-i', ddl_path,
+        ]
+
+    def _build_bcp_out_cmd(self, table_name: str, out_path: str) -> list:
+        p = self.params
+        return [
+            'bcp', table_name, 'out', out_path, '-S', f'{p["source_host"]},{p["source_port"]}',
+            '-U', p['source_username'], '-P', p['source_password'], '-d', p['source_db_name'], '-n',
+        ]
+
+    def _build_bcp_in_cmd(self, table_name: str, in_path: str) -> list:
+        p = self.params
+        return [
+            'bcp', table_name, 'in', in_path, '-S', f'{p["dest_host"]},{p["dest_port"]}',
+            '-U', p['dest_username'], '-P', p['dest_password'], '-d', p['dest_db_name'], '-n',
         ]
 
     def _run_step(self, cmd: list, log_callback: Callable[[str, str], None]) -> int:
@@ -1162,48 +1287,59 @@ class TestMssqlExecute:
                 log_callback('info', line)
         return proc.wait()
 
-    def execute(self, log_callback: Callable[[str, str], None]) -> None:
-        target_version = self._dest_target_server_version(log_callback)
-        fd, tmp_path = tempfile.mkstemp(suffix='.sql')
-        os.close(fd)
+    def _transfer_once(self, log_callback: Callable[[str, str], None]) -> bool:
+        table_names = self._source_table_names()
+        tmp_paths = []
         try:
-            last_scripter_exit = last_sqlcmd_exit = None
-            for attempt in range(1, MSSQL_MAX_RETRIES + 1):
-                log_callback('info', f'Starting mssql-scripter|sqlcmd (attempt {attempt})')
-                last_scripter_exit = self._run_step(self._build_scripter_cmd(tmp_path, target_version), log_callback)
-                if last_scripter_exit != 0:
-                    if attempt < MSSQL_MAX_RETRIES:
-                        log_callback('warn', f'mssql-scripter failed (exit {last_scripter_exit}), retrying in {MSSQL_RETRY_DELAY}s...')
-                        time.sleep(MSSQL_RETRY_DELAY)
-                    continue
-                last_sqlcmd_exit = self._run_step(self._build_sqlcmd_cmd(tmp_path), log_callback)
-                if last_sqlcmd_exit == 0:
-                    log_callback('info', 'Transfer complete')
-                    if self.params.get('verify_row_count'):
-                        self._verify_row_counts(log_callback)
-                    return
-                if attempt < MSSQL_MAX_RETRIES:
-                    log_callback('warn', f'sqlcmd failed (exit {last_sqlcmd_exit}), retrying in {MSSQL_RETRY_DELAY}s...')
-                    time.sleep(MSSQL_RETRY_DELAY)
+            fd, ddl_path = tempfile.mkstemp(suffix='.sql')
+            os.close(fd)
+            tmp_paths.append(ddl_path)
+            with open(ddl_path, 'w') as f:
+                for table_name in table_names:
+                    schema = self._introspect_table(table_name)
+                    f.write(self._build_create_table_sql(table_name, schema))
 
-            raise MssqlTransferError(
-                f'TRANSFER FAILED — mssql-scripter/sqlcmd failed after {MSSQL_MAX_RETRIES} attempts '
-                f'(scripter exit={last_scripter_exit}, sqlcmd exit={last_sqlcmd_exit})'
-            )
+            if self._run_step(self._build_sqlcmd_cmd(ddl_path), log_callback) != 0:
+                return False
+
+            for table_name in table_names:
+                fd, data_path = tempfile.mkstemp(suffix='.dat')
+                os.close(fd)
+                tmp_paths.append(data_path)
+                if self._run_step(self._build_bcp_out_cmd(table_name, data_path), log_callback) != 0:
+                    return False
+                if self._run_step(self._build_bcp_in_cmd(table_name, data_path), log_callback) != 0:
+                    return False
+            return True
         finally:
-            if os.path.exists(tmp_path):
-                os.unlink(tmp_path)
+            for path in tmp_paths:
+                if os.path.exists(path):
+                    os.unlink(path)
+
+    def execute(self, log_callback: Callable[[str, str], None]) -> None:
+        for attempt in range(1, MSSQL_MAX_RETRIES + 1):
+            log_callback('info', f'Starting MSSQL schema+data transfer (attempt {attempt})')
+            if self._transfer_once(log_callback):
+                log_callback('info', 'Transfer complete')
+                if self.params.get('verify_row_count'):
+                    self._verify_row_counts(log_callback)
+                return
+            if attempt < MSSQL_MAX_RETRIES:
+                log_callback('warn', f'Transfer step failed, retrying in {MSSQL_RETRY_DELAY}s...')
+                time.sleep(MSSQL_RETRY_DELAY)
+
+        raise MssqlTransferError(f'TRANSFER FAILED — mssql transfer failed after {MSSQL_MAX_RETRIES} attempts')
 ```
 
-- [ ] **Step 7: Run to verify pass, commit**
+- [ ] **Step 10: Run to verify pass, commit**
 
 ```bash
 docker compose run --rm -v "$PWD/services/worker:/app" worker python -m pytest tests/test_mssql_handler.py -q
 git add services/worker/modules/mssql/handler.py services/worker/tests/test_mssql_handler.py
-git commit -m "feat(mssql-transfer): scripter+sqlcmd two-step execution with retries"
+git commit -m "feat(mssql-transfer): sqlcmd DDL execution + bcp data copy with retries"
 ```
 
-- [ ] **Step 8: Write failing test for `_verify_row_counts`** (mirror Task 3's MySQL version, using `pyodbc`/`INFORMATION_SCHEMA.TABLES`)
+- [ ] **Step 11: Write failing test for `_verify_row_counts`** (identical shape to Task 3's MySQL version, using `pyodbc`/`INFORMATION_SCHEMA.TABLES`)
 
 ```python
 # services/worker/tests/test_mssql_handler.py (add)
@@ -1236,36 +1372,25 @@ class TestMssqlVerifyRowCounts:
             assert any(lvl == 'warn' for lvl, _ in logs)
 ```
 
-- [ ] **Step 9: Run to verify failure, then implement**
+- [ ] **Step 12: Run to verify failure, then implement**
 
 ```python
 # services/worker/modules/mssql/handler.py — add method
     def _verify_row_counts(self, log_callback: Callable[[str, str], None]) -> None:
         p = self.params
         try:
-            src_conn = pyodbc.connect(
-                self._conn_string(p['source_host'], p['source_port'], p['source_db_name'], p['source_username'], p['source_password']),
-                timeout=10,
-            )
+            src_conn = pyodbc.connect(self._source_conn_string(), timeout=10)
         except pyodbc.Error as e:
             log_callback('warn', f'ROW COUNT VERIFICATION SKIPPED — nie udało się połączyć ze źródłem: {e}')
             return
         try:
-            dst_conn = pyodbc.connect(
-                self._conn_string(p['dest_host'], p['dest_port'], p['dest_db_name'], p['dest_username'], p['dest_password']),
-                timeout=10,
-            )
+            dst_conn = pyodbc.connect(self._dest_conn_string(), timeout=10)
         except pyodbc.Error as e:
             src_conn.close()
             log_callback('warn', f'ROW COUNT VERIFICATION SKIPPED — nie udało się połączyć z celem: {e}')
             return
         try:
-            if p.get('table_name'):
-                tables = [p['table_name']]
-            else:
-                with src_conn.cursor() as cur:
-                    cur.execute("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'")
-                    tables = [row[0] for row in cur.fetchall()]
+            tables = self._source_table_names()
             for table in tables:
                 with src_conn.cursor() as cur:
                     cur.execute(f'SELECT COUNT(*) FROM [{table}]')  # nosec B608 — table name from INFORMATION_SCHEMA/user-selected dropdown
@@ -1284,7 +1409,7 @@ class TestMssqlVerifyRowCounts:
             dst_conn.close()
 ```
 
-- [ ] **Step 10: Run full mssql handler suite, verify pass, commit**
+- [ ] **Step 13: Run full mssql handler suite, verify pass, commit**
 
 ```bash
 docker compose run --rm -v "$PWD/services/worker:/app" worker python -m pytest tests/test_mssql_handler.py -q
@@ -1292,7 +1417,16 @@ git add services/worker/modules/mssql/handler.py services/worker/tests/test_mssq
 git commit -m "feat(mssql-transfer): row-count verification"
 ```
 
+- [ ] **Step 14: Verify `bcp` is actually present in the worker image** (Task 7 confirmed `sqlcmd` explicitly; `bcp` ships in the same `mssql-tools18` package but was not separately exercised)
+
+```bash
+docker compose run --rm worker bcp -v
+```
+
+Expected: version banner, no error. If `bcp` is missing or not on `PATH`, that's a Task 7 gap to fix (add explicitly to the `PATH`/package list) before this task can be considered done — report it rather than silently working around it.
+
 ---
+
 
 ### Task 5: Web introspection — `mysql_utils.py` / `mssql_utils.py` + generalized `db_tables` endpoint
 
@@ -1647,6 +1781,8 @@ git commit -m "feat(tasks): dispatch db_transfers.execute by engine (postgres/my
 
 ### Task 7: Docker/dependencies infrastructure
 
+> **DONE (dispatched first, out of document order — commit `9777906`).** The steps below are kept as originally written for the historical record, but the implementer correctly deviated from Step 2's literal `mssql-scripter` instruction: that package has no arm64-compatible release (see Task 4's header note and the design doc's 2026-07-21 update) and was deliberately left out of `requirements.txt`, with a comment explaining why. Everything else below (MySQL client, ODBC driver, `mssql-tools18`/`sqlcmd`, `pymysql`/`pyodbc`) was implemented and verified exactly as written. Do not re-dispatch this task.
+
 **Files:**
 - Modify: `services/worker/Dockerfile`
 - Modify: `services/worker/requirements.txt`
@@ -1654,7 +1790,7 @@ git commit -m "feat(tasks): dispatch db_transfers.execute by engine (postgres/my
 - Modify: `services/worker/tests/conftest.py` (stub the two new worker-side modules, mirroring existing stubs)
 
 **Interfaces:**
-- Produces: `mysqldump`/`mysql` CLI, `sqlcmd` CLI, `mssql-scripter` CLI, `pymysql`/`pyodbc` Python packages available in both `web` and `worker` images.
+- Produces: `mysqldump`/`mysql` CLI, `sqlcmd`/`bcp` CLI, `pymysql`/`pyodbc` Python packages available in both `web` and `worker` images. (`mssql-scripter` — see note above — deliberately not installed.)
 
 - [ ] **Step 1: Add MySQL client + Python packages (low risk, standard apt repo)**
 
