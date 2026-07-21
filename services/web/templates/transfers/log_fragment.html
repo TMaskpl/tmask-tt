@@ -1,3 +1,4 @@
+{% include "transfers/_progress_bar.html" with oob=True %}
 {% for log in logs %}
 <div class="log-line log-{{ log.level }}">
   [{{ log.timestamp|date:"H:i:s" }}] {{ log.message }}

@@ -1,0 +1,8 @@
+<div id="progress-bar-wrap"{% if oob %} hx-swap-oob="true"{% endif %}>
+{% if job.progress_percent is not None %}
+  <div class="progress-wrap">
+    <div class="progress-bar"><div class="progress-bar-fill" style="width:{{ job.progress_percent }}%"></div></div>
+    <span class="progress-label">{{ job.progress_percent }}%</span>
+  </div>
+{% endif %}
+</div>

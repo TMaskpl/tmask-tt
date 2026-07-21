@@ -199,6 +199,22 @@ label { display: block; margin-bottom: 0.25rem; color: #aaffaa; font-size: 0.85r
 
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
 
+/* Progress bar */
+.progress-wrap { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.5rem; }
+.progress-bar {
+  flex: 1;
+  height: 0.9rem;
+  background: #020202;
+  border: 1px solid var(--border);
+}
+.progress-bar-fill {
+  height: 100%;
+  background: var(--green);
+  box-shadow: 0 0 6px rgba(0,255,65,0.5);
+  transition: width 0.4s ease-out;
+}
+.progress-label { font-size: 0.8rem; color: var(--green-bright); min-width: 3.5em; text-align: right; }
+
 /* Log terminal */
 .log-terminal {
   background: #020202;

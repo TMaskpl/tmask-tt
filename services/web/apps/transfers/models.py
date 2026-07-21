@@ -45,6 +45,7 @@ class TransferJob(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='cancelled_jobs',
     )
+    progress_percent = models.PositiveSmallIntegerField(null=True, blank=True)
 
     def clean(self):
         from django.core.exceptions import ValidationError
@@ -57,12 +58,17 @@ class TransferJob(models.Model):
         self.status = STATUS_RUNNING
         self.celery_task_id = task_id
         self.started_at = timezone.now()
-        self.save(update_fields=['status', 'celery_task_id', 'started_at'])
+        self.progress_percent = None
+        self.save(update_fields=['status', 'celery_task_id', 'started_at', 'progress_percent'])
 
     def mark_done(self) -> None:
         self.status = STATUS_DONE
         self.finished_at = timezone.now()
-        self.save(update_fields=['status', 'finished_at'])
+        self.progress_percent = 100
+        self.save(update_fields=['status', 'finished_at', 'progress_percent'])
+
+    def update_progress(self, percent: int) -> None:
+        TransferJob.objects.filter(pk=self.pk).update(progress_percent=percent)
 
     def mark_failed(self, message: str) -> None:
         self.status = STATUS_FAILED

@@ -1,4 +1,4 @@
-RSYNC_BASE_FLAGS = ['-av', '--progress']
+RSYNC_BASE_FLAGS = ['-av', '--info=progress2']
 RSYNC_COMPRESS_FLAG = '--compress'
 RSYNC_TIMEOUT = 60
 RSYNC_MAX_RETRIES = 3

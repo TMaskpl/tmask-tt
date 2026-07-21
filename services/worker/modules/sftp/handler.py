@@ -67,7 +67,8 @@ class SFTPHandler:
         except ChecksumVerificationError as e:
             raise SFTPTransferError(str(e))
 
-    def _transfer_once(self, source: str, dest: str, log_callback, use_gpg: bool = False) -> None:
+    def _transfer_once(self, source: str, dest: str, log_callback, use_gpg: bool = False,
+                        progress_callback=None) -> None:
         """Single SFTP connection + transfer. socket.timeout/gaierror bubble up for retry."""
         client = self._build_client()
         try:
@@ -80,8 +81,8 @@ class SFTPHandler:
             log_callback('info', f'Transferring: {source}')
             with client.open_sftp() as sftp:
                 def _progress(done: int, total: int) -> None:
-                    if total:
-                        log_callback('info', f'Progress: {int(done / total * 100)}%')
+                    if total and progress_callback:
+                        progress_callback(int(done / total * 100))
                 sftp.put(source, dest, callback=_progress)
             self._verify_checksum_sftp(source, client, dest, log_callback, use_gpg)
             log_callback('info', 'Transfer complete')
@@ -98,7 +99,7 @@ class SFTPHandler:
         finally:
             client.close()
 
-    def execute(self, log_callback) -> None:
+    def execute(self, log_callback, progress_callback=None) -> None:
         if not (self.params.get('strict_host_key_checking') and self.params.get('known_host_key')):
             log_callback('warn', 'Host key verification DISABLED — connection is vulnerable to MITM')
 
@@ -120,7 +121,8 @@ class SFTPHandler:
 
             for attempt in range(1, SFTP_MAX_RETRIES + 1):
                 try:
-                    self._transfer_once(source, dest, log_callback, use_gpg=use_gpg)
+                    self._transfer_once(source, dest, log_callback, use_gpg=use_gpg,
+                                         progress_callback=progress_callback)
                     return
                 except (socket.timeout, socket.gaierror):
                     if attempt < SFTP_MAX_RETRIES:

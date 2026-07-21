@@ -118,6 +118,29 @@ class TestTransferCreateView:
         assert response.status_code == 200
         assert b'Transfer started' in response.content
 
+    def test_log_fragment_includes_oob_progress_bar_with_percent(self, auth_client, regular_user, make_connection):
+        job = TransferJob.objects.create(
+            owner=regular_user,
+            connection=make_connection(regular_user),
+            source_path='/x', destination_path='/y',
+            progress_percent=42,
+        )
+        response = auth_client.get(reverse('transfers:log_fragment', args=[job.pk]))
+        body = response.content.decode()
+        assert 'hx-swap-oob="true"' in body
+        assert 'width:42%' in body
+        assert '42%</span>' in body
+
+    def test_log_fragment_omits_progress_bar_fill_when_percent_unknown(self, auth_client, regular_user, make_connection):
+        job = TransferJob.objects.create(
+            owner=regular_user,
+            connection=make_connection(regular_user),
+            source_path='/x', destination_path='/y',
+        )
+        response = auth_client.get(reverse('transfers:log_fragment', args=[job.pk]))
+        body = response.content.decode()
+        assert 'progress-bar-fill' not in body
+
 
 @pytest.mark.django_db
 class TestTransferDetailView:
@@ -130,6 +153,19 @@ class TestTransferDetailView:
         )
         response = auth_client.get(reverse('transfers:detail', args=[job.pk]))
         assert response.status_code == 200
+
+    def test_detail_renders_progress_bar_when_percent_known(self, auth_client, regular_user, make_connection):
+        job = TransferJob.objects.create(
+            owner=regular_user,
+            connection=make_connection(regular_user),
+            source_path='/src/file.tar',
+            destination_path='/dst/',
+            progress_percent=78,
+        )
+        response = auth_client.get(reverse('transfers:detail', args=[job.pk]))
+        body = response.content.decode()
+        assert 'id="progress-bar-wrap"' in body
+        assert 'width:78%' in body
 
     def test_detail_returns_200_for_other_users_job(self, auth_client, admin_user, make_connection):
         job = TransferJob.objects.create(

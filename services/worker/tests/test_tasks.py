@@ -22,6 +22,25 @@ class TestExecuteTransferTask:
             MockSFTP.return_value.execute.assert_called_once()
             mock_job.mark_done.assert_called_once()
 
+    def test_progress_callback_updates_job_and_dedups_repeats(self):
+        with patch('tasks.SFTPHandler') as MockSFTP, \
+             patch('tasks.TransferJob') as MockJob, \
+             patch('tasks.TransferLog') as _:
+            mock_job = MagicMock()
+            MockJob.objects.get.return_value = mock_job
+            mock_job.flow_id = None
+            mock_job.connection.protocol = 'sftp'
+            mock_job.pk = 1
+
+            def _fake_execute(log_callback, progress_callback=None):
+                for pct in (10, 10, 20, 20, 20, 100):
+                    progress_callback(pct)
+            MockSFTP.return_value.execute.side_effect = _fake_execute
+
+            from tasks import execute_transfer
+            execute_transfer(job_id=1)
+            assert [c.args[0] for c in mock_job.update_progress.call_args_list] == [10, 20, 100]
+
     def test_marks_job_failed_on_sftp_error(self):
         with patch('tasks.SFTPHandler') as MockSFTP, \
              patch('tasks.TransferJob') as MockJob, \

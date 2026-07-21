@@ -42,6 +42,57 @@ class TestTransferJob:
         assert job.status == STATUS_DONE
         assert job.finished_at is not None
 
+    def test_default_progress_percent_is_none(self, regular_user, make_connection):
+        job = TransferJob.objects.create(
+            owner=regular_user,
+            connection=make_connection(regular_user),
+            source_path='/x', destination_path='/y',
+        )
+        assert job.progress_percent is None
+
+    def test_mark_running_resets_progress_percent(self, regular_user, make_connection):
+        job = TransferJob.objects.create(
+            owner=regular_user,
+            connection=make_connection(regular_user),
+            source_path='/x', destination_path='/y',
+            progress_percent=42,
+        )
+        job.mark_running('celery-task-abc-123')
+        job.refresh_from_db()
+        assert job.progress_percent is None
+
+    def test_mark_done_sets_progress_percent_to_100(self, regular_user, make_connection):
+        job = TransferJob.objects.create(
+            owner=regular_user,
+            connection=make_connection(regular_user),
+            source_path='/x', destination_path='/y',
+            progress_percent=57,
+        )
+        job.mark_done()
+        job.refresh_from_db()
+        assert job.progress_percent == 100
+
+    def test_update_progress_sets_percent(self, regular_user, make_connection):
+        job = TransferJob.objects.create(
+            owner=regular_user,
+            connection=make_connection(regular_user),
+            source_path='/x', destination_path='/y',
+        )
+        job.update_progress(33)
+        job.refresh_from_db()
+        assert job.progress_percent == 33
+
+    def test_mark_failed_does_not_touch_progress_percent(self, regular_user, make_connection):
+        job = TransferJob.objects.create(
+            owner=regular_user,
+            connection=make_connection(regular_user),
+            source_path='/x', destination_path='/y',
+            progress_percent=64,
+        )
+        job.mark_failed('boom')
+        job.refresh_from_db()
+        assert job.progress_percent == 64
+
     def test_mark_failed_saves_error_message(self, regular_user, make_connection):
         job = TransferJob.objects.create(
             owner=regular_user,

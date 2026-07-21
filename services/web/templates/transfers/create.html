@@ -67,6 +67,7 @@
       DST: {{ job.flow.dest_conn.name }} — {{ job.destination_path }}
     </div>
     {% endif %}
+    {% include "transfers/_progress_bar.html" %}
     <div
       id="log-output"
       class="log-terminal"

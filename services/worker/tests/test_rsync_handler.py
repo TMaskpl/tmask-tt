@@ -54,7 +54,7 @@ class TestRsyncHandler:
         cmd = handler._build_command()
         assert cmd[0] == 'rsync'
         assert '-av' in cmd
-        assert '--progress' in cmd
+        assert '--info=progress2' in cmd
         dest = f'{self._make_params()["username"]}@{self._make_params()["host"]}:{self._make_params()["destination_path"]}'
         assert dest in cmd
 
@@ -221,6 +221,73 @@ class TestRsyncHandler:
                 RsyncHandler(params).execute(log_callback=lambda lvl, msg: None)
 
             mock_unlink.assert_called_once_with(encrypted_tmp)
+
+
+class TestRsyncProgressCallback:
+    def _make_params(self, **kwargs):
+        defaults = {
+            'host': '192.168.1.10',
+            'port': 22,
+            'username': 'deploy',
+            'password': None,
+            'ssh_key': None,
+            'ssh_key_passphrase': None,
+            'source_path': '/data/',
+            'destination_path': '/backup/',
+            'compress': False,
+            'encrypt': False,
+            'strict_host_key_checking': False,
+            'known_host_key': None,
+        }
+        defaults.update(kwargs)
+        return defaults
+
+    def test_progress_callback_receives_parsed_percent(self):
+        with patch('modules.rsync.handler.subprocess.Popen') as MockPopen:
+            mock_proc = MagicMock()
+            mock_proc.stdout = iter([
+                'sending incremental file list\n',
+                'file.tar\n',
+                '      1,234,567  45%   12.34MB/s    0:00:03\n',
+                '      2,345,678 100%   12.34MB/s    0:00:05 (xfr#1, to-chk=0/1)\n',
+            ])
+            mock_proc.wait.return_value = 0
+            MockPopen.return_value = mock_proc
+            handler = RsyncHandler(self._make_params())
+            percents = []
+            handler.execute(
+                log_callback=lambda lvl, msg: None,
+                progress_callback=lambda pct: percents.append(pct),
+            )
+            assert percents == [45, 100]
+
+    def test_progress_lines_not_forwarded_to_log_callback(self):
+        with patch('modules.rsync.handler.subprocess.Popen') as MockPopen:
+            mock_proc = MagicMock()
+            mock_proc.stdout = iter([
+                'sending incremental file list\n',
+                'file.tar\n',
+                '      1,234,567  45%   12.34MB/s    0:00:03\n',
+            ])
+            mock_proc.wait.return_value = 0
+            MockPopen.return_value = mock_proc
+            handler = RsyncHandler(self._make_params())
+            logs = []
+            handler.execute(
+                log_callback=lambda lvl, msg: logs.append(msg),
+                progress_callback=lambda pct: None,
+            )
+            assert not any('%' in msg for msg in logs)
+            assert any('file.tar' in msg for msg in logs)
+
+    def test_execute_without_progress_callback_still_works(self):
+        with patch('modules.rsync.handler.subprocess.Popen') as MockPopen:
+            mock_proc = MagicMock()
+            mock_proc.stdout = iter(['      1,234,567  45%   12.34MB/s    0:00:03\n'])
+            mock_proc.wait.return_value = 0
+            MockPopen.return_value = mock_proc
+            handler = RsyncHandler(self._make_params())
+            handler.execute(log_callback=lambda lvl, msg: None)
 
 
 class TestRsyncDryRun:

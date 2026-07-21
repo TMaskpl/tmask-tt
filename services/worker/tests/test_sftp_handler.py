@@ -35,6 +35,62 @@ class TestSFTPHandler:
             )
             assert any('Transfer complete' in msg for _, msg in logs)
 
+    def test_progress_callback_receives_percent(self, sftp_params):
+        with patch('modules.sftp.handler.paramiko.SSHClient') as MockSSH:
+            mock_client = MagicMock()
+            MockSSH.return_value = mock_client
+            mock_sftp = MagicMock()
+            mock_client.open_sftp.return_value.__enter__ = MagicMock(return_value=mock_sftp)
+            mock_client.open_sftp.return_value.__exit__ = MagicMock(return_value=False)
+
+            def _fake_put(source, dest, callback):
+                callback(50, 200)
+                callback(200, 200)
+            mock_sftp.put.side_effect = _fake_put
+
+            handler = SFTPHandler(sftp_params)
+            percents = []
+            handler.execute(
+                log_callback=lambda lvl, msg: None,
+                progress_callback=lambda pct: percents.append(pct),
+            )
+            assert percents == [25, 100]
+
+    def test_progress_not_logged_as_message(self, sftp_params):
+        with patch('modules.sftp.handler.paramiko.SSHClient') as MockSSH:
+            mock_client = MagicMock()
+            MockSSH.return_value = mock_client
+            mock_sftp = MagicMock()
+            mock_client.open_sftp.return_value.__enter__ = MagicMock(return_value=mock_sftp)
+            mock_client.open_sftp.return_value.__exit__ = MagicMock(return_value=False)
+
+            def _fake_put(source, dest, callback):
+                callback(50, 200)
+            mock_sftp.put.side_effect = _fake_put
+
+            handler = SFTPHandler(sftp_params)
+            logs = []
+            handler.execute(
+                log_callback=lambda lvl, msg: logs.append(msg),
+                progress_callback=lambda pct: None,
+            )
+            assert not any('Progress' in msg for msg in logs)
+
+    def test_execute_without_progress_callback_still_works(self, sftp_params):
+        with patch('modules.sftp.handler.paramiko.SSHClient') as MockSSH:
+            mock_client = MagicMock()
+            MockSSH.return_value = mock_client
+            mock_sftp = MagicMock()
+            mock_client.open_sftp.return_value.__enter__ = MagicMock(return_value=mock_sftp)
+            mock_client.open_sftp.return_value.__exit__ = MagicMock(return_value=False)
+
+            def _fake_put(source, dest, callback):
+                callback(50, 200)
+            mock_sftp.put.side_effect = _fake_put
+
+            handler = SFTPHandler(sftp_params)
+            handler.execute(log_callback=lambda lvl, msg: None)
+
     def test_source_not_found_raises_error(self, sftp_params):
         with patch('modules.sftp.handler.paramiko.SSHClient') as MockSSH:
             mock_client = MagicMock()

@@ -103,7 +103,7 @@ def _resolve_job(job_id: int | None, scheduled_id: int | None):
         return None
 
 
-def _run_transfer(job, gpg_passphrase: str | None, log_callback) -> None:
+def _run_transfer(job, gpg_passphrase: str | None, log_callback, progress_callback=None) -> None:
     if job.flow_id:
         source_params, dest_params = _build_relay_params(job.flow)
         RelayHandler(source_params, dest_params).execute(log_callback=log_callback)
@@ -112,7 +112,7 @@ def _run_transfer(job, gpg_passphrase: str | None, log_callback) -> None:
             log_callback('warn', 'GPG encryption enabled but no passphrase provided — file will not be encrypted')
         params = _build_params(job, gpg_passphrase=gpg_passphrase)
         handler_cls = SFTPHandler if job.connection.protocol == 'sftp' else RsyncHandler
-        handler_cls(params).execute(log_callback=log_callback)
+        handler_cls(params).execute(log_callback=log_callback, progress_callback=progress_callback)
 
 
 @app.task(bind=True, name='transfers.send_notification', max_retries=3, default_retry_delay=60)
@@ -183,8 +183,16 @@ def execute_transfer(self, job_id: int | None = None, scheduled_id: int | None =
     def log_callback(level: str, message: str):
         TransferLog.objects.create(job=job, level=level, message=message)
 
+    last_percent = None
+
+    def progress_callback(percent: int):
+        nonlocal last_percent
+        if percent != last_percent:
+            last_percent = percent
+            job.update_progress(percent)
+
     try:
-        _run_transfer(job, gpg_passphrase, log_callback)
+        _run_transfer(job, gpg_passphrase, log_callback, progress_callback=progress_callback)
         job.mark_done()
         _cleanup_source_file(job)
         send_notification.delay(job.pk)

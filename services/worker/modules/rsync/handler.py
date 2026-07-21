@@ -1,4 +1,5 @@
 import os
+import re
 import shlex
 import subprocess  # nosec B404
 import tempfile
@@ -23,6 +24,11 @@ class RsyncTransferError(Exception):
 
 
 HOST_KEY_WARNING = 'Host key verification DISABLED — connection is vulnerable to MITM'
+
+# rsync --info=progress2 emits lines like:
+#       1,234,567  45%   12.34MB/s    0:00:03
+# These update in place on a real TTY; over a pipe each shows up as its own line.
+PROGRESS_LINE_RE = re.compile(r'^\s*[\d,]+\s+(\d{1,3})%\s+\S+/s\s')
 
 
 class RsyncHandler:
@@ -75,14 +81,21 @@ class RsyncHandler:
         cmd.append(f'{self.params["username"]}@{self.params["host"]}')
         return cmd
 
-    def _run_attempt(self, cmd: list, log_callback: Callable[[str, str], None]) -> tuple[int, str]:
+    def _run_attempt(self, cmd: list, log_callback: Callable[[str, str], None],
+                      progress_callback: Callable[[int], None] = None) -> tuple[int, str]:
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)  # nosec B603 — cmd built from validated SSH/rsync params + shlex.quote
         output_lines = []
         try:
             for line in proc.stdout:
                 line = line.rstrip()
                 output_lines.append(line)
-                if line:
+                if not line:
+                    continue
+                match = PROGRESS_LINE_RE.match(line)
+                if match:
+                    if progress_callback:
+                        progress_callback(int(match.group(1)))
+                else:
                     log_callback('info', line)
             return proc.wait(), '\n'.join(output_lines)
         finally:
@@ -169,11 +182,12 @@ class RsyncHandler:
         except ChecksumVerificationError as e:
             raise RsyncTransferError(str(e))
 
-    def _transfer_with_retries(self, cmd, log_callback: Callable[[str, str], None]) -> None:
+    def _transfer_with_retries(self, cmd, log_callback: Callable[[str, str], None],
+                                progress_callback: Callable[[int], None] = None) -> None:
         last_exit_code = None
         for attempt in range(1, RSYNC_MAX_RETRIES + 1):
             log_callback('info', f'Starting rsync (attempt {attempt}): {" ".join(cmd)}')
-            last_exit_code, output = self._run_attempt(cmd, log_callback)
+            last_exit_code, output = self._run_attempt(cmd, log_callback, progress_callback=progress_callback)
             self._check_rsync_output(last_exit_code, output)
             if last_exit_code == 0:
                 log_callback('info', 'Transfer complete')
@@ -185,7 +199,8 @@ class RsyncHandler:
             f'TRANSFER FAILED — rsync failed after {RSYNC_MAX_RETRIES} attempts (last exit code: {last_exit_code})'
         )
 
-    def execute(self, log_callback: Callable[[str, str], None]) -> None:
+    def execute(self, log_callback: Callable[[str, str], None],
+                progress_callback: Callable[[int], None] = None) -> None:
         encrypted_path = None
         known_hosts_path = None
         ssh_key_path = None
@@ -207,7 +222,7 @@ class RsyncHandler:
                 known_hosts_path=known_hosts_path,
                 ssh_key_path=ssh_key_path,
             )
-            self._transfer_with_retries(cmd, log_callback)
+            self._transfer_with_retries(cmd, log_callback, progress_callback=progress_callback)
             self._verify_checksum_if_needed(
                 use_gpg, source_override, dest_override, known_hosts_path, ssh_key_path, log_callback
             )
