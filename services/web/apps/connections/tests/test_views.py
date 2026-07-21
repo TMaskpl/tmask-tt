@@ -42,6 +42,19 @@ class TestConnectionCreate:
         assert response.status_code == 200
         assert response.context['form'].errors
 
+    def test_create_writes_audit_log_entry(self, admin_client, admin_user):
+        from apps.audit_log.models import ConfigAuditLog
+        admin_client.post(reverse('connections:create'), {
+            'name': 'Audited', 'kind': 'ssh', 'host': '10.0.0.1', 'port': 22,
+            'username': 'root', 'password': 'pass', 'protocol': 'sftp',
+            'compress': False, 'encrypt': False, 'strict_host_key_checking': True,
+        })
+        entry = ConfigAuditLog.objects.get()
+        assert entry.user == admin_user
+        assert entry.action == 'created'
+        assert entry.model_name == 'Connection'
+        assert 'Audited' in entry.object_repr
+
 @pytest.mark.django_db
 class TestConnectionScanHostkey:
     def test_requires_login(self, client, regular_user, make_connection):
@@ -154,6 +167,33 @@ class TestConnectionEdit:
         conn.refresh_from_db()
         assert conn.name == 'New Name'
 
+    def test_edit_writes_audit_log_with_field_diff_and_masks_secret(self, admin_client, admin_user, regular_user, make_connection):
+        from apps.audit_log.models import ConfigAuditLog
+        conn = make_connection(regular_user, name='Old Name', host='1.1.1.1', password='old-secret')
+        admin_client.post(reverse('connections:edit', args=[conn.pk]), {
+            'name': 'New Name', 'kind': 'ssh', 'host': '2.2.2.2', 'port': 22,
+            'username': 'root', 'password': 'new-secret', 'protocol': 'sftp',
+            'compress': False, 'encrypt': False, 'strict_host_key_checking': True,
+        })
+        entry = ConfigAuditLog.objects.get()
+        assert entry.user == admin_user
+        assert entry.action == 'updated'
+        assert entry.changed_fields['name'] == ['Old Name', 'New Name']
+        assert entry.changed_fields['host'] == ['1.1.1.1', '2.2.2.2']
+        assert entry.changed_fields['password'] == ['***', '***']
+        assert 'old-secret' not in str(entry.changed_fields)
+        assert 'new-secret' not in str(entry.changed_fields)
+
+    def test_edit_without_real_changes_writes_no_audit_entry(self, admin_client, regular_user, make_connection):
+        from apps.audit_log.models import ConfigAuditLog
+        conn = make_connection(regular_user, name='Same', host='1.1.1.1', password='p')
+        admin_client.post(reverse('connections:edit', args=[conn.pk]), {
+            'name': 'Same', 'kind': 'ssh', 'host': '1.1.1.1', 'port': 22,
+            'username': conn.username, 'password': 'p', 'protocol': 'sftp',
+            'compress': False, 'encrypt': False, 'strict_host_key_checking': True,
+        })
+        assert ConfigAuditLog.objects.count() == 0
+
     def test_edit_returns_200_for_other_users_connection(self, admin_client, regular_user, make_connection):
         conn = make_connection(regular_user, name='AdminConn')
         response = admin_client.get(reverse('connections:edit', args=[conn.pk]))
@@ -261,6 +301,15 @@ class TestConnectionDelete:
         conn = make_connection(admin_user)
         response = auth_client.post(reverse('connections:delete', args=[conn.pk]))
         assert response.status_code == 403
+
+    def test_delete_writes_audit_log_entry(self, admin_client, admin_user, make_connection):
+        from apps.audit_log.models import ConfigAuditLog
+        conn = make_connection(admin_user, name='ToDelete')
+        admin_client.post(reverse('connections:delete', args=[conn.pk]))
+        entry = ConfigAuditLog.objects.get()
+        assert entry.action == 'deleted'
+        assert entry.object_id == conn.pk
+        assert 'ToDelete' in entry.object_repr
 
 
 @pytest.mark.django_db

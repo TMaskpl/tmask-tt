@@ -12,6 +12,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.http import require_POST
 from apps.accounts.permissions import require_role
 from apps.accounts.models import ROLE_ADMIN, ROLE_READONLY
+from apps.audit_log.services import log_created, log_updated, log_deleted, diff_fields
 from .portability import export_config, import_config, PassphraseError
 from .forms import ConnectionForm
 from .models import Connection, KIND_POSTGRES
@@ -23,6 +24,13 @@ from .pg_utils import list_tables as _list_pg_tables
 
 _CONNECTIONS_LIST = 'connections:list'
 _MAX_IMPORT_BYTES = 1024 * 1024
+
+CONNECTION_TRACKED_FIELDS = [
+    'name', 'host', 'port', 'username', 'password', 'ssh_key', 'ssh_key_passphrase',
+    'protocol', 'compress', 'encrypt', 'strict_host_key_checking', 'known_host_key',
+    'dry_run_before_transfer', 'verify_checksum', 'kind', 'db_name',
+]
+CONNECTION_SECRET_FIELDS = {'password', 'ssh_key', 'ssh_key_passphrase', 'known_host_key'}
 
 @require_role(ROLE_READONLY)
 def connection_list(request):
@@ -36,6 +44,7 @@ def connection_create(request):
         conn = form.save(commit=False)
         conn.owner = request.user
         conn.save()
+        log_created(request.user, conn)
         return redirect(_CONNECTIONS_LIST)
     return render(request, 'connections/form.html', {'form': form, 'action': 'CREATE'})
 
@@ -44,7 +53,10 @@ def connection_edit(request, pk):
     conn = get_object_or_404(Connection, pk=pk)
     form = ConnectionForm(request.POST or None, instance=conn)
     if request.method == 'POST' and form.is_valid():
+        before = Connection.objects.get(pk=conn.pk)
         form.save()
+        changes = diff_fields(before, conn, CONNECTION_TRACKED_FIELDS, CONNECTION_SECRET_FIELDS)
+        log_updated(request.user, conn, changes)
         return redirect(_CONNECTIONS_LIST)
     return render(request, 'connections/form.html', {'form': form, 'action': 'EDIT', 'conn': conn})
 
@@ -52,6 +64,7 @@ def connection_edit(request, pk):
 @require_POST
 def connection_delete(request, pk):
     conn = get_object_or_404(Connection, pk=pk)
+    log_deleted(request.user, conn)
     conn.delete()
     return redirect(_CONNECTIONS_LIST)
 

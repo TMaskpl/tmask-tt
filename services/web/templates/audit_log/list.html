@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}AUDIT LOG — TMASK-TRANSPORTER{% endblock %}
+{% block content %}
+<div class="box">
+  <span class="box-title">AUDIT LOG — ZMIANY KONFIGURACJI (OSTATNIE {{ entries|length }})</span>
+  {% if entries %}
+  <table>
+    <thead>
+      <tr>
+        <th>DATA</th><th>USER</th><th>AKCJA</th><th>OBIEKT</th><th>ZMIANY</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for entry in entries %}
+      <tr>
+        <td>{{ entry.created_at|date:"Y-m-d H:i:s" }}</td>
+        <td>{{ entry.user.username|default:"—" }}</td>
+        <td><span class="status status-{{ entry.action }}">{{ entry.get_action_display|upper }}</span></td>
+        <td>{{ entry.model_name }}: {{ entry.object_repr }}</td>
+        <td>
+          {% if entry.changed_fields %}
+            {% for field, values in entry.changed_fields.items %}
+              <div><code>{{ field }}</code>: {{ values.0 }} → {{ values.1 }}</div>
+            {% endfor %}
+          {% else %}
+            —
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>Brak wpisów audytu.</p>
+  {% endif %}
+</div>
+{% endblock %}

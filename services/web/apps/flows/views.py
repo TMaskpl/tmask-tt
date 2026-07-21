@@ -4,12 +4,15 @@ from django.views.decorators.http import require_POST
 
 from apps.accounts.permissions import require_role
 from apps.accounts.models import ROLE_ADMIN, ROLE_OPERATOR, ROLE_READONLY
+from apps.audit_log.services import log_created, log_updated, log_deleted, diff_fields
 from apps.transfers.models import TransferJob
 from celery import current_app
 from .forms import FlowForm
 from .models import Flow
 
 _FLOWS_LIST = 'flows:list'
+
+FLOW_TRACKED_FIELDS = ['name', 'source_conn', 'source_path', 'dest_conn', 'dest_path', 'verify_checksum']
 
 
 @require_role(ROLE_READONLY)
@@ -25,6 +28,7 @@ def flow_create(request):
         flow = form.save(commit=False)
         flow.owner = request.user
         flow.save()
+        log_created(request.user, flow)
         return redirect(_FLOWS_LIST)
     return render(request, 'flows/form.html', {'form': form, 'action': 'CREATE'})
 
@@ -34,7 +38,10 @@ def flow_edit(request, pk):
     flow = get_object_or_404(Flow, pk=pk)
     form = FlowForm(request.POST or None, instance=flow, user=request.user)
     if request.method == 'POST' and form.is_valid():
+        before = Flow.objects.get(pk=flow.pk)
         form.save()
+        changes = diff_fields(before, flow, FLOW_TRACKED_FIELDS)
+        log_updated(request.user, flow, changes)
         return redirect(_FLOWS_LIST)
     return render(request, 'flows/form.html', {'form': form, 'action': 'EDIT', 'flow': flow})
 
@@ -43,6 +50,7 @@ def flow_edit(request, pk):
 @require_POST
 def flow_delete(request, pk):
     flow = get_object_or_404(Flow, pk=pk)
+    log_deleted(request.user, flow)
     flow.delete()
     return redirect(_FLOWS_LIST)
 

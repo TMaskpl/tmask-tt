@@ -68,6 +68,22 @@ class TestFlowEditView:
         flow.refresh_from_db()
         assert flow.name == 'NewName'
 
+    def test_edit_writes_audit_log_entry(self, admin_client, admin_user, regular_user, make_flow):
+        from apps.audit_log.models import ConfigAuditLog
+        flow = make_flow(regular_user, name='OldName')
+        admin_client.post(reverse('flows:edit', args=[flow.pk]), {
+            'name': 'NewName',
+            'source_conn': flow.source_conn_id,
+            'source_path': flow.source_path,
+            'dest_conn': flow.dest_conn_id,
+            'dest_path': flow.dest_path,
+        })
+        entry = ConfigAuditLog.objects.get()
+        assert entry.user == admin_user
+        assert entry.model_name == 'Flow'
+        assert entry.action == 'updated'
+        assert entry.changed_fields['name'] == ['OldName', 'NewName']
+
     def test_operator_cannot_edit_flow(self, auth_client, admin_user, make_flow):
         flow = make_flow(admin_user)
         response = auth_client.get(reverse('flows:edit', args=[flow.pk]))
