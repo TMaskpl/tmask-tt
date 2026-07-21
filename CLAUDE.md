@@ -73,7 +73,7 @@ docker compose build web && docker compose up -d web
 ## Testy
 
 ```bash
-# Web (461 testów)
+# Web (479 testów)
 docker compose --profile test run --rm web-test python -m pytest apps/ -v
 
 # Worker (185 testów)
