@@ -1,5 +1,6 @@
 import pytest
-from apps.connections.models import Connection
+from django.core.exceptions import ValidationError
+from apps.connections.models import Connection, KIND_MYSQL, KIND_MSSQL
 
 @pytest.mark.django_db
 class TestConnection:
@@ -80,4 +81,24 @@ class TestConnection:
 
     def test_clean_does_not_require_db_name_for_ssh_kind(self, regular_user):
         conn = Connection(owner=regular_user, name='X', host='h', username='u', kind='ssh', protocol='sftp')
+        conn.clean()  # should not raise
+
+
+@pytest.mark.django_db
+class TestConnectionDbKinds:
+    def test_mysql_requires_db_name(self, regular_user):
+        conn = Connection(owner=regular_user, name='x', host='h', port=3306,
+                           username='u', password='p', kind=KIND_MYSQL, db_name='')
+        with pytest.raises(ValidationError):
+            conn.clean()
+
+    def test_mssql_requires_db_name(self, regular_user):
+        conn = Connection(owner=regular_user, name='x', host='h', port=1433,
+                           username='u', password='p', kind=KIND_MSSQL, db_name='')
+        with pytest.raises(ValidationError):
+            conn.clean()
+
+    def test_mysql_with_db_name_is_valid(self, regular_user):
+        conn = Connection(owner=regular_user, name='x', host='h', port=3306,
+                           username='u', password='p', kind=KIND_MYSQL, db_name='mydb')
         conn.clean()  # should not raise
