@@ -99,3 +99,75 @@ class MssqlTransferHandler:
             f'DROP TABLE IF EXISTS {quoted_table};\n'
             f'CREATE TABLE {quoted_table} (\n    {columns_sql}\n);\n'
         )
+
+    def _build_sqlcmd_cmd(self, ddl_path: str) -> list:
+        p = self.params
+        return [
+            'sqlcmd', '-S', f'{p["dest_host"]},{p["dest_port"]}', '-d', p['dest_db_name'],
+            '-U', p['dest_username'], '-P', p['dest_password'], '-i', ddl_path,
+        ]
+
+    def _build_bcp_out_cmd(self, table_name: str, out_path: str) -> list:
+        p = self.params
+        return [
+            'bcp', table_name, 'out', out_path, '-S', f'{p["source_host"]},{p["source_port"]}',
+            '-U', p['source_username'], '-P', p['source_password'], '-d', p['source_db_name'], '-n',
+        ]
+
+    def _build_bcp_in_cmd(self, table_name: str, in_path: str) -> list:
+        p = self.params
+        return [
+            'bcp', table_name, 'in', in_path, '-S', f'{p["dest_host"]},{p["dest_port"]}',
+            '-U', p['dest_username'], '-P', p['dest_password'], '-d', p['dest_db_name'], '-n',
+        ]
+
+    def _run_step(self, cmd: list, log_callback: Callable[[str, str], None]) -> int:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)  # nosec B603 — cmd built from validated connection params
+        for line in proc.stdout:
+            line = line.rstrip()
+            if line:
+                log_callback('info', line)
+        return proc.wait()
+
+    def _transfer_once(self, log_callback: Callable[[str, str], None]) -> bool:
+        table_names = self._source_table_names()
+        tmp_paths = []
+        try:
+            fd, ddl_path = tempfile.mkstemp(suffix='.sql')
+            os.close(fd)
+            tmp_paths.append(ddl_path)
+            with open(ddl_path, 'w') as f:
+                for table_name in table_names:
+                    schema = self._introspect_table(table_name)
+                    f.write(self._build_create_table_sql(table_name, schema))
+
+            if self._run_step(self._build_sqlcmd_cmd(ddl_path), log_callback) != 0:
+                return False
+
+            for table_name in table_names:
+                fd, data_path = tempfile.mkstemp(suffix='.dat')
+                os.close(fd)
+                tmp_paths.append(data_path)
+                if self._run_step(self._build_bcp_out_cmd(table_name, data_path), log_callback) != 0:
+                    return False
+                if self._run_step(self._build_bcp_in_cmd(table_name, data_path), log_callback) != 0:
+                    return False
+            return True
+        finally:
+            for path in tmp_paths:
+                if os.path.exists(path):
+                    os.unlink(path)
+
+    def execute(self, log_callback: Callable[[str, str], None]) -> None:
+        for attempt in range(1, MSSQL_MAX_RETRIES + 1):
+            log_callback('info', f'Starting MSSQL schema+data transfer (attempt {attempt})')
+            if self._transfer_once(log_callback):
+                log_callback('info', 'Transfer complete')
+                if self.params.get('verify_row_count'):
+                    self._verify_row_counts(log_callback)
+                return
+            if attempt < MSSQL_MAX_RETRIES:
+                log_callback('warn', f'Transfer step failed, retrying in {MSSQL_RETRY_DELAY}s...')
+                time.sleep(MSSQL_RETRY_DELAY)
+
+        raise MssqlTransferError(f'TRANSFER FAILED — mssql transfer failed after {MSSQL_MAX_RETRIES} attempts')

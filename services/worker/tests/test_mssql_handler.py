@@ -106,3 +106,91 @@ class TestMssqlDdlGeneration:
         assert 'CREATE TABLE [od]]d table]' in ddl
         assert '[we]]ird] int NOT NULL' in ddl
         assert 'PRIMARY KEY ([we]]ird])' in ddl
+
+
+class TestMssqlCommandBuilding:
+    def _make_params(self, **kwargs):
+        defaults = {
+            'source_host': 'a', 'source_port': 1433, 'source_username': 'sa', 'source_password': 'srcpw',
+            'source_db_name': 'src', 'dest_host': 'b', 'dest_port': 1433, 'dest_username': 'sa',
+            'dest_password': 'dstpw', 'dest_db_name': 'dst', 'table_name': None, 'verify_row_count': False,
+        }
+        defaults.update(kwargs)
+        return defaults
+
+    def test_builds_sqlcmd_command(self, tmp_path):
+        handler = MssqlTransferHandler(self._make_params())
+        cmd = handler._build_sqlcmd_cmd(str(tmp_path / 'ddl.sql'))
+        assert cmd[0] == 'sqlcmd'
+        assert 'dst' in cmd
+
+    def test_builds_bcp_out_command(self, tmp_path):
+        handler = MssqlTransferHandler(self._make_params())
+        cmd = handler._build_bcp_out_cmd('users', str(tmp_path / 'users.dat'))
+        assert cmd[0] == 'bcp'
+        assert 'users' in cmd and 'out' in cmd and 'src' in cmd and '-n' in cmd
+
+    def test_builds_bcp_in_command(self, tmp_path):
+        handler = MssqlTransferHandler(self._make_params())
+        cmd = handler._build_bcp_in_cmd('users', str(tmp_path / 'users.dat'))
+        assert cmd[0] == 'bcp'
+        assert 'users' in cmd and 'in' in cmd and 'dst' in cmd and '-n' in cmd
+
+
+class TestMssqlExecute:
+    def _make_params(self):
+        return {
+            'source_host': 'a', 'source_port': 1433, 'source_username': 'sa', 'source_password': 'srcpw',
+            'source_db_name': 'src', 'dest_host': 'b', 'dest_port': 1433, 'dest_username': 'sa',
+            'dest_password': 'dstpw', 'dest_db_name': 'dst', 'table_name': None, 'verify_row_count': False,
+        }
+
+    def _mock_proc(self, stdout_lines, exit_code):
+        proc = MagicMock()
+        proc.stdout = iter(stdout_lines)
+        proc.wait.return_value = exit_code
+        return proc
+
+    def test_successful_transfer_and_temp_files_cleaned_up(self):
+        handler = MssqlTransferHandler(self._make_params())
+        with patch('modules.mssql.handler.MssqlTransferHandler._source_table_names', return_value=['users']), \
+             patch('modules.mssql.handler.MssqlTransferHandler._introspect_table',
+                   return_value={'columns': [{'name': 'id', 'data_type': 'int', 'character_maximum_length': None,
+                                               'numeric_precision': 10, 'numeric_scale': 0, 'is_nullable': False}],
+                                 'primary_key': ['id']}), \
+             patch('modules.mssql.handler.subprocess.Popen') as MockPopen, \
+             patch('modules.mssql.handler.os.path.exists', return_value=True), \
+             patch('modules.mssql.handler.os.unlink') as mock_unlink:
+            MockPopen.side_effect = [self._mock_proc([], 0), self._mock_proc([], 0), self._mock_proc([], 0)]
+            handler.execute(log_callback=lambda lvl, msg: None)
+            assert mock_unlink.call_count >= 1
+
+    def test_password_passed_via_argv_documented_risk(self):
+        # sqlcmd/bcp have no env-var password option — this test pins the accepted,
+        # documented trade-off rather than silently assuming otherwise.
+        handler = MssqlTransferHandler(self._make_params())
+        with patch('modules.mssql.handler.MssqlTransferHandler._source_table_names', return_value=['users']), \
+             patch('modules.mssql.handler.MssqlTransferHandler._introspect_table',
+                   return_value={'columns': [{'name': 'id', 'data_type': 'int', 'character_maximum_length': None,
+                                               'numeric_precision': 10, 'numeric_scale': 0, 'is_nullable': False}],
+                                 'primary_key': ['id']}), \
+             patch('modules.mssql.handler.subprocess.Popen') as MockPopen, \
+             patch('modules.mssql.handler.os.path.exists', return_value=False):
+            MockPopen.side_effect = [self._mock_proc([], 0), self._mock_proc([], 0), self._mock_proc([], 0)]
+            handler.execute(log_callback=lambda lvl, msg: None)
+            all_args = [arg for call in MockPopen.call_args_list for arg in call.args[0]]
+            assert 'srcpw' in all_args or 'dstpw' in all_args
+
+    def test_retries_on_ddl_failure_then_raises(self):
+        handler = MssqlTransferHandler(self._make_params())
+        with patch('modules.mssql.handler.MssqlTransferHandler._source_table_names', return_value=['users']), \
+             patch('modules.mssql.handler.MssqlTransferHandler._introspect_table',
+                   return_value={'columns': [{'name': 'id', 'data_type': 'int', 'character_maximum_length': None,
+                                               'numeric_precision': 10, 'numeric_scale': 0, 'is_nullable': False}],
+                                 'primary_key': ['id']}), \
+             patch('modules.mssql.handler.subprocess.Popen') as MockPopen, \
+             patch('modules.mssql.handler.os.path.exists', return_value=False), \
+             patch('modules.mssql.handler.time.sleep'):
+            MockPopen.side_effect = [self._mock_proc([], 1)] * (MSSQL_MAX_RETRIES * 3)
+            with pytest.raises(MssqlTransferError):
+                handler.execute(log_callback=lambda lvl, msg: None)
