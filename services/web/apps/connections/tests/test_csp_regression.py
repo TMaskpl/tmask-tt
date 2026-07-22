@@ -87,13 +87,13 @@ class TestDbTransfersCSPSafe:
         _no_inline_js(html)
         assert 'data-confirm=' in html
 
-    def test_create_view_loads_external_js_with_pg_tables_url(self, auth_client, regular_user, make_connection):
+    def test_create_view_loads_external_js_with_db_tables_url(self, auth_client, regular_user, make_connection):
         make_connection(regular_user, kind='postgres', db_name='a')
         resp = auth_client.get(reverse('db_transfers:create'))
         html = resp.content.decode()
         _no_inline_js(html)
         assert 'db_transfers_create.js' in html
-        assert 'data-pg-tables-url=' in html
+        assert 'data-db-tables-url=' in html
 
 
 @pytest.mark.django_db

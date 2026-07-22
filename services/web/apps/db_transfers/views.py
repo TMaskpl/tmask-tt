@@ -6,7 +6,7 @@ from django.views.decorators.http import require_POST
 from apps.accounts.permissions import require_role
 from apps.accounts.models import ROLE_ADMIN, ROLE_OPERATOR, ROLE_READONLY
 from .models import DbTransferJob, STATUS_RUNNING, STATUS_PENDING
-from .forms import PgTransferForm
+from .forms import DbTransferForm
 
 DB_TRANSFERS_DETAIL = 'db_transfers:detail'
 
@@ -19,7 +19,8 @@ def db_transfer_list(request):
 
 @require_role(ROLE_OPERATOR)
 def db_transfer_create(request):
-    form = PgTransferForm(request.POST or None, user=request.user)
+    engine = request.POST.get('engine') or request.GET.get('engine') or 'postgres'
+    form = DbTransferForm(request.POST or None, user=request.user, engine=engine)
     if request.method == 'POST' and form.is_valid():
         with transaction.atomic():
             job = form.save(commit=False)
