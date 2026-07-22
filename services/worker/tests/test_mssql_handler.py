@@ -195,6 +195,28 @@ class TestMssqlExecute:
             with pytest.raises(MssqlTransferError):
                 handler.execute(log_callback=lambda lvl, msg: None)
 
+    def test_temp_files_cleaned_up_even_when_every_attempt_fails(self):
+        # The DDL temp file must be removed by the `finally` block in
+        # `_transfer_once` on every attempt, not just on eventual success —
+        # otherwise a persistently failing transfer would leak one temp file
+        # per retry attempt.
+        handler = MssqlTransferHandler(self._make_params())
+        with patch('modules.mssql.handler.MssqlTransferHandler._source_table_names', return_value=['users']), \
+             patch('modules.mssql.handler.MssqlTransferHandler._introspect_table',
+                   return_value={'columns': [{'name': 'id', 'data_type': 'int', 'character_maximum_length': None,
+                                               'numeric_precision': 10, 'numeric_scale': 0, 'is_nullable': False}],
+                                 'primary_key': ['id']}), \
+             patch('modules.mssql.handler.subprocess.Popen') as MockPopen, \
+             patch('modules.mssql.handler.os.path.exists', return_value=True), \
+             patch('modules.mssql.handler.os.unlink') as mock_unlink, \
+             patch('modules.mssql.handler.time.sleep'):
+            MockPopen.side_effect = [self._mock_proc([], 1)] * (MSSQL_MAX_RETRIES * 3)
+            with pytest.raises(MssqlTransferError):
+                handler.execute(log_callback=lambda lvl, msg: None)
+            # sqlcmd fails immediately on every attempt, so exactly one DDL temp
+            # file is created (and cleaned up) per retry attempt.
+            assert mock_unlink.call_count == MSSQL_MAX_RETRIES
+
 
 class TestMssqlVerifyRowCounts:
     def _make_params(self):
