@@ -39,6 +39,16 @@ class TestMysqlTransferHandler:
         assert '10.0.0.2' in cmd
         assert 'testdb' in cmd
 
+    def test_quote_identifier_escapes_internal_backticks(self):
+        # pymysql has no sql.Identifier() equivalent (unlike psycopg2), so
+        # identifiers must be hand-quoted: wrap in backticks, double any
+        # internal backtick. This is the same defense SQLAlchemy's MySQL
+        # dialect uses for identifier quoting.
+        handler = MysqlTransferHandler(self._make_params())
+        assert handler._quote_identifier('users') == '`users`'
+        assert handler._quote_identifier('a`b') == '`a``b`'
+        assert handler._quote_identifier('a`; DROP TABLE x;--') == '`a``; DROP TABLE x;--`'
+
 
 class TestMysqlCollationCompat:
     def _make_params(self):
@@ -175,3 +185,36 @@ class TestMysqlVerifyRowCounts:
             logs = []
             handler._verify_row_counts(lambda lvl, msg: logs.append((lvl, msg)))
             assert any(lvl == 'warn' and 'MISMATCH' in msg for lvl, msg in logs)
+
+    def test_verify_row_count_uses_safe_identifier_quoting_not_fstring(self):
+        # Table name containing a backtick — would break out of an f-string
+        # f'SELECT COUNT(*) FROM `{table}`' by closing the identifier early
+        # and letting arbitrary SQL after it execute unescaped. Mirrors
+        # test_postgres_handler.py::test_verify_row_count_uses_safe_identifier_quoting_not_fstring.
+        malicious_table = 'a`; DROP TABLE x;--'
+        handler = MysqlTransferHandler(self._make_params(table_name=malicious_table))
+        with patch('modules.mysql.handler.pymysql.connect') as mock_connect:
+            src_cursor = MagicMock()
+            src_cursor.fetchone.return_value = (5,)
+            dst_cursor = MagicMock()
+            dst_cursor.fetchone.return_value = (5,)
+            src_conn = MagicMock()
+            src_conn.cursor.return_value.__enter__.return_value = src_cursor
+            dst_conn = MagicMock()
+            dst_conn.cursor.return_value.__enter__.return_value = dst_cursor
+            mock_connect.side_effect = [src_conn, dst_conn]
+            logs = []
+            handler._verify_row_counts(lambda lvl, msg: logs.append((lvl, msg)))
+
+            # A raw f-string interpolation would produce this unbalanced,
+            # unescaped identifier — the internal backtick is never doubled.
+            naive_unsafe = f'`{malicious_table}`'
+            # Safe quoting doubles the internal backtick, keeping it inside
+            # a single well-formed identifier.
+            safe_quoted = '`' + malicious_table.replace('`', '``') + '`'
+
+            for cur in (src_cursor, dst_cursor):
+                assert cur.execute.call_count == 1
+                executed = cur.execute.call_args.args[0]
+                assert safe_quoted in executed
+                assert naive_unsafe not in executed

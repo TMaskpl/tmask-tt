@@ -35,6 +35,14 @@ class MysqlTransferHandler:
         p = self.params
         return ['mysql', '-h', p['dest_host'], '-P', str(p['dest_port']), '-u', p['dest_username'], p['dest_db_name']]
 
+    def _quote_identifier(self, name: str) -> str:
+        # pymysql has no sql.Identifier()-equivalent safe-quoting API (unlike
+        # psycopg2's psycopg2.sql module used in modules/postgres/handler.py).
+        # The standard, driver-agnostic defense — also used by SQLAlchemy's
+        # MySQL dialect — is to wrap the identifier in backticks and double
+        # any backtick characters found inside it.
+        return '`' + name.replace('`', '``') + '`'
+
     def _dest_needs_collation_strip(self, log_callback: Callable[[str, str], None] = None) -> bool:
         p = self.params
         try:
@@ -151,11 +159,12 @@ class MysqlTransferHandler:
                     )
                     tables = [row[0] for row in cur.fetchall()]
             for table in tables:
+                quoted_table = self._quote_identifier(table)
                 with src_conn.cursor() as cur:
-                    cur.execute(f'SELECT COUNT(*) FROM `{table}`')  # nosec B608 — table name from information_schema/user-selected dropdown, not raw user text input
+                    cur.execute(f'SELECT COUNT(*) FROM {quoted_table}')  # nosec B608 — identifier is safely quoted via _quote_identifier, not raw-interpolated
                     src_count = cur.fetchone()[0]
                 with dst_conn.cursor() as cur:
-                    cur.execute(f'SELECT COUNT(*) FROM `{table}`')  # nosec B608
+                    cur.execute(f'SELECT COUNT(*) FROM {quoted_table}')  # nosec B608 — identifier is safely quoted via _quote_identifier, not raw-interpolated
                     dst_count = cur.fetchone()[0]
                 if src_count != dst_count:
                     log_callback('warn', f'ROW COUNT MISMATCH w "{table}": source={src_count} dest={dst_count}')
