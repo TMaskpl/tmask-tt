@@ -72,3 +72,30 @@ class MssqlTransferHandler:
                 )
                 primary_key = [row[0] for row in cur.fetchall()]
         return {'columns': columns, 'primary_key': primary_key}
+
+    _TYPES_WITH_LENGTH = {'varchar', 'nvarchar', 'char', 'nchar', 'varbinary', 'binary'}
+    _TYPES_WITH_PRECISION_SCALE = {'decimal', 'numeric'}
+
+    def _column_type_sql(self, col: dict) -> str:
+        data_type = col['data_type']
+        if data_type in self._TYPES_WITH_LENGTH and col['character_maximum_length']:
+            length = col['character_maximum_length']
+            return f'{data_type}({"max" if length == -1 else length})'
+        if data_type in self._TYPES_WITH_PRECISION_SCALE and col['numeric_precision'] is not None:
+            return f'{data_type}({col["numeric_precision"]},{col["numeric_scale"]})'
+        return data_type
+
+    def _build_create_table_sql(self, table_name: str, schema: dict) -> str:
+        quoted_table = self._quote_identifier(table_name)
+        column_lines = []
+        for col in schema['columns']:
+            nullability = 'NULL' if col['is_nullable'] else 'NOT NULL'
+            column_lines.append(f'{self._quote_identifier(col["name"])} {self._column_type_sql(col)} {nullability}')
+        if schema['primary_key']:
+            pk_cols = ', '.join(self._quote_identifier(c) for c in schema['primary_key'])
+            column_lines.append(f'PRIMARY KEY ({pk_cols})')
+        columns_sql = ',\n    '.join(column_lines)
+        return (
+            f'DROP TABLE IF EXISTS {quoted_table};\n'
+            f'CREATE TABLE {quoted_table} (\n    {columns_sql}\n);\n'
+        )
