@@ -104,7 +104,7 @@ class MssqlTransferHandler:
         p = self.params
         return [
             'sqlcmd', '-S', f'{p["dest_host"]},{p["dest_port"]}', '-d', p['dest_db_name'],
-            '-U', p['dest_username'], '-P', p['dest_password'], '-i', ddl_path,
+            '-U', p['dest_username'], '-P', p['dest_password'], '-i', ddl_path, '-b',
         ]
 
     def _build_bcp_out_cmd(self, table_name: str, out_path: str) -> list:
@@ -161,7 +161,11 @@ class MssqlTransferHandler:
     def execute(self, log_callback: Callable[[str, str], None]) -> None:
         for attempt in range(1, MSSQL_MAX_RETRIES + 1):
             log_callback('info', f'Starting MSSQL schema+data transfer (attempt {attempt})')
-            if self._transfer_once(log_callback):
+            try:
+                transfer_ok = self._transfer_once(log_callback)
+            except pyodbc.Error as e:
+                raise MssqlTransferError(f'SCHEMA INTROSPECTION FAILED — {e}') from e
+            if transfer_ok:
                 log_callback('info', 'Transfer complete')
                 if self.params.get('verify_row_count'):
                     self._verify_row_counts(log_callback)

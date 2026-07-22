@@ -1,3 +1,4 @@
+import pyodbc
 import pytest
 from unittest.mock import patch, MagicMock
 
@@ -123,6 +124,10 @@ class TestMssqlCommandBuilding:
         cmd = handler._build_sqlcmd_cmd(str(tmp_path / 'ddl.sql'))
         assert cmd[0] == 'sqlcmd'
         assert 'dst' in cmd
+        # -b ("on error batch abort") is required for sqlcmd's own exit code to
+        # reflect a failed T-SQL statement inside the script — without it, sqlcmd
+        # exits 0 even when a CREATE TABLE inside the DDL script fails.
+        assert '-b' in cmd
 
     def test_builds_bcp_out_command(self, tmp_path):
         handler = MssqlTransferHandler(self._make_params())
@@ -182,6 +187,13 @@ class TestMssqlExecute:
             assert 'srcpw' in all_args or 'dstpw' in all_args
 
     def test_retries_on_ddl_failure_then_raises(self):
+        # Regression test for the missing `-b` flag on sqlcmd: without it, sqlcmd
+        # exits 0 even on a failed DDL statement, so a non-zero exit here is the
+        # only signal the handler has that DDL application failed. This test
+        # simulates sqlcmd returning a non-zero exit (as it correctly does once
+        # `-b` is present and a script statement fails) and asserts the handler
+        # (1) never proceeds to `bcp` for a failed DDL step, (2) retries up to
+        # MSSQL_MAX_RETRIES times, and (3) ultimately raises MssqlTransferError.
         handler = MssqlTransferHandler(self._make_params())
         with patch('modules.mssql.handler.MssqlTransferHandler._source_table_names', return_value=['users']), \
              patch('modules.mssql.handler.MssqlTransferHandler._introspect_table',
@@ -194,6 +206,11 @@ class TestMssqlExecute:
             MockPopen.side_effect = [self._mock_proc([], 1)] * (MSSQL_MAX_RETRIES * 3)
             with pytest.raises(MssqlTransferError):
                 handler.execute(log_callback=lambda lvl, msg: None)
+            # Exactly one Popen call per attempt (sqlcmd only) proves bcp was
+            # never invoked after a failed DDL step — no silent fall-through.
+            assert MockPopen.call_count == MSSQL_MAX_RETRIES
+            for call in MockPopen.call_args_list:
+                assert call.args[0][0] == 'sqlcmd'
 
     def test_temp_files_cleaned_up_even_when_every_attempt_fails(self):
         # The DDL temp file must be removed by the `finally` block in
@@ -216,6 +233,60 @@ class TestMssqlExecute:
             # sqlcmd fails immediately on every attempt, so exactly one DDL temp
             # file is created (and cleaned up) per retry attempt.
             assert mock_unlink.call_count == MSSQL_MAX_RETRIES
+
+
+class TestMssqlIntrospectionErrorWrapping:
+    # Every other failure path in this handler (DDL apply via sqlcmd, bcp out/in)
+    # eventually raises MssqlTransferError. Schema introspection (_source_table_names /
+    # _introspect_table) uses pyodbc directly and previously let a raw pyodbc.Error
+    # (e.g. source connection failure) escape execute() unwrapped, inconsistent with
+    # the rest of the module's error contract.
+    def _make_params(self):
+        return {
+            'source_host': 'a', 'source_port': 1433, 'source_username': 'sa', 'source_password': 'srcpw',
+            'source_db_name': 'src', 'dest_host': 'b', 'dest_port': 1433, 'dest_username': 'sa',
+            'dest_password': 'dstpw', 'dest_db_name': 'dst', 'table_name': None, 'verify_row_count': False,
+        }
+
+    def test_pyodbc_error_during_table_listing_becomes_mssql_transfer_error(self):
+        handler = MssqlTransferHandler(self._make_params())
+        with patch('modules.mssql.handler.MssqlTransferHandler._source_table_names',
+                   side_effect=pyodbc.Error('08001', 'source unreachable')):
+            with pytest.raises(MssqlTransferError) as exc_info:
+                handler.execute(log_callback=lambda lvl, msg: None)
+            assert 'SCHEMA INTROSPECTION FAILED' in str(exc_info.value)
+            # The raw driver exception must not be what callers see.
+            assert not isinstance(exc_info.value, pyodbc.Error)
+
+    def test_pyodbc_error_during_column_introspection_becomes_mssql_transfer_error(self):
+        handler = MssqlTransferHandler(self._make_params())
+        with patch('modules.mssql.handler.MssqlTransferHandler._source_table_names', return_value=['users']), \
+             patch('modules.mssql.handler.MssqlTransferHandler._introspect_table',
+                   side_effect=pyodbc.Error('HY000', 'introspection query failed')):
+            with pytest.raises(MssqlTransferError) as exc_info:
+                handler.execute(log_callback=lambda lvl, msg: None)
+            assert 'SCHEMA INTROSPECTION FAILED' in str(exc_info.value)
+
+    def test_introspection_failure_is_not_retried(self):
+        # Preserves pre-existing behavior: an exception escaping _transfer_once
+        # (as opposed to a False return from a failed DDL/bcp step) has never
+        # gone through the retry loop's "if attempt < MAX: retry" branch — it
+        # unwinds immediately. This test pins that so the fix only changes the
+        # exception type, not the retry semantics for this failure class.
+        handler = MssqlTransferHandler(self._make_params())
+        call_count = 0
+
+        def _raise_once(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            raise pyodbc.Error('08001', 'source unreachable')
+
+        with patch('modules.mssql.handler.MssqlTransferHandler._source_table_names', side_effect=_raise_once), \
+             patch('modules.mssql.handler.time.sleep') as mock_sleep:
+            with pytest.raises(MssqlTransferError):
+                handler.execute(log_callback=lambda lvl, msg: None)
+            assert call_count == 1
+            mock_sleep.assert_not_called()
 
 
 class TestMssqlVerifyRowCounts:
