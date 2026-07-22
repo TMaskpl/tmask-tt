@@ -1,4 +1,7 @@
 from unittest.mock import patch, MagicMock
+
+import pytest
+
 from apps.connections.mssql_utils import list_tables
 
 
@@ -7,8 +10,22 @@ class _Conn:
 
 
 def test_returns_table_names():
-    with patch('apps.connections.mssql_utils.pyodbc.connect') as mock_connect:
-        cur = MagicMock()
-        cur.fetchall.return_value = [('users',), ('orders',)]
-        mock_connect.return_value.__enter__.return_value.cursor.return_value.__enter__.return_value = cur
-        assert list_tables(_Conn()) == ['users', 'orders']
+    mock_cursor = MagicMock()
+    mock_cursor.fetchall.return_value = [('users',), ('orders',)]
+    mock_conn = MagicMock()
+    mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+    with patch('apps.connections.mssql_utils.pyodbc.connect', return_value=mock_conn):
+        tables = list_tables(_Conn())
+    assert tables == ['users', 'orders']
+    mock_conn.close.assert_called_once()
+
+
+def test_closes_connection_when_query_raises():
+    mock_cursor = MagicMock()
+    mock_cursor.execute.side_effect = RuntimeError('boom')
+    mock_conn = MagicMock()
+    mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+    with patch('apps.connections.mssql_utils.pyodbc.connect', return_value=mock_conn):
+        with pytest.raises(RuntimeError, match='boom'):
+            list_tables(_Conn())
+    mock_conn.close.assert_called_once()

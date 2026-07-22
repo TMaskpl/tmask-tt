@@ -10,7 +10,10 @@ def _conn_string(connection) -> str:
 
 
 def list_tables(connection) -> list:
-    with pyodbc.connect(_conn_string(connection), timeout=10) as conn:
+    conn = pyodbc.connect(_conn_string(connection), timeout=10)
+    try:
         with conn.cursor() as cur:
             cur.execute("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE' ORDER BY TABLE_NAME")
             return [row[0] for row in cur.fetchall()]
+    finally:
+        conn.close()
