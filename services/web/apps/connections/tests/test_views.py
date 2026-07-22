@@ -443,6 +443,21 @@ class TestConnectionPgTables:
 
 
 @pytest.mark.django_db
+class TestConnectionDbTablesDispatch:
+    def test_mysql_connection_lists_via_mysql_utils(self, admin_client, make_connection, admin_user):
+        conn = make_connection(admin_user, kind=KIND_MYSQL, db_name='d')
+        with patch('apps.connections.views._list_mysql_tables', return_value=['a', 'b']):
+            response = admin_client.get(reverse('connections:db_tables'), {'source_connection': conn.pk})
+        assert b'a' in response.content and b'b' in response.content
+
+    def test_mssql_connection_lists_via_mssql_utils(self, admin_client, make_connection, admin_user):
+        conn = make_connection(admin_user, kind=KIND_MSSQL, db_name='d')
+        with patch('apps.connections.views._list_mssql_tables', return_value=['x']):
+            response = admin_client.get(reverse('connections:db_tables'), {'source_connection': conn.pk})
+        assert b'x' in response.content
+
+
+@pytest.mark.django_db
 class TestConnectionTestDispatchDbKinds:
     def test_mysql_kind_calls_mysql_tester(self, admin_client, make_connection, admin_user):
         conn = make_connection(admin_user, kind=KIND_MYSQL, db_name='d')
