@@ -171,3 +171,35 @@ class MssqlTransferHandler:
                 time.sleep(MSSQL_RETRY_DELAY)
 
         raise MssqlTransferError(f'TRANSFER FAILED — mssql transfer failed after {MSSQL_MAX_RETRIES} attempts')
+
+    def _verify_row_counts(self, log_callback: Callable[[str, str], None]) -> None:
+        try:
+            src_conn = pyodbc.connect(self._source_conn_string(), timeout=10)
+        except pyodbc.Error as e:
+            log_callback('warn', f'ROW COUNT VERIFICATION SKIPPED — nie udało się połączyć ze źródłem: {e}')
+            return
+        try:
+            dst_conn = pyodbc.connect(self._dest_conn_string(), timeout=10)
+        except pyodbc.Error as e:
+            src_conn.close()
+            log_callback('warn', f'ROW COUNT VERIFICATION SKIPPED — nie udało się połączyć z celem: {e}')
+            return
+        try:
+            tables = self._source_table_names()
+            for table in tables:
+                quoted_table = self._quote_identifier(table)
+                with src_conn.cursor() as cur:
+                    cur.execute(f'SELECT COUNT(*) FROM {quoted_table}')  # nosec B608 — identifier is safely quoted via _quote_identifier, not raw-interpolated
+                    src_count = cur.fetchone()[0]
+                with dst_conn.cursor() as cur:
+                    cur.execute(f'SELECT COUNT(*) FROM {quoted_table}')  # nosec B608 — identifier is safely quoted via _quote_identifier, not raw-interpolated
+                    dst_count = cur.fetchone()[0]
+                if src_count != dst_count:
+                    log_callback('warn', f'ROW COUNT MISMATCH w "{table}": source={src_count} dest={dst_count}')
+                else:
+                    log_callback('info', f'ROW COUNT OK w "{table}": {src_count}')
+        except pyodbc.Error as e:
+            log_callback('warn', f'ROW COUNT VERIFICATION FAILED — {e}')
+        finally:
+            src_conn.close()
+            dst_conn.close()

@@ -194,3 +194,50 @@ class TestMssqlExecute:
             MockPopen.side_effect = [self._mock_proc([], 1)] * (MSSQL_MAX_RETRIES * 3)
             with pytest.raises(MssqlTransferError):
                 handler.execute(log_callback=lambda lvl, msg: None)
+
+
+class TestMssqlVerifyRowCounts:
+    def _make_params(self):
+        return {
+            'source_host': 'a', 'source_port': 1433, 'source_username': 'sa', 'source_password': 'p',
+            'source_db_name': 'src', 'dest_host': 'b', 'dest_port': 1433, 'dest_username': 'sa',
+            'dest_password': 'p', 'dest_db_name': 'dst', 'table_name': 'users', 'verify_row_count': True,
+        }
+
+    def test_matching_counts_no_warn(self):
+        # NOTE: fixed from the task brief's literal test code, which mocked
+        # `pyodbc.connect` as a context manager (`.return_value.__enter__...`)
+        # even though _verify_row_counts assigns `src_conn = pyodbc.connect(...)`
+        # directly and calls `src_conn.cursor()` — not
+        # `with pyodbc.connect(...) as conn:`. The brief's mock chain was never
+        # actually exercised (same fix already applied in
+        # test_mysql_handler.py::TestMysqlVerifyRowCounts for the identical bug).
+        handler = MssqlTransferHandler(self._make_params())
+        with patch('modules.mssql.handler.pyodbc.connect') as mock_connect:
+            cur = MagicMock()
+            cur.fetchone.return_value = (7,)
+            conn = MagicMock()
+            conn.cursor.return_value.__enter__.return_value = cur
+            mock_connect.return_value = conn
+            logs = []
+            handler._verify_row_counts(lambda lvl, msg: logs.append((lvl, msg)))
+            assert not any(lvl == 'warn' for lvl, _ in logs)
+            assert any(lvl == 'info' and 'ROW COUNT OK' in msg for lvl, msg in logs)
+
+    def test_mismatched_counts_warns(self):
+        # See NOTE above — uses distinct src/dst connection mocks so the two
+        # SELECT COUNT(*) calls actually return different values.
+        handler = MssqlTransferHandler(self._make_params())
+        with patch('modules.mssql.handler.pyodbc.connect') as mock_connect:
+            src_cursor = MagicMock()
+            src_cursor.fetchone.return_value = (7,)
+            dst_cursor = MagicMock()
+            dst_cursor.fetchone.return_value = (4,)
+            src_conn = MagicMock()
+            src_conn.cursor.return_value.__enter__.return_value = src_cursor
+            dst_conn = MagicMock()
+            dst_conn.cursor.return_value.__enter__.return_value = dst_cursor
+            mock_connect.side_effect = [src_conn, dst_conn]
+            logs = []
+            handler._verify_row_counts(lambda lvl, msg: logs.append((lvl, msg)))
+            assert any(lvl == 'warn' for lvl, _ in logs)
