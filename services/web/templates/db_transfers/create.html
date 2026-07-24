@@ -4,7 +4,7 @@
 {% block content %}
 <div class="box" style="max-width:600px;">
   <span class="box-title">NEW DB TRANSFER</span>
-  <form method="post" id="pg-transfer-form" data-pg-tables-url="{% url 'connections:pg_tables' %}">
+  <form method="post" id="db-transfer-form" data-db-tables-url="{% url 'connections:db_tables' %}">
     {% csrf_token %}
     {% if form.non_field_errors %}
     <div class="msg-error" style="margin-bottom:1rem;">
@@ -12,7 +12,13 @@
     </div>
     {% endif %}
     {% for field in form %}
-    {% if field.name == 'table_name' %}
+    {% if field.name == 'engine' %}
+    <div class="field">
+      <label>{{ field.label|upper }}:</label>
+      {{ field }}
+      {% if field.errors %}<div style="color:var(--red);font-size:0.8rem;">{{ field.errors }}</div>{% endif %}
+    </div>
+    {% elif field.name == 'table_name' %}
     <div class="field">
       <label>{{ field.label|upper }}:</label>
       <select id="id_table_name" name="table_name">

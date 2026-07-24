@@ -12,7 +12,7 @@ django.setup()
 from django.conf import settings  # noqa: E402
 from apps.connections.models import Connection  # noqa: E402
 from apps.transfers.models import TransferJob, TransferLog  # noqa: E402
-from apps.db_transfers.models import PgTransferJob, PgTransferLog  # noqa: E402
+from apps.db_transfers.models import DbTransferJob, DbTransferLog  # noqa: E402
 from apps.webhook_deliveries.models import WebhookDeliveryLog  # noqa: E402
 from apps.webhook_deliveries.services import (  # noqa: E402
     circuit_is_open, record_success, record_failure, CIRCUIT_SKIPPED_MESSAGE,
@@ -21,6 +21,8 @@ from modules.sftp.handler import SFTPHandler, SFTPTransferError  # noqa: E402
 from modules.rsync.handler import RsyncHandler, RsyncTransferError  # noqa: E402
 from modules.relay.handler import RelayHandler, RelayTransferError  # noqa: E402
 from modules.postgres.handler import PgTransferHandler, PgTransferError  # noqa: E402
+from modules.mysql.handler import MysqlTransferHandler, MysqlTransferError  # noqa: E402
+from modules.mssql.handler import MssqlTransferHandler, MssqlTransferError  # noqa: E402
 from notifications import send_email_notification, send_webhook_notification, send_telegram_notification  # noqa: E402
 
 app = Celery('transporter')
@@ -294,7 +296,19 @@ def dry_run_preview(connection_id: int, source_path: str, destination_path: str,
     return RsyncHandler(params).preview(log_callback)
 
 
-def _build_pg_params(job) -> dict:
+def _db_transfer_handlers() -> dict:
+    # Built fresh on each call (not as a module-level constant) so that
+    # unittest.mock.patch('tasks.MysqlTransferHandler'/'PgTransferHandler'/...)
+    # is honored — a module-level dict would freeze in the original class
+    # objects at import time and silently ignore patched replacements.
+    return {
+        'postgres': (PgTransferHandler, PgTransferError),
+        'mysql': (MysqlTransferHandler, MysqlTransferError),
+        'mssql': (MssqlTransferHandler, MssqlTransferError),
+    }
+
+
+def _build_db_transfer_params(job) -> dict:
     return {
         'source_host': job.source_connection.host,
         'source_port': job.source_connection.port,
@@ -312,28 +326,29 @@ def _build_pg_params(job) -> dict:
 
 
 @app.task(bind=True, name='db_transfers.execute')
-def execute_pg_transfer(self, job_id: int):
+def execute_db_transfer(self, job_id: int):
     try:
-        job = PgTransferJob.objects.select_related('source_connection', 'dest_connection').get(pk=job_id)
-    except PgTransferJob.DoesNotExist:
-        logger.error(f'PgTransferJob {job_id} not found — task aborted')
+        job = DbTransferJob.objects.select_related('source_connection', 'dest_connection').get(pk=job_id)
+    except DbTransferJob.DoesNotExist:
+        logger.error(f'DbTransferJob {job_id} not found — task aborted')
         return
 
     job.mark_running(self.request.id)
 
     def log_callback(level: str, message: str):
-        PgTransferLog.objects.create(job=job, level=level, message=message)
+        DbTransferLog.objects.create(job=job, level=level, message=message)
 
+    handler_cls, error_cls = _db_transfer_handlers()[job.engine]
     try:
-        params = _build_pg_params(job)
-        PgTransferHandler(params).execute(log_callback=log_callback)
+        params = _build_db_transfer_params(job)
+        handler_cls(params).execute(log_callback=log_callback)
         job.mark_done()
-    except PgTransferError as e:
+    except error_cls as e:
         job.mark_failed(str(e))
         log_callback('error', str(e))
-        logger.error(f'PgTransferJob {job.pk} failed: {e}')
+        logger.error(f'DbTransferJob {job.pk} failed: {e}')
     except Exception as e:
         job.mark_failed(f'UNEXPECTED ERROR — {e}')
         log_callback('error', f'UNEXPECTED ERROR — {e}')
-        logger.error(f'PgTransferJob {job.pk} unexpected error: {e}')
+        logger.error(f'DbTransferJob {job.pk} unexpected error: {e}')
         raise

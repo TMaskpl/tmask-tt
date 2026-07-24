@@ -649,31 +649,33 @@ class TestDryRunPreviewTask:
             MockRsync.return_value.execute.assert_not_called()
 
 
-class TestExecutePgTransferTask:
+class TestExecuteDbTransferPostgresDispatch:
     def test_dispatches_to_postgres_handler_and_marks_done(self):
         with patch('tasks.PgTransferHandler') as MockHandler, \
-             patch('tasks.PgTransferJob') as MockJob, \
-             patch('tasks.PgTransferLog') as _:
+             patch('tasks.DbTransferJob') as MockJob, \
+             patch('tasks.DbTransferLog') as _:
             mock_job = MagicMock()
             MockJob.objects.select_related.return_value.get.return_value = mock_job
             mock_job.pk = 1
+            mock_job.engine = 'postgres'
             mock_job.table_name = ''
             mock_job.source_connection.host = '10.0.0.1'
             mock_job.dest_connection.host = '10.0.0.2'
             MockHandler.return_value.execute.return_value = None
-            from tasks import execute_pg_transfer
-            execute_pg_transfer(job_id=1)
+            from tasks import execute_db_transfer
+            execute_db_transfer(job_id=1)
             MockHandler.assert_called_once()
             MockHandler.return_value.execute.assert_called_once()
             mock_job.mark_done.assert_called_once()
 
     def test_builds_params_with_correct_source_dest_field_mapping(self):
         with patch('tasks.PgTransferHandler') as MockHandler, \
-             patch('tasks.PgTransferJob') as MockJob, \
-             patch('tasks.PgTransferLog') as _:
+             patch('tasks.DbTransferJob') as MockJob, \
+             patch('tasks.DbTransferLog') as _:
             mock_job = MagicMock()
             MockJob.objects.select_related.return_value.get.return_value = mock_job
             mock_job.pk = 1
+            mock_job.engine = 'postgres'
             mock_job.table_name = 'users'
             mock_job.verify_row_count = True
             mock_job.source_connection.host = 'src-host'
@@ -687,8 +689,8 @@ class TestExecutePgTransferTask:
             mock_job.dest_connection.password = 'dst-pass'
             mock_job.dest_connection.db_name = 'dst-db'
             MockHandler.return_value.execute.return_value = None
-            from tasks import execute_pg_transfer
-            execute_pg_transfer(job_id=1)
+            from tasks import execute_db_transfer
+            execute_db_transfer(job_id=1)
             params = MockHandler.call_args.args[0]
             assert params['source_host'] == 'src-host'
             assert params['source_port'] == 5432
@@ -705,22 +707,84 @@ class TestExecutePgTransferTask:
 
     def test_marks_job_failed_on_pg_transfer_error(self):
         with patch('tasks.PgTransferHandler') as MockHandler, \
-             patch('tasks.PgTransferJob') as MockJob, \
-             patch('tasks.PgTransferLog') as _:
+             patch('tasks.DbTransferJob') as MockJob, \
+             patch('tasks.DbTransferLog') as _:
             mock_job = MagicMock()
             MockJob.objects.select_related.return_value.get.return_value = mock_job
             mock_job.pk = 1
+            mock_job.engine = 'postgres'
             mock_job.table_name = ''
             from modules.postgres.handler import PgTransferError
             MockHandler.return_value.execute.side_effect = PgTransferError('AUTH FAILED')
-            from tasks import execute_pg_transfer
-            execute_pg_transfer(job_id=1)
+            from tasks import execute_db_transfer
+            execute_db_transfer(job_id=1)
             mock_job.mark_failed.assert_called_once_with('AUTH FAILED')
 
     def test_job_not_found_returns_without_error(self):
-        with patch('tasks.PgTransferJob') as MockJob, \
-             patch('tasks.PgTransferLog') as _:
+        with patch('tasks.DbTransferJob') as MockJob, \
+             patch('tasks.DbTransferLog') as _:
             MockJob.DoesNotExist = Exception
             MockJob.objects.select_related.return_value.get.side_effect = MockJob.DoesNotExist
-            from tasks import execute_pg_transfer
-            execute_pg_transfer(job_id=999)  # should not raise
+            from tasks import execute_db_transfer
+            execute_db_transfer(job_id=999)  # should not raise
+
+
+class TestExecuteDbTransferEngineDispatch:
+    def _mock_job(self, MockJob, engine):
+        mock_job = MagicMock()
+        mock_job.engine = engine
+        mock_job.pk = 1
+        MockJob.objects.select_related.return_value.get.return_value = mock_job
+        return mock_job
+
+    def test_dispatches_to_mysql_handler(self):
+        with patch('tasks.DbTransferJob') as MockJob, \
+             patch('tasks.DbTransferLog'), \
+             patch('tasks.MysqlTransferHandler') as MockMysql:
+            self._mock_job(MockJob, 'mysql')
+            MockMysql.return_value.execute.return_value = None
+            from tasks import execute_db_transfer
+            execute_db_transfer(job_id=1)
+            MockMysql.assert_called_once()
+
+    def test_dispatches_to_mssql_handler(self):
+        with patch('tasks.DbTransferJob') as MockJob, \
+             patch('tasks.DbTransferLog'), \
+             patch('tasks.MssqlTransferHandler') as MockMssql:
+            self._mock_job(MockJob, 'mssql')
+            MockMssql.return_value.execute.return_value = None
+            from tasks import execute_db_transfer
+            execute_db_transfer(job_id=1)
+            MockMssql.assert_called_once()
+
+    def test_dispatches_to_postgres_handler_unchanged(self):
+        with patch('tasks.DbTransferJob') as MockJob, \
+             patch('tasks.DbTransferLog'), \
+             patch('tasks.PgTransferHandler') as MockPg:
+            self._mock_job(MockJob, 'postgres')
+            MockPg.return_value.execute.return_value = None
+            from tasks import execute_db_transfer
+            execute_db_transfer(job_id=1)
+            MockPg.assert_called_once()
+
+    def test_mysql_error_marks_job_failed(self):
+        with patch('tasks.DbTransferJob') as MockJob, \
+             patch('tasks.DbTransferLog'), \
+             patch('tasks.MysqlTransferHandler') as MockMysql:
+            from modules.mysql.handler import MysqlTransferError
+            mock_job = self._mock_job(MockJob, 'mysql')
+            MockMysql.return_value.execute.side_effect = MysqlTransferError('AUTH FAILED')
+            from tasks import execute_db_transfer
+            execute_db_transfer(job_id=1)
+            mock_job.mark_failed.assert_called_once_with('AUTH FAILED')
+
+    def test_mssql_error_marks_job_failed(self):
+        with patch('tasks.DbTransferJob') as MockJob, \
+             patch('tasks.DbTransferLog'), \
+             patch('tasks.MssqlTransferHandler') as MockMssql:
+            from modules.mssql.handler import MssqlTransferError
+            mock_job = self._mock_job(MockJob, 'mssql')
+            MockMssql.return_value.execute.side_effect = MssqlTransferError('CONN FAILED')
+            from tasks import execute_db_transfer
+            execute_db_transfer(job_id=1)
+            mock_job.mark_failed.assert_called_once_with('CONN FAILED')

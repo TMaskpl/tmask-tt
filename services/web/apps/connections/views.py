@@ -6,6 +6,8 @@ from datetime import date
 
 import paramiko
 import psycopg2
+import pymysql
+import pyodbc
 from django.contrib import messages
 from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
@@ -15,12 +17,16 @@ from apps.accounts.models import ROLE_ADMIN, ROLE_READONLY
 from apps.audit_log.services import log_created, log_updated, log_deleted, diff_fields
 from .portability import export_config, import_config, PassphraseError
 from .forms import ConnectionForm
-from .models import Connection, KIND_POSTGRES
+from .models import Connection, KIND_POSTGRES, KIND_MYSQL, KIND_MSSQL
 from .sftp_utils import list_directory, build_breadcrumbs
 from .ssh_keys import load_private_key
 from .ssh_tester import test_connection as _test_connection
 from .pg_tester import test_connection as _test_pg_connection
+from .mysql_tester import test_connection as _test_mysql_connection
+from .mssql_tester import test_connection as _test_mssql_connection
 from .pg_utils import list_tables as _list_pg_tables
+from .mysql_utils import list_tables as _list_mysql_tables
+from .mssql_utils import list_tables as _list_mssql_tables
 
 _CONNECTIONS_LIST = 'connections:list'
 _MAX_IMPORT_BYTES = 1024 * 1024
@@ -73,6 +79,10 @@ def connection_test(request, pk):
     conn = get_object_or_404(Connection, pk=pk)
     if conn.kind == KIND_POSTGRES:
         result = _test_pg_connection(conn)
+    elif conn.kind == KIND_MYSQL:
+        result = _test_mysql_connection(conn)
+    elif conn.kind == KIND_MSSQL:
+        result = _test_mssql_connection(conn)
     else:
         result = _test_connection(conn)
     return render(request, 'connections/_test_result.html', {'result': result})
@@ -142,7 +152,7 @@ def browse_directory(request, pk):
 
 
 @require_role(ROLE_READONLY)
-def connection_pg_tables(request):
+def connection_db_tables(request):
     raw_source_connection = request.GET.get('source_connection')
     tables = []
     error = None
@@ -156,13 +166,20 @@ def connection_pg_tables(request):
     # only a value that actually parsed counts as a real selection for the template.
     source_connection = conn_id
     if conn_id is not None:
-        conn = Connection.objects.filter(pk=conn_id, kind=KIND_POSTGRES).first()
+        conn = Connection.objects.filter(
+            pk=conn_id, kind__in=[KIND_POSTGRES, KIND_MYSQL, KIND_MSSQL]
+        ).first()
         if conn:
             try:
-                tables = _list_pg_tables(conn)
-            except psycopg2.Error as e:
+                if conn.kind == KIND_POSTGRES:
+                    tables = _list_pg_tables(conn)
+                elif conn.kind == KIND_MYSQL:
+                    tables = _list_mysql_tables(conn)
+                elif conn.kind == KIND_MSSQL:
+                    tables = _list_mssql_tables(conn)
+            except (psycopg2.Error, pymysql.Error, pyodbc.Error) as e:
                 error = f'Błąd połączenia z bazą źródłową — {e}'.strip()
-    return render(request, 'connections/_pg_tables_options.html', {
+    return render(request, 'connections/_db_tables_options.html', {
         'tables': tables,
         'source_connection': source_connection,
         'error': error,

@@ -8,7 +8,13 @@ PROTOCOL_CHOICES = [(PROTOCOL_SFTP, 'SFTP/SCP'), (PROTOCOL_RSYNC, 'rsync')]
 
 KIND_SSH = 'ssh'
 KIND_POSTGRES = 'postgres'
-KIND_CHOICES = [(KIND_SSH, 'SSH'), (KIND_POSTGRES, 'Postgres')]
+KIND_MYSQL = 'mysql'
+KIND_MSSQL = 'mssql'
+KIND_CHOICES = [
+    (KIND_SSH, 'SSH'), (KIND_POSTGRES, 'Postgres'),
+    (KIND_MYSQL, 'MySQL'), (KIND_MSSQL, 'MSSQL'),
+]
+KIND_DB_KINDS = (KIND_POSTGRES, KIND_MYSQL, KIND_MSSQL)
 
 class Connection(models.Model):
     owner    = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='connections')
@@ -35,8 +41,8 @@ class Connection(models.Model):
 
     def clean(self):
         from django.core.exceptions import ValidationError
-        if self.kind == KIND_POSTGRES and not self.db_name:
-            raise ValidationError('DB NAME jest wymagane dla połączeń typu Postgres.')
+        if self.kind in KIND_DB_KINDS and not self.db_name:
+            raise ValidationError('DB NAME jest wymagane dla połączeń bazodanowych (Postgres/MySQL/MSSQL).')
 
     class Meta:
         ordering = ['-created_at']

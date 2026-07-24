@@ -6,6 +6,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev gcc \
     && rm -rf /var/lib/apt/lists/*
 
+# Microsoft apt repo for msodbcsql18 (ODBC driver for pyodbc) — web needs the
+# runtime driver + unixodbc for pyodbc-based connection testing (see worker
+# Dockerfile for the matching mssql-tools18/mssql-scripter CLI install).
+RUN apt-get update && apt-get install -y --no-install-recommends curl gnupg2 apt-transport-https \
+    && curl -sSL -o /usr/share/keyrings/microsoft-prod.gpg https://packages.microsoft.com/keys/microsoft.asc \
+    && echo "deb [arch=amd64,arm64 signed-by=/usr/share/keyrings/microsoft-prod.gpg] https://packages.microsoft.com/debian/12/prod bookworm main" \
+       > /etc/apt/sources.list.d/mssql-release.list \
+    && apt-get update \
+    && ACCEPT_EULA=Y apt-get install -y --no-install-recommends unixodbc-dev unixodbc msodbcsql18 \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements-prod.txt .
 RUN pip install --no-cache-dir -r requirements-prod.txt
 

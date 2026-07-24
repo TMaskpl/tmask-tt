@@ -22,16 +22,19 @@ LOG_ERROR = 'error'
 LOG_CHOICES = [(LOG_INFO, 'INFO'), (LOG_WARN, 'WARN'), (LOG_ERROR, 'ERROR')]
 
 
-class PgTransferJob(models.Model):
+class DbTransferJob(models.Model):
     owner             = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='pg_jobs'
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='db_jobs'
     )
     source_connection = models.ForeignKey(
-        'connections.Connection', on_delete=models.CASCADE, related_name='pg_source_jobs'
+        'connections.Connection', on_delete=models.CASCADE, related_name='db_source_jobs'
     )
     dest_connection   = models.ForeignKey(
-        'connections.Connection', on_delete=models.CASCADE, related_name='pg_dest_jobs'
+        'connections.Connection', on_delete=models.CASCADE, related_name='db_dest_jobs'
     )
+    engine            = models.CharField(max_length=10, choices=[
+        ('postgres', 'Postgres'), ('mysql', 'MySQL'), ('mssql', 'MSSQL'),
+    ])
     table_name        = models.CharField(max_length=255, blank=True)
     verify_row_count  = models.BooleanField(default=False)
     status            = models.CharField(max_length=10, choices=STATUS_CHOICES, default=STATUS_PENDING)
@@ -42,12 +45,14 @@ class PgTransferJob(models.Model):
     error_message     = models.TextField(blank=True, default='')
     cancelled_by      = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='cancelled_pg_jobs',
+        related_name='cancelled_db_jobs',
     )
 
     def clean(self):
         if self.source_connection_id and self.dest_connection_id and self.source_connection_id == self.dest_connection_id:
             raise ValidationError('Source and destination connection cannot be the same.')
+        if self.source_connection_id and self.dest_connection_id and self.source_connection.kind != self.dest_connection.kind:
+            raise ValidationError('Source and destination must be the same database engine.')
 
     def mark_running(self, task_id: str) -> None:
         self.status = STATUS_RUNNING
@@ -80,8 +85,8 @@ class PgTransferJob(models.Model):
         ordering = ['-created_at']
 
 
-class PgTransferLog(models.Model):
-    job       = models.ForeignKey(PgTransferJob, on_delete=models.CASCADE, related_name='logs')
+class DbTransferLog(models.Model):
+    job       = models.ForeignKey(DbTransferJob, on_delete=models.CASCADE, related_name='logs')
     timestamp = models.DateTimeField(auto_now_add=True)
     level     = models.CharField(max_length=5, choices=LOG_CHOICES, default=LOG_INFO)
     message   = models.TextField()

@@ -2,6 +2,19 @@ celery==5.4.*
 redis==5.*
 paramiko==3.4.*
 psycopg2-binary==2.9.*
+pymysql==1.1.*
+pyodbc==5.*
+# mssql-scripter: NOT installed — BLOCKED on arm64, see task-7-report.md.
+# Package has no stable 1.0 release (only 1.0.0a0-a23 pre-releases, last
+# published 2018) and its functional backend (mssqltoolsservice) has no
+# arm64/aarch64 Linux build on PyPI. The only Linux variant
+# (mssqltoolsservice-linux-64) ships an x86_64 .NET binary
+# (MicrosoftSqlToolsServiceLayer) that pip installs without error on arm64
+# (wheel is tagged py2.py3-none-any, so platform checks don't catch it) but
+# which fails at exec time: "rosetta error: failed to open elf at
+# /lib64/ld-linux-x86-64.so.2" (confirmed on this host, 2026-07-21).
+# Needs an architectural decision (accept amd64-only prod / alternative
+# MSSQL scripting approach / deliberate emulation) before re-adding.
 Django>=5.1.14
 django-celery-beat==2.7.*
 django-celery-results==2.5.*
