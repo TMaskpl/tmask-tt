@@ -408,25 +408,25 @@ class TestConnectionPgTables:
     def test_returns_options_fragment(self, auth_client, regular_user, make_connection):
         conn = make_connection(regular_user, kind='postgres', db_name='proddb')
         with patch('apps.connections.views._list_pg_tables', return_value=['users', 'orders']):
-            response = auth_client.get(reverse('connections:pg_tables'), {'source_connection': conn.pk})
+            response = auth_client.get(reverse('connections:db_tables'), {'source_connection': conn.pk})
         assert response.status_code == 200
         assert b'<option value="users">users</option>' in response.content
         assert b'<option value="orders">orders</option>' in response.content
 
     def test_empty_when_no_connection_id(self, auth_client):
-        response = auth_client.get(reverse('connections:pg_tables'))
+        response = auth_client.get(reverse('connections:db_tables'))
         assert response.status_code == 200
         assert b'wybierz' in response.content.lower()
 
     def test_non_numeric_connection_id_does_not_500(self, auth_client):
-        response = auth_client.get(reverse('connections:pg_tables'), {'source_connection': 'abc'})
+        response = auth_client.get(reverse('connections:db_tables'), {'source_connection': 'abc'})
         assert response.status_code == 200
         assert 'wybierz najpierw source connection' in response.content.decode().lower()
 
     def test_connection_error_renders_distinct_message(self, auth_client, regular_user, make_connection):
         conn = make_connection(regular_user, kind='postgres', db_name='proddb')
         with patch('apps.connections.views._list_pg_tables', side_effect=psycopg2.OperationalError('unreachable')):
-            response = auth_client.get(reverse('connections:pg_tables'), {'source_connection': conn.pk})
+            response = auth_client.get(reverse('connections:db_tables'), {'source_connection': conn.pk})
         assert response.status_code == 200
         content = response.content.decode().lower()
         assert 'błąd połączenia' in content
@@ -435,7 +435,7 @@ class TestConnectionPgTables:
     def test_empty_table_list_renders_distinct_message(self, auth_client, regular_user, make_connection):
         conn = make_connection(regular_user, kind='postgres', db_name='proddb')
         with patch('apps.connections.views._list_pg_tables', return_value=[]):
-            response = auth_client.get(reverse('connections:pg_tables'), {'source_connection': conn.pk})
+            response = auth_client.get(reverse('connections:db_tables'), {'source_connection': conn.pk})
         assert response.status_code == 200
         content = response.content.decode().lower()
         assert 'brak tabel' in content

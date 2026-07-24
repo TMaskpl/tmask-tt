@@ -12,10 +12,6 @@ urlpatterns = [
     path('<int:pk>/scan-hostkey/', views.connection_scan_hostkey, name='scan_hostkey'),
     path('<int:pk>/browse/', views.browse_directory, name='browse'),
     path('db-tables/', views.connection_db_tables, name='db_tables'),
-    # Deprecated alias — db_transfers/create.html + db_transfers_create.js still
-    # reference `connections:pg_tables` / data-pg-tables-url. Task 8 will update
-    # both to the new `db_tables` name; remove this alias once that lands.
-    path('pg-tables/', views.connection_db_tables, name='pg_tables'),
     path('export/', views.connection_export, name='export'),
     path('import/', views.connection_import, name='import'),
 ]
