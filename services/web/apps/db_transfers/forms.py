@@ -24,6 +24,7 @@ class DbTransferForm(forms.ModelForm):
         qs = Connection.objects.filter(kind=selected_engine)
         self.fields['source_connection'].queryset = qs
         self.fields['dest_connection'].queryset = qs
+        self.fields['engine'].initial = selected_engine
 
     def clean(self):
         cleaned = super().clean()

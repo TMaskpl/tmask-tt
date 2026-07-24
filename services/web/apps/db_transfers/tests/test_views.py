@@ -1,3 +1,4 @@
+import re
 from unittest.mock import patch
 
 import pytest
@@ -110,6 +111,14 @@ class TestDbTransferCreateEngineSelection:
         mysql_conn = make_connection(admin_user, kind=KIND_MYSQL, db_name='a')
         response = admin_client.get(reverse('db_transfers:create'), {'engine': 'mysql'})
         assert response.context['form'].fields['source_connection'].queryset.filter(pk=mysql_conn.pk).exists()
+
+    def test_get_with_engine_param_renders_mysql_radio_checked(self, admin_client):
+        response = admin_client.get(reverse('db_transfers:create'), {'engine': 'mysql'})
+        content = response.content.decode()
+        mysql_input = re.search(r'<input[^>]*name="engine"[^>]*value="mysql"[^>]*>', content).group(0)
+        postgres_input = re.search(r'<input[^>]*name="engine"[^>]*value="postgres"[^>]*>', content).group(0)
+        assert 'checked' in mysql_input
+        assert 'checked' not in postgres_input
 
     def test_post_creates_job_with_engine_from_source_connection(
         self, admin_client, admin_user, make_connection, mocker, django_capture_on_commit_callbacks,

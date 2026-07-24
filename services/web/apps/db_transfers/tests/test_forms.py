@@ -1,3 +1,5 @@
+import re
+
 import pytest
 from apps.db_transfers.forms import DbTransferForm
 from apps.connections.models import KIND_MYSQL, KIND_MSSQL
@@ -21,3 +23,15 @@ class TestDbTransferFormEngineFiltering:
             user=regular_user, engine=KIND_MYSQL,
         )
         assert not form.is_valid()
+
+    def test_unbound_form_with_engine_kwarg_sets_engine_field_initial(self, regular_user):
+        form = DbTransferForm(user=regular_user, engine=KIND_MYSQL)
+        assert form.fields['engine'].initial == KIND_MYSQL
+
+    def test_unbound_form_with_engine_kwarg_renders_correct_radio_checked(self, regular_user):
+        form = DbTransferForm(user=regular_user, engine=KIND_MYSQL)
+        rendered = str(form['engine'])
+        mysql_input = re.search(r'<input[^>]*value="mysql"[^>]*>', rendered).group(0)
+        postgres_input = re.search(r'<input[^>]*value="postgres"[^>]*>', rendered).group(0)
+        assert 'checked' in mysql_input
+        assert 'checked' not in postgres_input
