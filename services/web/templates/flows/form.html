@@ -2,76 +2,76 @@
 {% block title %}{{ action }} FLOW — TMASK-TRANSPORTER{% endblock %}
 {% block content %}
 {% if action == 'CREATE' %}
-<div class="toolbar" style="margin-bottom:1rem;">
-  <a href="{% url 'flows:create' %}" class="btn">[ PLIK ]</a>
-  <a href="{% url 'db_transfers:create' %}" class="btn">[ BAZA ]</a>
+<div class="toolbar">
+  <a href="{% url 'flows:create' %}" class="btn">Plik</a>
+  <a href="{% url 'db_transfers:create' %}" class="btn">Baza</a>
 </div>
 {% endif %}
-<div class="box" style="max-width:700px;">
-  <span class="box-title">{{ action }} RELAY FLOW (PLIK)</span>
+<div class="panel" style="max-width:700px;">
+  <span class="panel-title">{{ action }} Relay Flow (Plik)</span>
   <form method="post">
     {% csrf_token %}
     {% if form.non_field_errors %}
-    <div class="msg-error">{% for e in form.non_field_errors %}> {{ e }}{% endfor %}</div>
+    <div class="msg-error">{% for e in form.non_field_errors %}{{ e }}{% endfor %}</div>
     {% endif %}
     <div class="field">
-      <label>NAME:</label>
+      <label>Name</label>
       {{ form.name }}
-      {% if form.name.errors %}<div style="color:var(--red);font-size:0.8rem;">{{ form.name.errors }}</div>{% endif %}
+      {% if form.name.errors %}<div class="field-error">{{ form.name.errors }}</div>{% endif %}
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:1rem;">
+    <div class="two-col" style="margin-top:1rem;">
       <div>
-        <span class="box-title" style="font-size:0.75rem;">SOURCE</span>
+        <span class="panel-title" style="font-size:0.7rem;">Source</span>
         <div class="field">
-          <label>CONNECTION:</label>
+          <label>Connection</label>
           {{ form.source_conn }}
-          {% if form.source_conn.errors %}<div style="color:var(--red);font-size:0.8rem;">{{ form.source_conn.errors }}</div>{% endif %}
+          {% if form.source_conn.errors %}<div class="field-error">{{ form.source_conn.errors }}</div>{% endif %}
         </div>
         <div class="field">
-          <label>PATH:</label>
+          <label>Path</label>
           <div class="field-with-btn">
             {{ form.source_path }}
             <button type="button" class="btn btn-small"
               data-browse-open
               data-browse-field="id_source_path"
               data-browse-conn-sel="#id_source_conn">
-              [BROWSE]
+              Browse
             </button>
           </div>
-          {% if form.source_path.errors %}<div style="color:var(--red);font-size:0.8rem;">{{ form.source_path.errors }}</div>{% endif %}
+          {% if form.source_path.errors %}<div class="field-error">{{ form.source_path.errors }}</div>{% endif %}
         </div>
       </div>
       <div>
-        <span class="box-title" style="font-size:0.75rem;">DESTINATION</span>
+        <span class="panel-title" style="font-size:0.7rem;">Destination</span>
         <div class="field">
-          <label>CONNECTION:</label>
+          <label>Connection</label>
           {{ form.dest_conn }}
-          {% if form.dest_conn.errors %}<div style="color:var(--red);font-size:0.8rem;">{{ form.dest_conn.errors }}</div>{% endif %}
+          {% if form.dest_conn.errors %}<div class="field-error">{{ form.dest_conn.errors }}</div>{% endif %}
         </div>
         <div class="field">
-          <label>PATH:</label>
+          <label>Path</label>
           <div class="field-with-btn">
             {{ form.dest_path }}
             <button type="button" class="btn btn-small"
               data-browse-open
               data-browse-field="id_dest_path"
               data-browse-conn-sel="#id_dest_conn">
-              [BROWSE]
+              Browse
             </button>
           </div>
-          {% if form.dest_path.errors %}<div style="color:var(--red);font-size:0.8rem;">{{ form.dest_path.errors }}</div>{% endif %}
+          {% if form.dest_path.errors %}<div class="field-error">{{ form.dest_path.errors }}</div>{% endif %}
         </div>
       </div>
     </div>
     <div class="field" style="margin-top:1.2rem;">
-      <label>WERYFIKACJA SHA-256:</label>
+      <label>Weryfikacja SHA-256</label>
       {{ form.verify_checksum }}
-      <span style="font-size:0.75rem;color:var(--dim);">Po transferze porównuje sha256sum na hoście źródłowym i docelowym. Transfer = błąd przy rozbieżności.</span>
-      {% if form.verify_checksum.errors %}<div style="color:var(--red);font-size:0.8rem;">{{ form.verify_checksum.errors }}</div>{% endif %}
+      <span class="field-hint">Po transferze porównuje sha256sum na hoście źródłowym i docelowym. Transfer = błąd przy rozbieżności.</span>
+      {% if form.verify_checksum.errors %}<div class="field-error">{{ form.verify_checksum.errors }}</div>{% endif %}
     </div>
-    <div style="display:flex;gap:1rem;margin-top:1.5rem;">
-      <button type="submit" class="btn">[ SAVE FLOW ]</button>
-      <a href="{% url 'flows:list' %}" class="btn btn-danger">[ CANCEL ]</a>
+    <div class="form-actions">
+      <button type="submit" class="btn">Save Flow</button>
+      <a href="{% url 'flows:list' %}" class="btn btn-danger">Cancel</a>
     </div>
   </form>
 </div>

@@ -783,3 +783,101 @@ label.btn-small { cursor: pointer; }
 .token-modal .token-actions { display: flex; gap: 0.75rem; }
 
 .text-warn { color: var(--warn); }
+
+/* ============================================================
+   SCHEDULER
+   ============================================================ */
+.sched-wrap { max-width: 660px; }
+
+.sched-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.sched-card-title {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  margin-bottom: 1rem;
+}
+
+.sf-row { margin-bottom: 1rem; }
+.sf-row:last-child { margin-bottom: 0; }
+
+.sf-label {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  margin-bottom: 0.3rem;
+  display: block;
+}
+
+.flow-info {
+  margin-top: 0.6rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  font-size: var(--font-size-xs);
+  color: var(--text-dim);
+}
+.flow-info .fi-arrow { color: var(--warn); margin: 0 0.4rem; }
+
+.cron-panel {
+  margin-top: 0.75rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 1rem;
+  background: var(--bg);
+}
+
+.cron-panel-title {
+  font-size: var(--font-size-xs);
+  color: var(--text-dim);
+  margin-bottom: 0.6rem;
+}
+
+.cron-examples { display: grid; grid-template-columns: 1fr 1fr; gap: 0.25rem 1.5rem; }
+
+.cron-ex { display: flex; gap: 0.75rem; align-items: baseline; cursor: pointer; padding: 0.15rem 0; }
+.cron-ex:hover .cron-ex-val { color: var(--accent); }
+.cron-ex:hover .cron-ex-desc { color: var(--text); }
+
+.cron-ex-val {
+  color: var(--warn);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-width: 110px;
+}
+
+.cron-ex-desc { color: var(--text-dim); font-size: var(--font-size-xs); }
+
+.enabled-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-subtle);
+}
+.enabled-row input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; flex-shrink: 0; }
+.enabled-row label { font-size: var(--font-size-sm); color: var(--text-muted); cursor: pointer; margin: 0; }
+
+.sf-error { color: var(--danger); font-size: var(--font-size-xs); margin-top: 0.25rem; display: block; }
+
+.sched-actions { display: flex; gap: 1rem; padding-top: 0.25rem; }
+
+.sched-breadcrumb {
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.75rem;
+  font-size: var(--font-size-xs);
+  color: var(--text-dim);
+}
+.sched-breadcrumb .current { color: var(--accent); font-weight: 600; }

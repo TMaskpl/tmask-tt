@@ -3,159 +3,15 @@
 {% block content %}
 {% load static %}
 
-<style>
-/* ── Scheduler form layout ───────────────────────── */
-.sched-wrap {
-  max-width: 660px;
-}
-
-/* ── Section cards ───────────────────────────────── */
-.sched-card {
-  border: 1px solid var(--border);
-  padding: 1.5rem 1.5rem 1.25rem;
-  margin-bottom: 1.5rem;
-  position: relative;
-}
-
-.sched-card-title {
-  position: absolute;
-  top: -0.6rem;
-  left: 1rem;
-  background: var(--bg);
-  padding: 0 0.5rem;
-  font-size: 0.7rem;
-  letter-spacing: 3px;
-  color: var(--green-bright);
-  text-transform: uppercase;
-}
-
-/* ── Form rows ───────────────────────────────────── */
-.sf-row { margin-bottom: 1rem; }
-.sf-row:last-child { margin-bottom: 0; }
-
-.sf-label {
-  font-size: 0.7rem;
-  color: #556655;
-  letter-spacing: 2px;
-  margin-bottom: 0.3rem;
-  display: block;
-}
-
-/* ── Flow info bar ───────────────────────────────── */
-.flow-info {
-  margin-top: 0.6rem;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid #1a3a1a;
-  background: #030803;
-  font-size: 0.72rem;
-  color: #446644;
-  letter-spacing: 1px;
-}
-
-.flow-info .fi-arrow {
-  color: var(--amber);
-  margin: 0 0.4rem;
-}
-
-/* ── CRON helper panel ───────────────────────────── */
-.cron-panel {
-  margin-top: 0.75rem;
-  border: 1px solid #111;
-  padding: 0.75rem 1rem;
-  background: #050505;
-}
-
-.cron-panel-title {
-  font-size: 0.65rem;
-  color: #446644;
-  letter-spacing: 3px;
-  margin-bottom: 0.6rem;
-}
-
-.cron-examples {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.25rem 1.5rem;
-}
-
-.cron-ex {
-  display: flex;
-  gap: 0.75rem;
-  align-items: baseline;
-  cursor: pointer;
-  padding: 0.1rem 0;
-}
-
-.cron-ex:hover .cron-ex-val { color: var(--green-bright); }
-.cron-ex:hover .cron-ex-desc { color: #aaffaa; }
-
-.cron-ex-val {
-  color: var(--amber);
-  font-size: 0.75rem;
-  letter-spacing: 0.05em;
-  white-space: nowrap;
-  flex-shrink: 0;
-  min-width: 110px;
-}
-
-.cron-ex-desc {
-  color: #556655;
-  font-size: 0.7rem;
-  letter-spacing: 1px;
-}
-
-/* ── Enabled toggle ──────────────────────────────── */
-.enabled-row {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  margin-top: 1rem;
-  padding-top: 1rem;
-  border-top: 1px solid #111;
-}
-
-.enabled-row input[type="checkbox"] {
-  width: 14px;
-  height: 14px;
-  accent-color: var(--green-bright);
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
-.enabled-row label {
-  font-size: 0.8rem;
-  color: #aaffaa;
-  letter-spacing: 1px;
-  cursor: pointer;
-  margin: 0;
-}
-
-/* ── Error messages ──────────────────────────────── */
-.sf-error {
-  color: var(--red);
-  font-size: 0.75rem;
-  margin-top: 0.25rem;
-  display: block;
-}
-
-/* ── Action bar ──────────────────────────────────── */
-.sched-actions {
-  display: flex;
-  gap: 1rem;
-  padding-top: 0.25rem;
-}
-</style>
-
 {# ── Page header ──────────────────────────────────── #}
 <div class="sched-wrap">
-  <div style="margin-bottom: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem;">
-    <span style="font-size: 0.7rem; color: #446644; letter-spacing: 3px;">&gt; SCHEDULER /</span>
-    <span style="color: var(--green-bright); letter-spacing: 3px; font-size: 0.85rem; text-shadow: 0 0 6px rgba(0,255,65,0.5);"> {{ action|upper }} SCHEDULE</span>
+  <div class="sched-breadcrumb">
+    Scheduler / <span class="current">{{ action|upper }} Schedule</span>
   </div>
 
   {% if form.non_field_errors %}
   <div class="msg-error" style="margin-bottom: 1.25rem;">
-    {% for e in form.non_field_errors %}&gt; {{ e }}{% endfor %}
+    {% for e in form.non_field_errors %}{{ e }}{% endfor %}
   </div>
   {% endif %}
 
@@ -164,10 +20,10 @@
 
     {# ── SEKCJA: CEL TRANSFERU ──────────────────────── #}
     <div class="sched-card">
-      <div class="sched-card-title">CEL TRANSFERU</div>
+      <div class="sched-card-title">Cel transferu</div>
 
       <div class="sf-row">
-        <span class="sf-label">FLOW</span>
+        <span class="sf-label">Flow</span>
         {{ form.flow }}
         {% if form.flow.errors %}<span class="sf-error">{{ form.flow.errors|join:", " }}</span>{% endif %}
       </div>
@@ -183,17 +39,17 @@
 
     {# ── SEKCJA: HARMONOGRAM ────────────────────────── #}
     <div class="sched-card">
-      <div class="sched-card-title">HARMONOGRAM</div>
+      <div class="sched-card-title">Harmonogram</div>
 
       <div class="sf-row">
-        <span class="sf-label">WYRAŻENIE CRON</span>
+        <span class="sf-label">Wyrażenie cron</span>
         {{ form.cron_expr }}
         {% if form.cron_expr.errors %}<span class="sf-error">{{ form.cron_expr.errors|join:", " }}</span>{% endif %}
       </div>
 
       {# CRON quick-reference #}
       <div class="cron-panel">
-        <div class="cron-panel-title">FORMAT: MIN GODZ DZIEŃ MIESIĄC DZIEŃ_TYG — kliknij aby wstawić</div>
+        <div class="cron-panel-title">Format: min godz dzień miesiąc dzień_tyg — kliknij aby wstawić</div>
         <div class="cron-examples">
           <div class="cron-ex" data-cron="0 3 * * *">
             <span class="cron-ex-val">0 3 * * *</span>
@@ -225,14 +81,14 @@
       {# Enabled #}
       <div class="enabled-row">
         {{ form.enabled }}
-        <label for="{{ form.enabled.id_for_label }}">{{ form.enabled.label|upper }}</label>
+        <label for="{{ form.enabled.id_for_label }}">{{ form.enabled.label }}</label>
       </div>
     </div>
 
     {# ── Przyciski ──────────────────────────────────── #}
     <div class="sched-actions">
-      <button type="submit" class="btn">[ ZAPISZ ]</button>
-      <a href="{% url 'scheduler:list' %}" class="btn btn-danger">[ ANULUJ ]</a>
+      <button type="submit" class="btn">Zapisz</button>
+      <a href="{% url 'scheduler:list' %}" class="btn btn-danger">Anuluj</a>
     </div>
   </form>
 </div>

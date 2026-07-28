@@ -1,39 +1,39 @@
 {% extends "base.html" %}
 {% block title %}SCHEDULER{% endblock %}
 {% block content %}
-<div class="box">
-  <span class="box-title">SCHEDULED TRANSFERS</span>
+<div class="panel">
+  <span class="panel-title">Scheduled Transfers</span>
   <div style="margin-bottom:1rem;">
     {% if user.is_admin %}
-    <a href="{% url 'scheduler:create' %}" class="btn">[ + NEW SCHEDULE ]</a>
+    <a href="{% url 'scheduler:create' %}" class="btn">+ New Schedule</a>
     {% endif %}
   </div>
   {% if schedules %}
   <table>
     <thead>
-      <tr><th>FLOW</th><th>ŹRÓDŁO</th><th>CEL</th><th>CRON</th><th>LAST RUN</th><th>STATUS</th><th>ACTIONS</th></tr>
+      <tr><th>Flow</th><th>Źródło</th><th>Cel</th><th>Cron</th><th>Last Run</th><th>Status</th><th>Actions</th></tr>
     </thead>
     <tbody>
       {% for s in schedules %}
       <tr>
-        <td class="glow">{{ s.flow.name|default:"—" }}</td>
+        <td>{{ s.flow.name|default:"—" }}</td>
         <td>{% if s.flow %}{{ s.flow.source_conn.name }}: {{ s.flow.source_path }}{% else %}—{% endif %}</td>
         <td>{% if s.flow %}{{ s.flow.dest_conn.name }}: {{ s.flow.dest_path }}{% else %}—{% endif %}</td>
         <td>{{ s.cron_expr }}</td>
         <td>{{ s.last_run|date:"Y-m-d H:i"|default:"—" }}</td>
-        <td>{% if s.enabled %}<span style="color:var(--green-bright);">● ACTIVE</span>{% else %}<span style="color:#555;">○ PAUSED</span>{% endif %}</td>
+        <td>{% if s.enabled %}<span class="glow">● Active</span>{% else %}<span class="text-dim">○ Paused</span>{% endif %}</td>
         <td>
           {% if user.is_admin %}
-          <form method="post" action="{% url 'scheduler:toggle' s.pk %}" style="display:inline">{% csrf_token %}
-            <button type="submit" class="btn btn-warn">{% if s.enabled %}[PAUSE]{% else %}[RESUME]{% endif %}</button>
+          <form method="post" action="{% url 'scheduler:toggle' s.pk %}" class="inline-form">{% csrf_token %}
+            <button type="submit" class="btn btn-warn btn-small">{% if s.enabled %}Pause{% else %}Resume{% endif %}</button>
           </form>
-          <a href="{% url 'scheduler:edit' s.pk %}" class="btn">[EDIT]</a>
-          <form method="post" action="{% url 'scheduler:delete' s.pk %}" style="display:inline"
+          <a href="{% url 'scheduler:edit' s.pk %}" class="btn btn-small">Edit</a>
+          <form method="post" action="{% url 'scheduler:delete' s.pk %}" class="inline-form"
             data-confirm="DELETE schedule?">{% csrf_token %}
-            <button type="submit" class="btn btn-danger">[DEL]</button>
+            <button type="submit" class="btn btn-danger btn-small">Del</button>
           </form>
           {% else %}
-          <span style="color:#555;">—</span>
+          <span class="text-dim">—</span>
           {% endif %}
         </td>
       </tr>
@@ -41,7 +41,7 @@
     </tbody>
   </table>
   {% else %}
-  <p style="color:#555;">NO SCHEDULES — ADD ONE ABOVE</p>
+  <p class="text-muted">No schedules — add one above</p>
   {% endif %}
 </div>
 {% endblock %}
