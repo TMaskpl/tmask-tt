@@ -2,22 +2,22 @@
 {% load static %}
 {% block title %}{{ action }} CONNECTION{% endblock %}
 {% block content %}
-<div class="box" style="max-width:700px;">
-  <span class="box-title">{{ action }} CONNECTION</span>
+<div class="panel" style="max-width:700px;">
+  <span class="panel-title">{{ action }} Connection</span>
   <form method="post">
     {% csrf_token %}
     {% if form.non_field_errors %}
-    <div class="msg-error">{% for e in form.non_field_errors %}> {{ e }}{% endfor %}</div>
+    <div class="msg-error">{% for e in form.non_field_errors %}{{ e }}{% endfor %}</div>
     {% endif %}
 
-    <div class="box box-nested">
-      <span class="box-title">PODSTAWOWE</span>
+    <div class="panel-nested">
+      <span class="panel-title">Podstawowe</span>
       {% include "connections/_field.html" with field=form.name %}
       {% include "connections/_field.html" with field=form.kind %}
     </div>
 
-    <div class="box box-nested">
-      <span class="box-title">POŁĄCZENIE</span>
+    <div class="panel-nested">
+      <span class="panel-title">Połączenie</span>
       <div class="field-grid">
         {% include "connections/_field.html" with field=form.host %}
         {% include "connections/_field.html" with field=form.port %}
@@ -28,13 +28,13 @@
       </div>
     </div>
 
-    <div class="box box-nested db-kind-field">
-      <span class="box-title">DATABASE</span>
+    <div class="panel-nested db-kind-field">
+      <span class="panel-title">Database</span>
       {% include "connections/_field.html" with field=form.db_name %}
     </div>
 
-    <div class="box box-nested ssh-only-field">
-      <span class="box-title">SSH</span>
+    <div class="panel-nested ssh-only-field">
+      <span class="panel-title">SSH</span>
       <div class="field-grid">
         {% include "connections/_field.html" with field=form.protocol %}
         {% include "connections/_field.html" with field=form.compress %}
@@ -46,46 +46,46 @@
       {% include "connections/_field.html" with field=form.ssh_key %}
       {% include "connections/_field.html" with field=form.ssh_key_passphrase %}
       <div class="field" id="known-host-section" style="display:none">
-        <label>{{ form.known_host_key.label|upper }}:</label>
+        <label>{{ form.known_host_key.label }}</label>
         {{ form.known_host_key }}
         {% if conn %}
         <div style="margin-top:0.4rem;">
-          <button type="button" class="btn btn-warn" id="scan-btn"
-                  data-scan-url="{% url 'connections:scan_hostkey' conn.pk %}">[ SCAN HOST KEY ]</button>
+          <button type="button" class="btn btn-warn btn-small" id="scan-btn"
+                  data-scan-url="{% url 'connections:scan_hostkey' conn.pk %}">Scan Host Key</button>
           <span id="scan-result" style="font-size:0.8rem; margin-left:0.5rem;"></span>
         </div>
         {% endif %}
         {% if form.known_host_key.errors %}
-        <div style="color:var(--red);font-size:0.8rem;">{% for e in form.known_host_key.errors %}{{ e }}{% endfor %}</div>
+        <div class="field-error">{% for e in form.known_host_key.errors %}{{ e }}{% endfor %}</div>
         {% endif %}
       </div>
     </div>
 
-    <div class="box box-nested">
-      <span class="box-title">ZAAWANSOWANE</span>
+    <div class="panel-nested">
+      <span class="panel-title">Zaawansowane</span>
       <div class="field-grid">
         <div class="field ssh-only-field">
-          <label>{{ form.dry_run_before_transfer.label|upper }}:</label>
+          <label>{{ form.dry_run_before_transfer.label }}</label>
           {{ form.dry_run_before_transfer }}
-          <span style="font-size:0.75rem;color:var(--dim);">Sprawdza listę plików bez kopiowania. Transfer anulowany jeśli dry-run zakończy się błędem.</span>
+          <span class="field-hint">Sprawdza listę plików bez kopiowania. Transfer anulowany jeśli dry-run zakończy się błędem.</span>
           {% if form.dry_run_before_transfer.errors %}
-          <div style="color:var(--red);font-size:0.8rem;">{% for e in form.dry_run_before_transfer.errors %}{{ e }}{% endfor %}</div>
+          <div class="field-error">{% for e in form.dry_run_before_transfer.errors %}{{ e }}{% endfor %}</div>
           {% endif %}
         </div>
         <div class="field ssh-only-field">
-          <label>{{ form.verify_checksum.label|upper }}:</label>
+          <label>{{ form.verify_checksum.label }}</label>
           {{ form.verify_checksum }}
-          <span style="font-size:0.75rem;color:var(--dim);">Wymaga sha256sum na zdalnym hoście. Ignorowane gdy GPG włączone.</span>
+          <span class="field-hint">Wymaga sha256sum na zdalnym hoście. Ignorowane gdy GPG włączone.</span>
           {% if form.verify_checksum.errors %}
-          <div style="color:var(--red);font-size:0.8rem;">{% for e in form.verify_checksum.errors %}{{ e }}{% endfor %}</div>
+          <div class="field-error">{% for e in form.verify_checksum.errors %}{{ e }}{% endfor %}</div>
           {% endif %}
         </div>
       </div>
     </div>
 
-    <div style="display:flex;gap:1rem;margin-top:1.5rem;">
-      <button type="submit" class="btn">[ SAVE ]</button>
-      <a href="{% url 'connections:list' %}" class="btn btn-danger">[ CANCEL ]</a>
+    <div class="form-actions">
+      <button type="submit" class="btn">Save</button>
+      <a href="{% url 'connections:list' %}" class="btn btn-danger">Cancel</a>
     </div>
   </form>
 </div>

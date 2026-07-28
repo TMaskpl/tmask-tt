@@ -1,7 +1,7 @@
 <div class="field">
-  <label>{{ field.label|upper }}:</label>
+  <label>{{ field.label }}</label>
   {{ field }}
   {% if field.errors %}
-  <div style="color:var(--red);font-size:0.8rem;">{% for e in field.errors %}{{ e }}{% endfor %}</div>
+  <div class="field-error">{% for e in field.errors %}{{ e }}{% endfor %}</div>
   {% endif %}
 </div>

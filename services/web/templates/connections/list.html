@@ -1,44 +1,44 @@
 {% extends "base.html" %}
 {% block title %}CONNECTIONS — TMASK-TRANSPORTER{% endblock %}
 {% block content %}
-<div class="box">
-  <span class="box-title">CONNECTIONS</span>
+<div class="panel">
+  <span class="panel-title">Connections</span>
   <div class="toolbar">
     {% if user.is_admin %}
-    <a href="{% url 'connections:create' %}" class="btn">[ + NEW CONNECTION ]</a>
+    <a href="{% url 'connections:create' %}" class="btn">+ New Connection</a>
     {% endif %}
   </div>
   {% if connections %}
   <table>
     <thead>
       <tr>
-        <th>NAME</th><th>KIND</th><th>HOST</th><th>PORT</th><th>PROTO</th>
-        <th>COMPRESS</th><th>ENCRYPT</th><th>UTWORZYŁ</th><th class="col-actions">ACTIONS</th>
+        <th>Name</th><th>Kind</th><th>Host</th><th>Port</th><th>Proto</th>
+        <th>Compress</th><th>Encrypt</th><th>Utworzył</th><th class="col-actions">Actions</th>
       </tr>
     </thead>
     <tbody>
       {% for conn in connections %}
       <tr>
-        <td class="glow">{{ conn.name }}</td>
+        <td>{{ conn.name }}</td>
         <td>{{ conn.kind|upper }}</td>
         <td>{{ conn.host }}</td>
         <td>{{ conn.port }}</td>
         <td>{{ conn.protocol|upper }}</td>
-        <td>{% if conn.compress %}YES{% else %}—{% endif %}</td>
-        <td>{% if conn.encrypt %}YES{% else %}—{% endif %}</td>
+        <td>{% if conn.compress %}Yes{% else %}—{% endif %}</td>
+        <td>{% if conn.encrypt %}Yes{% else %}—{% endif %}</td>
         <td>{{ conn.owner.username }}</td>
         <td class="col-actions">
           <div class="row-actions">
             <button class="btn btn-small btn-warn"
               hx-get="{% url 'connections:test' conn.pk %}"
               hx-target="#test-result-{{ conn.pk }}"
-              hx-swap="innerHTML">[TEST]</button>
+              hx-swap="innerHTML">Test</button>
             {% if user.is_admin %}
-            <a href="{% url 'connections:edit' conn.pk %}" class="btn btn-small">[EDIT]</a>
-            <form method="post" action="{% url 'connections:delete' conn.pk %}" style="display:inline"
+            <a href="{% url 'connections:edit' conn.pk %}" class="btn btn-small">Edit</a>
+            <form method="post" action="{% url 'connections:delete' conn.pk %}" class="inline-form"
               data-confirm="DELETE {{ conn.name }}?">
               {% csrf_token %}
-              <button type="submit" class="btn btn-small btn-danger">[DEL]</button>
+              <button type="submit" class="btn btn-small btn-danger">Del</button>
             </form>
             {% endif %}
             <span id="test-result-{{ conn.pk }}" class="test-result"></span>
@@ -49,7 +49,7 @@
     </tbody>
   </table>
   {% else %}
-  <p style="color:#6a8a6a;">NO CONNECTIONS CONFIGURED — ADD ONE ABOVE</p>
+  <p class="text-muted">No connections configured — add one above</p>
   {% endif %}
 </div>
 {% endblock %}
