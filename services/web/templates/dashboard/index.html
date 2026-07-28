@@ -3,8 +3,8 @@
 {% block title %}DASHBOARD — TMASK-TRANSPORTER{% endblock %}
 {% block content %}
 <div class="dash-header">
-  <h1 class="glow">DASHBOARD</h1>
-  <span class="dash-sub">// ostatnie 30 dni</span>
+  <h1>Dashboard</h1>
+  <span class="dash-sub">ostatnie 30 dni</span>
 </div>
 
 {{ data|json_script:"dashboard-data" }}
@@ -30,24 +30,24 @@
 </section>
 
 <div class="chart-grid">
-  <div class="box chart-box">
-    <span class="box-title">Transfery / dzień</span>
+  <div class="panel chart-box">
+    <span class="panel-title">Transfery / dzień</span>
     <div class="chart-canvas"><canvas id="chart-per-day"></canvas></div>
   </div>
-  <div class="box chart-box">
-    <span class="box-title">Success rate</span>
+  <div class="panel chart-box">
+    <span class="panel-title">Success rate</span>
     <div class="chart-canvas"><canvas id="chart-success"></canvas></div>
   </div>
-  <div class="box chart-box chart-full">
-    <span class="box-title">Top źródła</span>
+  <div class="panel chart-box chart-full">
+    <span class="panel-title">Top źródła</span>
     <div class="chart-canvas"><canvas id="chart-top"></canvas></div>
   </div>
 </div>
 {% else %}
-<div class="dash-empty">BRAK DANYCH — wykonaj pierwszy transfer</div>
+<div class="dash-empty">Brak danych — wykonaj pierwszy transfer</div>
 {% endif %}
 {% endblock %}
 {% block scripts %}
 <script src="{% static 'js/chart.min.js' %}"></script>
-<script src="{% static 'js/dashboard.js' %}?v=2"></script>
+<script src="{% static 'js/dashboard.js' %}?v=3"></script>
 {% endblock %}

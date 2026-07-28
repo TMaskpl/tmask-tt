@@ -3,9 +3,9 @@
   if (!el) return;
   const data = JSON.parse(el.textContent);
 
-  // paleta CRT (tokeny z crt.css)
-  const GREEN = '#00ff41', RED = '#ff3333', AMBER = '#ffb000';
-  const GRID = 'rgba(51, 255, 51, 0.08)', TICK = '#7fae7f';
+  // paleta Dark Ops Console (tokeny z crt.css :root)
+  const ACCENT = '#22c55e', DANGER = '#ef4444', WARN = '#f59e0b';
+  const GRID = 'rgba(148, 163, 184, 0.12)', TICK = '#94a3b8';
 
   if (!data.success || data.success.total === 0) {
     const empty = document.getElementById('dashboard-empty');
@@ -14,7 +14,7 @@
   }
 
   Chart.defaults.color = TICK;
-  Chart.defaults.font.family = "'JetBrains Mono', monospace";
+  Chart.defaults.font.family = "'Inter', -apple-system, sans-serif";
   Chart.defaults.font.size = 11;
   Chart.defaults.animation.duration = 700;
   Chart.defaults.animation.easing = 'easeOutQuart';
@@ -27,8 +27,8 @@
     data: {
       labels: data.per_day.labels,
       datasets: [
-        { label: 'DONE', data: data.per_day.done, backgroundColor: GREEN, borderRadius: 2, maxBarThickness: 22 },
-        { label: 'FAILED', data: data.per_day.failed, backgroundColor: RED, borderRadius: 2, maxBarThickness: 22 },
+        { label: 'DONE', data: data.per_day.done, backgroundColor: ACCENT, borderRadius: 4, maxBarThickness: 22 },
+        { label: 'FAILED', data: data.per_day.failed, backgroundColor: DANGER, borderRadius: 4, maxBarThickness: 22 },
       ],
     },
     options: {
@@ -46,8 +46,8 @@
       labels: ['DONE', 'FAILED', 'OTHER'],
       datasets: [{
         data: [data.success.done, data.success.failed, data.success.other],
-        backgroundColor: [GREEN, RED, AMBER],
-        borderColor: '#0a0a0a',
+        backgroundColor: [ACCENT, DANGER, WARN],
+        borderColor: '#1e293b',
         borderWidth: 2,
         hoverOffset: 8,
       }],
@@ -62,7 +62,7 @@
     type: 'bar',
     data: {
       labels: data.top.labels,
-      datasets: [{ label: 'JOBS', data: data.top.counts, backgroundColor: GREEN, borderRadius: 2, maxBarThickness: 18 }],
+      datasets: [{ label: 'JOBS', data: data.top.counts, backgroundColor: ACCENT, borderRadius: 4, maxBarThickness: 18 }],
     },
     options: {
       indexAxis: 'y',
