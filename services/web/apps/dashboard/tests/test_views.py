@@ -1,5 +1,7 @@
 import pytest
 from datetime import timedelta
+from django.conf import settings
+from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
@@ -58,3 +60,11 @@ class TestOrgWideStats:
     def test_readonly_can_view_dashboard(self, readonly_client):
         resp = readonly_client.get(reverse('dashboard:index'))
         assert resp.status_code == 200
+
+
+class DarkOpsConsoleTokensTest(TestCase):
+    def test_stylesheet_defines_design_tokens(self):
+        css_path = settings.BASE_DIR / "static" / "css" / "crt.css"
+        content = css_path.read_text()
+        for token in ("--bg:", "--surface:", "--accent:", "--danger:", "--font-ui:", "--font-mono:"):
+            self.assertIn(token, content, f"brak tokenu {token} w crt.css")
