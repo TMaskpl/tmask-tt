@@ -23,7 +23,7 @@ class ConnectionForm(forms.ModelForm):
             'ssh_key_passphrase': forms.PasswordInput(render_value=True, attrs={'autocomplete': 'new-password'}),
             'known_host_key': forms.Textarea(attrs={
                 'rows': 3,
-                'placeholder': 'hostname ssh-rsa AAAA... — kliknij [SCAN] aby pobrać automatycznie',
+                'placeholder': 'hostname ssh-rsa AAAA... — kliknij Scan Host Key aby pobrać automatycznie',
             }),
         }
 

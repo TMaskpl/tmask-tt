@@ -26,7 +26,7 @@
     <a href="{% url 'audit_log:list' %}" class="{% if request.resolver_match.app_name == 'audit_log' %}active{% endif %}">Audit Log</a>
     {% endif %}
     <span class="nav-right">
-      {{ user.username|upper }} [{{ user.role|upper }}]
+      {{ user.username|upper }} — {{ user.role|upper }}
       &nbsp;|&nbsp;
       <a href="{% url 'accounts:profile' %}">Profil</a>
       &nbsp;|&nbsp;
