@@ -13,26 +13,26 @@
 <body>
   {% if user.is_authenticated %}
   <nav>
-    <a href="{% url 'dashboard:index' %}" class="logo {% if request.resolver_match.app_name == 'dashboard' %}active{% endif %}" title="Dashboard">[ TMASK-TRANSPORTER ]</a>
+    <a href="{% url 'dashboard:index' %}" class="logo {% if request.resolver_match.app_name == 'dashboard' %}active{% endif %}" title="Dashboard">TMASK-TRANSPORTER</a>
     <span class="org-name">{{ organization.name }}</span>
-    <a href="{% url 'transfers:create' %}" class="{% if request.resolver_match.app_name == 'transfers' %}active{% endif %}">TRANSFERS</a>
-    <a href="{% url 'connections:list' %}" class="{% if request.resolver_match.app_name == 'connections' %}active{% endif %}">CONNECTIONS</a>
-    <a href="{% url 'flows:list' %}" class="{% if request.resolver_match.app_name == 'flows' %}active{% endif %}">FLOWS</a>
-    <a href="{% url 'scheduler:list' %}" class="{% if request.resolver_match.app_name == 'scheduler' %}active{% endif %}">SCHEDULER</a>
-    <a href="{% url 'db_transfers:list' %}" class="{% if request.resolver_match.app_name == 'db_transfers' %}active{% endif %}">DB TRANSFERS</a>
-    <a href="{% url 'transfers:logs' %}">LOGS</a>
+    <a href="{% url 'transfers:create' %}" class="{% if request.resolver_match.app_name == 'transfers' %}active{% endif %}">Transfers</a>
+    <a href="{% url 'connections:list' %}" class="{% if request.resolver_match.app_name == 'connections' %}active{% endif %}">Connections</a>
+    <a href="{% url 'flows:list' %}" class="{% if request.resolver_match.app_name == 'flows' %}active{% endif %}">Flows</a>
+    <a href="{% url 'scheduler:list' %}" class="{% if request.resolver_match.app_name == 'scheduler' %}active{% endif %}">Scheduler</a>
+    <a href="{% url 'db_transfers:list' %}" class="{% if request.resolver_match.app_name == 'db_transfers' %}active{% endif %}">DB Transfers</a>
+    <a href="{% url 'transfers:logs' %}">Logs</a>
     {% if user.is_admin %}
-    <a href="{% url 'accounts:users' %}">USERS</a>
-    <a href="{% url 'audit_log:list' %}" class="{% if request.resolver_match.app_name == 'audit_log' %}active{% endif %}">AUDIT LOG</a>
+    <a href="{% url 'accounts:users' %}">Users</a>
+    <a href="{% url 'audit_log:list' %}" class="{% if request.resolver_match.app_name == 'audit_log' %}active{% endif %}">Audit Log</a>
     {% endif %}
     <span class="nav-right">
-      USER: {{ user.username|upper }} [{{ user.role|upper }}]
+      {{ user.username|upper }} [{{ user.role|upper }}]
       &nbsp;|&nbsp;
-      <a href="{% url 'accounts:profile' %}">PROFIL</a>
+      <a href="{% url 'accounts:profile' %}">Profil</a>
       &nbsp;|&nbsp;
-      <form method="post" action="{% url 'accounts:logout' %}" style="display:inline">
+      <form method="post" action="{% url 'accounts:logout' %}" class="inline-form">
         {% csrf_token %}
-        <button type="submit" class="btn" style="border:none;padding:0;">LOGOUT</button>
+        <button type="submit" class="btn btn-small">Logout</button>
       </form>
     </span>
   </nav>
@@ -43,7 +43,7 @@
     <div class="messages">
       {% for message in messages %}
       <div class="msg-{% if message.tags == 'error' %}error{% else %}success{% endif %}">
-        > {{ message }}
+        {{ message }}
       </div>
       {% endfor %}
     </div>
@@ -52,9 +52,9 @@
   </main>
   <div id="file-browser-overlay" style="display:none">
     <div id="file-browser-modal">
-      <span class="box-title">FILE BROWSER</span>
+      <span class="panel-title">File Browser</span>
       <div id="file-browser-content"></div>
-      <button type="button" class="btn btn-danger" data-browse-close>[ ZAMKNIJ ]</button>
+      <button type="button" class="btn btn-danger" data-browse-close>Zamknij</button>
     </div>
   </div>
   {% block scripts %}{% endblock %}

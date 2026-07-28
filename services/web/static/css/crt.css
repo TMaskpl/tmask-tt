@@ -418,3 +418,52 @@ label.btn-small { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   .status-running { animation: none; }
 }
+
+/* ============================================================
+   FILE BROWSER MODAL
+   ============================================================ */
+#file-browser-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+#file-browser-modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-raised);
+  padding: 1.5rem;
+  width: min(700px, 90vw);
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+#file-browser-content {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 200px;
+}
+
+.breadcrumbs {
+  font-size: var(--font-size-sm);
+  color: var(--warn);
+  margin-bottom: 0.5rem;
+  word-break: break-all;
+}
+.breadcrumbs a { color: var(--warn); text-decoration: none; }
+.breadcrumbs a:hover { color: var(--accent); }
+
+.file-list { list-style: none; }
+.file-list li { padding: 0.3rem 0; border-bottom: 1px solid var(--border-subtle); }
+.file-list a { color: var(--text); text-decoration: none; }
+.file-list a:hover { color: var(--accent); }
+
+.browse-actions { margin-bottom: 0.5rem; }
