@@ -1,19 +1,19 @@
 {% extends "base.html" %}
 {% block title %}DB TRANSFERS — TMASK-TRANSPORTER{% endblock %}
 {% block content %}
-<div class="box">
-  <span class="box-title">DB TRANSFERS</span>
+<div class="panel">
+  <span class="panel-title">DB Transfers</span>
   <div class="toolbar">
     {% if user.can_operate %}
-    <a href="{% url 'db_transfers:create' %}" class="btn">[ + NEW DB TRANSFER ]</a>
+    <a href="{% url 'db_transfers:create' %}" class="btn">+ New DB Transfer</a>
     {% endif %}
   </div>
   {% if jobs %}
   <table>
     <thead>
       <tr>
-        <th>#</th><th>ENGINE</th><th>SOURCE</th><th>DEST</th><th>SCOPE</th>
-        <th>STATUS</th><th>STARTED</th><th>FINISHED</th><th>ACTIONS</th>
+        <th>#</th><th>Engine</th><th>Source</th><th>Dest</th><th>Scope</th>
+        <th>Status</th><th>Started</th><th>Finished</th><th>Actions</th>
       </tr>
     </thead>
     <tbody>
@@ -23,18 +23,18 @@
         <td><span class="status">{{ job.engine|upper }}</span></td>
         <td>{{ job.source_connection.name }}</td>
         <td>{{ job.dest_connection.name }}</td>
-        <td>{% if job.table_name %}{{ job.table_name }}{% else %}CAŁA BAZA{% endif %}</td>
+        <td>{% if job.table_name %}{{ job.table_name }}{% else %}Cała baza{% endif %}</td>
         <td><span class="status status-{{ job.status }}">{{ job.status|upper }}</span></td>
         <td>{{ job.started_at|date:"Y-m-d H:i"|default:"—" }}</td>
         <td>{{ job.finished_at|date:"Y-m-d H:i"|default:"—" }}</td>
         <td class="col-actions">
           <div class="row-actions">
-            <a href="{% url 'db_transfers:detail' job.pk %}" class="btn btn-small">[VIEW]</a>
+            <a href="{% url 'db_transfers:detail' job.pk %}" class="btn btn-small">View</a>
             {% if user.is_admin %}
-            <form method="post" action="{% url 'db_transfers:delete' job.pk %}" style="display:inline"
+            <form method="post" action="{% url 'db_transfers:delete' job.pk %}" class="inline-form"
               data-confirm="DELETE transfer #{{ job.pk }}?">
               {% csrf_token %}
-              <button type="submit" class="btn btn-small btn-danger">[DEL]</button>
+              <button type="submit" class="btn btn-small btn-danger">Del</button>
             </form>
             {% endif %}
           </div>
@@ -44,7 +44,7 @@
     </tbody>
   </table>
   {% else %}
-  <p style="color:#555;">NO DB TRANSFERS YET</p>
+  <p class="text-muted">No DB transfers yet</p>
   {% endif %}
 </div>
 {% endblock %}

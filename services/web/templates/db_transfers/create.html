@@ -2,39 +2,39 @@
 {% load static %}
 {% block title %}NEW DB TRANSFER — TMASK-TRANSPORTER{% endblock %}
 {% block content %}
-<div class="box" style="max-width:600px;">
-  <span class="box-title">NEW DB TRANSFER</span>
+<div class="panel" style="max-width:600px;">
+  <span class="panel-title">New DB Transfer</span>
   <form method="post" id="db-transfer-form" data-db-tables-url="{% url 'connections:db_tables' %}">
     {% csrf_token %}
     {% if form.non_field_errors %}
     <div class="msg-error" style="margin-bottom:1rem;">
-      {% for error in form.non_field_errors %}&gt; {{ error }}<br>{% endfor %}
+      {% for error in form.non_field_errors %}{{ error }}<br>{% endfor %}
     </div>
     {% endif %}
     {% for field in form %}
     {% if field.name == 'engine' %}
     <div class="field">
-      <label>{{ field.label|upper }}:</label>
+      <label>{{ field.label }}</label>
       {{ field }}
-      {% if field.errors %}<div style="color:var(--red);font-size:0.8rem;">{{ field.errors }}</div>{% endif %}
+      {% if field.errors %}<div class="field-error">{{ field.errors }}</div>{% endif %}
     </div>
     {% elif field.name == 'table_name' %}
     <div class="field">
-      <label>{{ field.label|upper }}:</label>
+      <label>{{ field.label }}</label>
       <select id="id_table_name" name="table_name">
         <option value="">— wybierz najpierw SOURCE CONNECTION —</option>
       </select>
-      {% if field.errors %}<div style="color:var(--red);font-size:0.8rem;">{{ field.errors }}</div>{% endif %}
+      {% if field.errors %}<div class="field-error">{{ field.errors }}</div>{% endif %}
     </div>
     {% else %}
     <div class="field">
-      <label>{{ field.label|upper }}:</label>
+      <label>{{ field.label }}</label>
       {{ field }}
-      {% if field.errors %}<div style="color:var(--red);font-size:0.8rem;">{{ field.errors }}</div>{% endif %}
+      {% if field.errors %}<div class="field-error">{{ field.errors }}</div>{% endif %}
     </div>
     {% endif %}
     {% endfor %}
-    <button type="submit" class="btn" id="execute-btn">[ EXECUTE TRANSFER ]</button>
+    <button type="submit" class="btn" id="execute-btn">Execute Transfer</button>
   </form>
 </div>
 <script src="{% static 'js/db_transfers_create.js' %}"></script>
