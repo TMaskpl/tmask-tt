@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% block title %}WEBHOOK DELIVERIES — TMASK-TRANSPORTER{% endblock %}
 {% block content %}
-<div class="box">
-  <span class="box-title">HISTORIA DOSTARCZEŃ WEBHOOKA (OSTATNIE {{ deliveries|length }})</span>
+<div class="panel">
+  <span class="panel-title">Historia dostarczeń webhooka (ostatnie {{ deliveries|length }})</span>
   {% if circuit_open %}
   <div class="msg-error" style="margin-bottom:1rem;">
-    &gt; CIRCUIT BREAKER OTWARTY — dostarczenia wstrzymane do {{ circuit_open_until|date:"Y-m-d H:i:s" }}
+    Circuit breaker otwarty — dostarczenia wstrzymane do {{ circuit_open_until|date:"Y-m-d H:i:s" }}
     (zbyt wiele kolejnych błędów pod rząd)
   </div>
   {% endif %}
@@ -13,7 +13,7 @@
   <table>
     <thead>
       <tr>
-        <th>DATA</th><th>TRANSFER</th><th>STATUS</th><th>URL</th><th>BŁĄD</th>
+        <th>Data</th><th>Transfer</th><th>Status</th><th>URL</th><th>Błąd</th>
       </tr>
     </thead>
     <tbody>
@@ -23,11 +23,11 @@
         <td>{% if d.job %}<a href="{% url 'transfers:detail' d.job.pk %}">#{{ d.job.pk }}</a>{% else %}—{% endif %}</td>
         <td>
           {% if d.skipped %}
-          <span class="status status-pending">SKIPPED</span>
+          <span class="status status-pending">Skipped</span>
           {% elif d.success %}
           <span class="status status-done">OK</span>
           {% else %}
-          <span class="status status-failed">FAILED</span>
+          <span class="status status-failed">Failed</span>
           {% endif %}
         </td>
         <td>{{ d.url|truncatechars:45 }}</td>
@@ -37,7 +37,7 @@
     </tbody>
   </table>
   {% else %}
-  <p>Brak dostarczeń webhooka.</p>
+  <p class="text-muted">Brak dostarczeń webhooka.</p>
   {% endif %}
 </div>
 {% endblock %}

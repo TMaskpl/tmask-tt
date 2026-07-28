@@ -41,4 +41,4 @@ class TestWebhookDeliveriesList:
         regular_user.save(update_fields=['webhook_circuit_open_until'])
         response = auth_client.get(reverse('webhook_deliveries:list'))
         assert response.context['circuit_open'] is True
-        assert 'CIRCUIT BREAKER' in response.content.decode()
+        assert 'Circuit breaker' in response.content.decode()

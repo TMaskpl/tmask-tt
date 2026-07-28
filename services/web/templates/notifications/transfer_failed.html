@@ -3,19 +3,19 @@
 <head>
 <meta charset="UTF-8">
 <style>
-  body { background:#0a0a0a; color:#33ff33; font-family:monospace; padding:20px; }
-  .header { border:1px solid #ff3333; padding:10px 20px; margin-bottom:20px; }
-  .header h1 { color:#ff3333; font-size:16px; margin:0; letter-spacing:2px; }
+  body { background:#0f172a; color:#f8fafc; font-family:sans-serif; padding:20px; }
+  .header { border:1px solid #ef4444; border-radius:8px; padding:10px 20px; margin-bottom:20px; }
+  .header h1 { color:#ef4444; font-size:16px; margin:0; letter-spacing:0.02em; }
   table { border-collapse:collapse; width:100%; }
-  td { padding:4px 12px; color:#33ff33; }
-  td:first-child { color:#aaffaa; width:80px; }
-  .error-row td { color:#ff3333; }
-  .footer { margin-top:20px; border-top:1px solid #33ff33; padding-top:10px; font-size:11px; color:#557755; }
+  td { padding:4px 12px; color:#f8fafc; }
+  td:first-child { color:#94a3b8; width:80px; }
+  .error-row td { color:#ef4444; }
+  .footer { margin-top:20px; border-top:1px solid #334155; padding-top:10px; font-size:11px; color:#64748b; }
 </style>
 </head>
 <body>
   <div class="header">
-    <h1>[ TMASK TRANSPORTER — TRANSFER FAILED ]</h1>
+    <h1>TMask Transporter — Transfer Failed</h1>
   </div>
   <p>Job #{{ job.pk }} zakończony błędem.</p>
   <table>
@@ -23,7 +23,7 @@
     <tr><td>TO</td><td>{{ job.destination_path }}</td></tr>
     <tr><td>START</td><td>{% if job.started_at %}{{ job.started_at|date:"Y-m-d H:i" }}{% else %}—{% endif %}</td></tr>
     <tr class="error-row"><td>ERROR</td><td>{{ job.error_message|default:"UNKNOWN ERROR" }}</td></tr>
-    <tr><td>HOST</td><td>{% if job.connection %}{{ job.connection.name }} ({{ job.connection.protocol|upper }}){% elif job.flow %}RELAY: {{ job.flow.name }}{% else %}—{% endif %}</td></tr>
+    <tr><td>HOST</td><td>{% if job.connection %}{{ job.connection.name }} ({{ job.connection.protocol|upper }}){% elif job.flow %}Relay: {{ job.flow.name }}{% else %}—{% endif %}</td></tr>
   </table>
   <div class="footer">TMask Transporter &mdash; ustawienia powiadomień: /accounts/profile/</div>
 </body>

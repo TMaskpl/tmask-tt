@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 {% block title %}AUDIT LOG — TMASK-TRANSPORTER{% endblock %}
 {% block content %}
-<div class="box">
-  <span class="box-title">AUDIT LOG — ZMIANY KONFIGURACJI (OSTATNIE {{ entries|length }})</span>
+<div class="panel">
+  <span class="panel-title">Audit Log — zmiany konfiguracji (ostatnie {{ entries|length }})</span>
   {% if entries %}
   <table>
     <thead>
       <tr>
-        <th>DATA</th><th>USER</th><th>AKCJA</th><th>OBIEKT</th><th>ZMIANY</th>
+        <th>Data</th><th>User</th><th>Akcja</th><th>Obiekt</th><th>Zmiany</th>
       </tr>
     </thead>
     <tbody>
@@ -31,7 +31,7 @@
     </tbody>
   </table>
   {% else %}
-  <p>Brak wpisów audytu.</p>
+  <p class="text-muted">Brak wpisów audytu.</p>
   {% endif %}
 </div>
 {% endblock %}

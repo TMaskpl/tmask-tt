@@ -197,14 +197,14 @@ class TestNotificationTemplates:
         result = render_to_string('notifications/transfer_done.html', {'job': job})
         assert str(job.pk) in result
         assert '/data/file.tar' in result
-        assert '33ff33' in result
+        assert '22c55e' in result
 
     def test_failed_html_contains_error_color(self, django_user_model):
         from django.template.loader import render_to_string
         job = self._make_job(django_user_model, 'failed', error_message='TIMEOUT')
         result = render_to_string('notifications/transfer_failed.html', {'job': job})
         assert 'TIMEOUT' in result
-        assert 'ff3333' in result
+        assert 'ef4444' in result
 
 
 @pytest.mark.django_db
