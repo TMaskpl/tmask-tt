@@ -3,248 +3,20 @@
 {% block content %}
 {% load static %}
 
-<style>
-/* ── Profile layout ──────────────────────────────── */
-.profile-header {
-  border: 1px solid var(--border);
-  padding: 0.75rem 1.25rem;
-  margin-bottom: 2rem;
-  display: flex;
-  gap: 3rem;
-  align-items: center;
-  background: rgba(0,255,65,0.02);
-}
-.profile-header .ph-field { display: flex; flex-direction: column; gap: 0.15rem; }
-.profile-header .ph-label { font-size: 0.7rem; color: #556655; letter-spacing: 2px; }
-.profile-header .ph-value {
-  color: var(--green-bright);
-  font-size: 1rem;
-  letter-spacing: 3px;
-  text-shadow: 0 0 8px rgba(0,255,65,0.6);
-}
-
-.profile-grid {
-  display: grid;
-  grid-template-columns: 1fr 400px;
-  gap: 1.5rem;
-  align-items: start;
-}
-
-/* ── Channel cards ───────────────────────────────── */
-.channel-card {
-  border: 1px solid var(--border);
-  padding: 1.25rem 1.25rem 1rem;
-  margin-bottom: 1.25rem;
-  position: relative;
-  transition: border-color 0.2s;
-}
-.channel-card:hover { border-color: #2a6b2a; }
-
-.channel-title {
-  position: absolute;
-  top: -0.6rem;
-  left: 1rem;
-  background: var(--bg);
-  padding: 0 0.5rem;
-  font-size: 0.75rem;
-  letter-spacing: 3px;
-  text-transform: uppercase;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-.channel-title .ct-text { color: var(--green-bright); }
-.status-dot {
-  width: 7px; height: 7px;
-  border-radius: 50%;
-  display: inline-block;
-  flex-shrink: 0;
-}
-.status-dot.active {
-  background: var(--green-bright);
-  box-shadow: 0 0 6px var(--green-bright);
-  animation: pulse 2s ease-in-out infinite;
-}
-.status-dot.inactive { background: #333; border: 1px solid #444; }
-
-/* ── Form fields inside cards ────────────────────── */
-.cf-row { margin-bottom: 0.85rem; }
-.cf-row:last-child { margin-bottom: 0; }
-
-.cf-label {
-  font-size: 0.7rem;
-  color: #556655;
-  letter-spacing: 2px;
-  margin-bottom: 0.3rem;
-  display: block;
-}
-
-.cf-input-row {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-}
-.cf-input-row input[type="text"],
-.cf-input-row input[type="email"],
-.cf-input-row input[type="url"] { flex: 1; }
-
-.cf-error { color: var(--red); font-size: 0.75rem; margin-top: 0.25rem; display: block; }
-
-/* ── Checkbox rows ───────────────────────────────── */
-.cb-group { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.85rem; }
-.cb-row {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  cursor: pointer;
-}
-.cb-row input[type="checkbox"] {
-  width: 14px; height: 14px;
-  accent-color: var(--green-bright);
-  cursor: pointer;
-  flex-shrink: 0;
-}
-.cb-row label {
-  font-size: 0.75rem;
-  color: #aaffaa;
-  letter-spacing: 1px;
-  cursor: pointer;
-  margin: 0;
-}
-.cb-row:hover label { color: var(--green-bright); }
-
-/* ── Divider ─────────────────────────────────────── */
-.cf-divider {
-  border: none;
-  border-top: 1px solid #111;
-  margin: 0.85rem 0;
-}
-
-/* ── Status line inside card ─────────────────────── */
-.cf-status {
-  font-size: 0.75rem;
-  color: #556655;
-  margin-top: 0.5rem;
-  padding-top: 0.5rem;
-  border-top: 1px solid #111;
-}
-.cf-status .active-val { color: var(--green-bright); }
-
-/* ── Webhook test result ─────────────────────────── */
-#webhook-test-result { min-height: 1.2rem; margin-top: 0.4rem; font-size: 0.8rem; }
-
-/* ── Save button ─────────────────────────────────── */
-.profile-save {
-  margin-top: 0.5rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--border);
-}
-
-/* ── API Tokens panel ────────────────────────────── */
-.tokens-panel {
-  border: 1px solid var(--border);
-  padding: 1.25rem;
-  position: relative;
-}
-.tokens-title {
-  position: absolute;
-  top: -0.6rem;
-  left: 1rem;
-  background: var(--bg);
-  padding: 0 0.5rem;
-  font-size: 0.75rem;
-  letter-spacing: 3px;
-  color: var(--green-bright);
-}
-
-.tokens-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-bottom: 1rem;
-  font-size: 0.8rem;
-}
-.tokens-table th {
-  color: #556655;
-  font-size: 0.65rem;
-  letter-spacing: 2px;
-  padding: 0 0 0.4rem;
-  border-bottom: 1px solid #1a1a1a;
-  text-align: left;
-}
-.tokens-table td {
-  padding: 0.45rem 0;
-  border-bottom: 1px solid #0d0d0d;
-  vertical-align: middle;
-}
-.tokens-table tr:hover td { background: rgba(0,255,65,0.02); }
-.token-label { color: var(--green); letter-spacing: 1px; }
-.token-date { color: #446644; font-size: 0.7rem; }
-
-.token-gen-row {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-  margin-top: 0.75rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid #111;
-}
-.token-gen-row input { flex: 1; font-size: 0.8rem; }
-
-.no-tokens {
-  color: #446644;
-  font-size: 0.8rem;
-  padding: 0.5rem 0 1rem;
-  letter-spacing: 1px;
-}
-
-/* ── Backup / Restore — dwie równe karty ──────────── */
-.backup-section { margin-top: 2rem; }
-.backup-section-title {
-  font-size: 0.75rem;
-  letter-spacing: 3px;
-  color: #556655;
-  text-transform: uppercase;
-  margin-bottom: 1.5rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid #111;
-}
-.backup-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1.5rem;
-  align-items: start;
-}
-.backup-grid .channel-card { margin-bottom: 0; padding-top: 1.4rem; }
-.backup-desc {
-  color: #6a8a6a;
-  font-size: 0.78rem;
-  line-height: 1.5;
-  margin-bottom: 1.1rem;
-  min-height: 3.2em;
-}
-.backup-vform { display: flex; flex-direction: column; gap: 0.9rem; }
-.backup-vform .file-name { flex: 1; min-width: 0; }
-.backup-vform .btn:not(.btn-small) { align-self: flex-start; margin-top: 0.2rem; }
-@media (max-width: 720px) {
-  .backup-grid { grid-template-columns: 1fr; }
-  .backup-desc { min-height: 0; }
-}
-</style>
-
 {# ── Header ──────────────────────────────────────── #}
 <div class="profile-header">
   <div class="ph-field">
-    <span class="ph-label">UŻYTKOWNIK</span>
+    <span class="ph-label">Użytkownik</span>
     <span class="ph-value">{{ user.username|upper }}</span>
   </div>
   <div class="ph-field">
-    <span class="ph-label">ROLA</span>
+    <span class="ph-label">Rola</span>
     <span class="ph-value">{{ user.role|upper }}</span>
   </div>
   <div class="ph-field">
-    <span class="ph-label">EMAIL</span>
-    <span class="ph-value" style="font-size:0.85rem; letter-spacing:1px;">
-      {% if user.email %}{{ user.email }}{% else %}<span style="color:#446644">—</span>{% endif %}
+    <span class="ph-label">Email</span>
+    <span class="ph-value small">
+      {% if user.email %}{{ user.email }}{% else %}<span class="text-dim">—</span>{% endif %}
     </span>
   </div>
 </div>
@@ -261,25 +33,25 @@
       <div class="channel-card">
         <div class="channel-title">
           <span class="status-dot {% if user.email %}active{% else %}inactive{% endif %}"></span>
-          <span class="ct-text">EMAIL</span>
+          <span>Email</span>
         </div>
         <div class="cf-row">
-          <span class="cf-label">ADRES EMAIL</span>
+          <span class="cf-label">Adres email</span>
           <div class="cf-input-row">{{ form.email }}</div>
           {% if form.email.errors %}<span class="cf-error">{{ form.email.errors|join:", " }}</span>{% endif %}
         </div>
         <div class="cb-group">
           <div class="cb-row">
             {{ form.notify_on_failed }}
-            <label for="{{ form.notify_on_failed.id_for_label }}">{{ form.notify_on_failed.label|upper }}</label>
+            <label for="{{ form.notify_on_failed.id_for_label }}">{{ form.notify_on_failed.label }}</label>
           </div>
           <div class="cb-row">
             {{ form.notify_on_done }}
-            <label for="{{ form.notify_on_done.id_for_label }}">{{ form.notify_on_done.label|upper }}</label>
+            <label for="{{ form.notify_on_done.id_for_label }}">{{ form.notify_on_done.label }}</label>
           </div>
         </div>
         {% if not user.email %}
-        <div class="cf-status">&gt; BRAK ADRESU EMAIL — POWIADOMIENIA NIEAKTYWNE</div>
+        <div class="cf-status">Brak adresu email — powiadomienia nieaktywne</div>
         {% endif %}
       </div>
 
@@ -287,17 +59,17 @@
       <div class="channel-card">
         <div class="channel-title">
           <span class="status-dot {% if user.webhook_url %}active{% else %}inactive{% endif %}"></span>
-          <span class="ct-text">SLACK / WEBHOOK</span>
+          <span>Slack / Webhook</span>
         </div>
         <div class="cf-row">
-          <span class="cf-label">WEBHOOK URL</span>
+          <span class="cf-label">Webhook URL</span>
           <div class="cf-input-row">
             {{ form.webhook_url }}
             <button type="button" class="btn btn-small"
                     hx-post="{% url 'accounts:test_webhook' %}"
                     hx-include="#id_webhook_url"
                     hx-target="#webhook-test-result"
-                    hx-swap="innerHTML">[ TEST ]</button>
+                    hx-swap="innerHTML">Test</button>
           </div>
           {% if form.webhook_url.errors %}<span class="cf-error">{{ form.webhook_url.errors|join:", " }}</span>{% endif %}
           <div id="webhook-test-result"></div>
@@ -305,87 +77,87 @@
         <div class="cb-group">
           <div class="cb-row">
             {{ form.webhook_on_failed }}
-            <label for="{{ form.webhook_on_failed.id_for_label }}">{{ form.webhook_on_failed.label|upper }}</label>
+            <label for="{{ form.webhook_on_failed.id_for_label }}">{{ form.webhook_on_failed.label }}</label>
           </div>
           <div class="cb-row">
             {{ form.webhook_on_done }}
-            <label for="{{ form.webhook_on_done.id_for_label }}">{{ form.webhook_on_done.label|upper }}</label>
+            <label for="{{ form.webhook_on_done.id_for_label }}">{{ form.webhook_on_done.label }}</label>
           </div>
         </div>
         {% if user.webhook_url %}
-        <div class="cf-status">&gt; AKTYWNY — <span class="active-val">{{ user.webhook_url|truncatechars:45 }}</span></div>
+        <div class="cf-status">Aktywny — <span class="active-val">{{ user.webhook_url|truncatechars:45 }}</span></div>
         {% endif %}
-        <div class="cf-status"><a href="{% url 'webhook_deliveries:list' %}">[ HISTORIA DOSTARCZEŃ ]</a></div>
+        <div class="cf-status"><a href="{% url 'webhook_deliveries:list' %}">Historia dostarczeń</a></div>
       </div>
 
       {# TELEGRAM #}
       <div class="channel-card">
         <div class="channel-title">
           <span class="status-dot {% if user.telegram_chat_id %}active{% else %}inactive{% endif %}"></span>
-          <span class="ct-text">TELEGRAM</span>
+          <span>Telegram</span>
         </div>
         <div class="cf-row">
-          <span class="cf-label">CHAT ID</span>
+          <span class="cf-label">Chat ID</span>
           <div class="cf-input-row">{{ form.telegram_chat_id }}</div>
           {% if form.telegram_chat_id.errors %}<span class="cf-error">{{ form.telegram_chat_id.errors|join:", " }}</span>{% endif %}
         </div>
         <div class="cb-group">
           <div class="cb-row">
             {{ form.telegram_on_failed }}
-            <label for="{{ form.telegram_on_failed.id_for_label }}">{{ form.telegram_on_failed.label|upper }}</label>
+            <label for="{{ form.telegram_on_failed.id_for_label }}">{{ form.telegram_on_failed.label }}</label>
           </div>
           <div class="cb-row">
             {{ form.telegram_on_done }}
-            <label for="{{ form.telegram_on_done.id_for_label }}">{{ form.telegram_on_done.label|upper }}</label>
+            <label for="{{ form.telegram_on_done.id_for_label }}">{{ form.telegram_on_done.label }}</label>
           </div>
         </div>
         {% if user.telegram_chat_id %}
-        <div class="cf-status">&gt; AKTYWNY — chat_id: <span class="active-val">{{ user.telegram_chat_id }}</span></div>
+        <div class="cf-status">Aktywny — chat_id: <span class="active-val">{{ user.telegram_chat_id }}</span></div>
         {% endif %}
       </div>
 
       <div class="profile-save">
-        <button type="submit" class="btn">[ ZAPISZ USTAWIENIA ]</button>
+        <button type="submit" class="btn">Zapisz ustawienia</button>
       </div>
     </form>
   </div>
 
   {# ── 2FA ─────────────────────────────────────── #}
   <div class="tokens-panel" style="margin-bottom:1.5rem;">
-    <div class="tokens-title">2FA — WERYFIKACJA DWUSKŁADNIKOWA</div>
+    <div class="tokens-title">2FA — Weryfikacja dwuskładnikowa</div>
     {% if user.totp_enabled %}
-    <div class="cf-status" style="border-top:none; padding-top:0;">
+    <div class="cf-status no-border">
       <span class="status-dot active" style="margin-right:0.4rem;"></span>
-      <span class="active-val">WŁĄCZONE</span>
+      <span class="active-val">Włączone</span>
     </div>
     <form method="post" action="{% url 'accounts:2fa_disable' %}" style="margin-top:0.85rem;">
       {% csrf_token %}
       <div class="cf-row">
-        <span class="cf-label">HASŁO (POTWIERDŹ WYŁĄCZENIE)</span>
+        <span class="cf-label">Hasło (potwierdź wyłączenie)</span>
         <div class="cf-input-row">{{ totp_disable_form.password }}</div>
       </div>
-      <button type="submit" class="btn btn-danger" style="margin-top:0.5rem;">[ WYŁĄCZ 2FA ]</button>
+      <button type="submit" class="btn btn-danger" style="margin-top:0.5rem;">Wyłącz 2FA</button>
     </form>
     {% else %}
-    <div class="cf-status" style="border-top:none; padding-top:0;">
+    <div class="cf-status no-border">
       <span class="status-dot inactive" style="margin-right:0.4rem;"></span>
-      <span>WYŁĄCZONE</span>
+      <span>Wyłączone</span>
     </div>
-    <a href="{% url 'accounts:2fa_setup' %}" class="btn" style="margin-top:0.85rem; display:inline-block;">[ WŁĄCZ 2FA ]</a>
+    <a href="{% url 'accounts:2fa_setup' %}" class="btn" style="margin-top:0.85rem; display:inline-block;">Włącz 2FA</a>
     {% endif %}
   </div>
 
   {# ── Prawa kolumna: API Tokens ─────────────────── #}
   <div class="tokens-panel">
-    <div class="tokens-title">API TOKENS</div>
+    <div class="tokens-title">API Tokens</div>
 
     {% if api_tokens %}
     <table class="tokens-table">
       <thead>
         <tr>
-          <th>ETYKIETA</th>
-          <th>UTWORZONY</th>
-          <th>UŻYTY</th>
+          <th>Etykieta</th>
+          <th>Utworzony</th>
+          <th>Użyty</th>
           <th></th>
         </tr>
       </thead>
@@ -399,7 +171,7 @@
             <form method="post" action="{% url 'accounts:revoke_api_token' token.pk %}"
                   data-confirm="Usunąć token {{ token.label }}?">
               {% csrf_token %}
-              <button type="submit" class="btn btn-danger" style="padding:0.2rem 0.5rem; font-size:0.7rem; letter-spacing:1px;">REVOKE</button>
+              <button type="submit" class="btn btn-danger btn-small">Revoke</button>
             </form>
           </td>
         </tr>
@@ -407,20 +179,20 @@
       </tbody>
     </table>
     {% else %}
-    <div class="no-tokens">&gt; BRAK TOKENÓW API</div>
+    <div class="no-tokens">Brak tokenów API</div>
     {% endif %}
 
     {% if api_tokens.count < 5 %}
     <form method="post" action="{% url 'accounts:generate_api_token' %}">
       {% csrf_token %}
       <div class="token-gen-row">
-        <input type="text" id="api-token-label" name="label" class="crt-input"
+        <input type="text" id="api-token-label" name="label"
                maxlength="100" placeholder="etykieta tokenu" required>
-        <button type="submit" class="btn" style="white-space:nowrap; font-size:0.75rem; padding:0.4rem 0.7rem; letter-spacing:1px;">[ GEN ]</button>
+        <button type="submit" class="btn btn-small">Gen</button>
       </div>
     </form>
     {% else %}
-    <div class="cf-status" style="margin-top:0.5rem;">&gt; LIMIT 5 TOKENÓW — USUŃ ABY DODAĆ NOWY</div>
+    <div class="cf-status" style="margin-top:0.5rem;">Limit 5 tokenów — usuń aby dodać nowy</div>
     {% endif %}
   </div>
 
@@ -428,45 +200,45 @@
 
 {# ── Backup / Restore ─────────────────────────────── #}
 <div class="backup-section">
-  <div class="backup-section-title">BACKUP / RESTORE</div>
+  <div class="backup-section-title">Backup / Restore</div>
   <div class="backup-grid">
 
     <div class="channel-card">
-      <div class="channel-title"><span class="ct-text">EKSPORT</span></div>
+      <div class="channel-title"><span>Eksport</span></div>
       <p class="backup-desc">Pobiera całą konfigurację (połączenia + flows) do pliku JSON na Twój komputer. Sekrety szyfrowane hasłem — zapamiętaj je.</p>
       <form method="post" action="{% url 'connections:export' %}" class="backup-vform">
         {% csrf_token %}
         <div class="cf-row">
-          <span class="cf-label">HASŁO SZYFROWANIA</span>
+          <span class="cf-label">Hasło szyfrowania</span>
           <div class="cf-input-row">
             <input type="password" name="passphrase" required autocomplete="off">
           </div>
         </div>
-        <button type="submit" class="btn">[ EXPORT ]</button>
+        <button type="submit" class="btn">Export</button>
       </form>
     </div>
 
     <div class="channel-card">
-      <div class="channel-title"><span class="ct-text">IMPORT</span></div>
+      <div class="channel-title"><span>Import</span></div>
       <p class="backup-desc">Wczytuje połączenia i flows z pliku z Twojego komputera. Istniejące (po nazwie) są pomijane — nic nie nadpisuje.</p>
       <form method="post" action="{% url 'connections:import' %}" enctype="multipart/form-data" class="backup-vform">
         {% csrf_token %}
         <div class="cf-row">
-          <span class="cf-label">PLIK KONFIGURACJI</span>
+          <span class="cf-label">Plik konfiguracji</span>
           <div class="field-with-btn">
             <input type="text" class="file-name" readonly placeholder="nie wybrano pliku" id="import-file-name">
-            <label for="import-file" class="btn btn-small">[ WYBIERZ ]</label>
+            <label for="import-file" class="btn btn-small">Wybierz</label>
             <input type="file" id="import-file" name="file" accept="application/json,.json"
                    class="file-hidden" data-file-display="import-file-name">
           </div>
         </div>
         <div class="cf-row">
-          <span class="cf-label">HASŁO Z EKSPORTU</span>
+          <span class="cf-label">Hasło z eksportu</span>
           <div class="cf-input-row">
             <input type="password" name="passphrase" required autocomplete="off">
           </div>
         </div>
-        <button type="submit" class="btn">[ IMPORT ]</button>
+        <button type="submit" class="btn">Import</button>
       </form>
     </div>
 
@@ -475,21 +247,18 @@
 
 {# ── New token modal ──────────────────────────────── #}
 {% if new_token %}
-<div id="token-modal" style="
-    position:fixed; top:0; left:0; width:100%; height:100%;
-    background:rgba(0,0,0,0.88); z-index:1000;
-    display:flex; align-items:center; justify-content:center;">
-  <div style="border:1px solid var(--border); padding:1.5rem 2rem; max-width:560px; width:90%; background:var(--bg); position:relative;">
-    <div style="position:absolute; top:-0.6rem; left:1rem; background:var(--bg); padding:0 0.5rem; font-size:0.75rem; letter-spacing:3px; color:var(--green-bright);">NOWY TOKEN API</div>
-    <div style="color:var(--amber); font-size:0.8rem; margin-bottom:1rem; letter-spacing:1px;">
-      &gt; ZAPISZ TEN KLUCZ — NIE ZOSTANIE POKAZANY PONOWNIE
+<div id="token-modal" class="token-modal-overlay">
+  <div class="token-modal">
+    <div class="tokens-title">Nowy token API</div>
+    <div class="token-warn">
+      Zapisz ten klucz — nie zostanie pokazany ponownie
     </div>
-    <div style="background:#050505; border:1px solid var(--border); padding:0.75rem 1rem; word-break:break-all; letter-spacing:0.05em; margin-bottom:1rem; font-size:0.85rem;">
+    <div class="token-value-box">
       <code id="new-token-value">{{ new_token }}</code>
     </div>
-    <div style="display:flex; gap:0.75rem;">
-      <button type="button" class="btn" id="copy-token-btn">[ COPY ]</button>
-      <button type="button" class="btn" id="close-token-modal">[ ZAMKNIJ ]</button>
+    <div class="token-actions">
+      <button type="button" class="btn" id="copy-token-btn">Copy</button>
+      <button type="button" class="btn" id="close-token-modal">Zamknij</button>
     </div>
   </div>
 </div>

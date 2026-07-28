@@ -1,33 +1,33 @@
 {% extends "base.html" %}
 {% block title %}USERS — ADMIN{% endblock %}
 {% block content %}
-<div class="box">
-  <span class="box-title">{{ organization.name|upper }} — CZŁONKOWIE</span>
-  <div class="toolbar" style="margin-bottom:1rem;">
-    <a href="{% url 'organization:settings' %}" class="btn btn-small">[ EDYTUJ NAZWĘ ORGANIZACJI ]</a>
-    <a href="{% url 'accounts:user_create' %}" class="btn">[ + DODAJ USERA ]</a>
+<div class="panel">
+  <span class="panel-title">{{ organization.name|upper }} — Członkowie</span>
+  <div class="toolbar">
+    <a href="{% url 'organization:settings' %}" class="btn btn-small">Edytuj nazwę organizacji</a>
+    <a href="{% url 'accounts:user_create' %}" class="btn">+ Dodaj usera</a>
   </div>
   <table>
     <thead>
-      <tr><th>USERNAME</th><th>ROLE</th><th>EMAIL</th><th>LAST LOGIN</th><th>ACTIVE</th><th>ACTIONS</th></tr>
+      <tr><th>Username</th><th>Role</th><th>Email</th><th>Last Login</th><th>Active</th><th>Actions</th></tr>
     </thead>
     <tbody>
       {% for u in users %}
       <tr>
-        <td class="glow">{{ u.username }}</td>
-        <td><span style="color:{% if u.is_admin %}var(--amber){% else %}var(--green){% endif %}">{{ u.role|upper }}</span></td>
+        <td>{{ u.username }}</td>
+        <td><span class="{% if u.is_admin %}text-warn{% else %}text-muted{% endif %}">{{ u.role|upper }}</span></td>
         <td>{{ u.email|default:"—" }}</td>
         <td>{{ u.last_login|date:"Y-m-d H:i"|default:"NEVER" }}</td>
-        <td>{% if u.is_active %}<span style="color:var(--green-bright);">● YES</span>{% else %}<span style="color:var(--red);">○ NO</span>{% endif %}</td>
+        <td>{% if u.is_active %}<span class="glow">● Yes</span>{% else %}<span style="color:var(--danger);">○ No</span>{% endif %}</td>
         <td>
-          <form method="post" action="{% url 'accounts:change_user_role' u.pk %}" style="display:inline">
+          <form method="post" action="{% url 'accounts:change_user_role' u.pk %}" class="inline-form">
             {% csrf_token %}
             <select name="role">
               {% for value, label in role_choices %}
               <option value="{{ value }}" {% if u.role == value %}selected{% endif %}>{{ label }}</option>
               {% endfor %}
             </select>
-            <button type="submit" class="btn btn-small">[ZAPISZ]</button>
+            <button type="submit" class="btn btn-small">Zapisz</button>
           </form>
         </td>
       </tr>

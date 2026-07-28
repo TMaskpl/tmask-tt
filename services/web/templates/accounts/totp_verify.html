@@ -7,22 +7,22 @@
   <link rel="stylesheet" href="{% static 'css/crt.css' %}?v=6">
 </head>
 <body>
-<main style="display:flex; justify-content:center; align-items:center; min-height:100vh;">
-  <div style="width:400px;">
-    <div class="box">
-      <span class="box-title">WERYFIKACJA DWUSKŁADNIKOWA</span>
+<main class="center-viewport">
+  <div class="auth-card">
+    <div class="panel">
+      <span class="panel-title">Weryfikacja dwuskładnikowa</span>
       <form method="post">
         {% csrf_token %}
         {% if form.non_field_errors %}
         <div class="msg-error">
-          {% for error in form.non_field_errors %}&gt; {{ error }}{% endfor %}
+          {% for error in form.non_field_errors %}{{ error }}{% endfor %}
         </div>
         {% endif %}
         <div class="field">
-          <label>KOD Z APLIKACJI LUB KOD ZAPASOWY:</label>
+          <label>Kod z aplikacji lub kod zapasowy</label>
           <input type="text" name="code" autofocus autocomplete="one-time-code">
         </div>
-        <button type="submit" class="btn" style="width:100%;">[ ZATWIERDŹ ]</button>
+        <button type="submit" class="btn" style="width:100%;">Zatwierdź</button>
       </form>
     </div>
   </div>
