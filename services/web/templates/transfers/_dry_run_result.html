@@ -3,14 +3,14 @@
   hx-get="{% url 'transfers:dry_run_status' task_id %}"
   hx-trigger="every 2s"
   hx-swap="outerHTML">
-  &gt; DRY-RUN W TOKU...
+  Dry-run w toku...
 </div>
 {% elif state == 'SUCCESS' and result.exit_code == 0 %}
-<div id="dry-run-result" class="msg-ok">&gt; DRY-RUN OK — poniżej co zostanie przesłane:
+<div id="dry-run-result" class="msg-ok">Dry-run OK — poniżej co zostanie przesłane:
 {{ result.output }}</div>
 {% elif state == 'SUCCESS' %}
-<div id="dry-run-result" class="msg-error">&gt; DRY-RUN FAILED (exit {{ result.exit_code }}):
+<div id="dry-run-result" class="msg-error">Dry-run failed (exit {{ result.exit_code }}):
 {{ result.output }}</div>
 {% else %}
-<div id="dry-run-result" class="msg-error">&gt; DRY-RUN BŁĄD — nie udało się wykonać podglądu.</div>
+<div id="dry-run-result" class="msg-error">Dry-run błąd — nie udało się wykonać podglądu.</div>
 {% endif %}
