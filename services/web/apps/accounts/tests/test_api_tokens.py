@@ -52,7 +52,7 @@ class TestGenerateApiToken:
         profile_url = reverse('accounts:profile')
         response = auth_client.get(profile_url)
         assert response.status_code == 200
-        assert b'NOWY TOKEN API' in response.content
+        assert b'Nowy token API' in response.content
 
     def test_profile_modal_consumed_on_second_visit(self, auth_client, regular_user):
         gen_url = reverse('accounts:generate_api_token')
@@ -60,7 +60,7 @@ class TestGenerateApiToken:
         profile_url = reverse('accounts:profile')
         auth_client.get(profile_url)  # konsumuje sesję
         response = auth_client.get(profile_url)  # drugi visit — modal nie powinien być
-        assert b'NOWY TOKEN API' not in response.content
+        assert b'Nowy token API' not in response.content
 
 
 @pytest.mark.django_db
