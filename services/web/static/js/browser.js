@@ -10,7 +10,7 @@ function openBrowser(fieldId, connPk, path) {
   const url = '/connections/' + connPk + '/browse/?path=' + encodeURIComponent(path)
           + '&field_id=' + encodeURIComponent(fieldId);
   const content = document.getElementById('file-browser-content');
-  content.innerHTML = '<p style="color:var(--amber)">[ ŁADOWANIE... ]</p>';
+  content.innerHTML = '<p style="color:var(--warn)">Ładowanie...</p>';
   document.getElementById('file-browser-overlay').style.display = 'flex';
   htmx.ajax('GET', url, {target: '#file-browser-content', swap: 'innerHTML'});
 }

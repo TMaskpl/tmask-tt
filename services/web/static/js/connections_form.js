@@ -33,23 +33,23 @@
     const btn = document.getElementById('scan-btn');
     const result = document.getElementById('scan-result');
     btn.disabled = true;
-    result.textContent = 'SCANNING...';
+    result.textContent = 'Skanowanie...';
     result.style.color = '';
     fetch(url)
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (data.success) {
           document.getElementById('id_known_host_key').value = data.known_host_key;
-          result.textContent = 'KEY SCANNED — VERIFY AND SAVE';
-          result.style.color = 'var(--green)';
+          result.textContent = 'Klucz zeskanowany — zweryfikuj i zapisz';
+          result.style.color = 'var(--accent)';
         } else {
           result.textContent = data.message;
-          result.style.color = 'var(--red)';
+          result.style.color = 'var(--danger)';
         }
       })
       .catch(function () {
-        result.textContent = 'SCAN ERROR';
-        result.style.color = 'var(--red)';
+        result.textContent = 'Błąd skanowania';
+        result.style.color = 'var(--danger)';
       })
       .finally(function () { btn.disabled = false; });
   }
