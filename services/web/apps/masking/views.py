@@ -12,11 +12,19 @@ from apps.connections.mssql_utils import list_columns as _list_mssql_columns
 
 @require_role(ROLE_READONLY)
 def masking_columns(request):
-    conn_id = request.GET.get('connection')
+    raw_connection = request.GET.get('connection')
     table_name = request.GET.get('table_name')
     columns = []
     error = None
-    if conn_id and table_name:
+    conn_id = None
+    if raw_connection:
+        try:
+            conn_id = int(raw_connection)
+        except ValueError:
+            conn_id = None
+    # A non-numeric/invalid value is treated the same as "nothing selected" —
+    # only a value that actually parsed counts as a real selection.
+    if conn_id is not None and table_name:
         conn = Connection.objects.filter(
             pk=conn_id, kind__in=[KIND_POSTGRES, KIND_MYSQL, KIND_MSSQL]
         ).first()

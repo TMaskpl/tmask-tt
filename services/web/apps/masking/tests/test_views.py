@@ -40,3 +40,9 @@ class TestMaskingColumnsView:
         response = readonly_client.get('/masking/columns/')
         assert response.status_code == 200
         assert b'wybierz kolumn' not in response.content
+
+    def test_non_numeric_connection_param_does_not_crash(self, readonly_client):
+        response = readonly_client.get(
+            '/masking/columns/', {'connection': 'not-a-number', 'table_name': 'users'}
+        )
+        assert response.status_code == 200
