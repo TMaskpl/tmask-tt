@@ -1,4 +1,5 @@
 import os
+import re
 import subprocess  # nosec B404
 import threading
 import time
@@ -7,11 +8,12 @@ from typing import Callable
 import psycopg2
 from psycopg2 import sql
 
+from modules.masking.faker_engine import mask_value
+
 from .config import (
     PG_DUMP_BASE_FLAGS,
     PG_DUMP_MAX_RETRIES,
     PG_DUMP_RETRY_DELAY,
-    SED_STRIP_INCOMPATIBLE_SET,
 )
 
 
@@ -22,6 +24,8 @@ class PgTransferError(Exception):
 class PgTransferHandler:
     def __init__(self, params: dict):
         self.params = params
+        self._log_callback = None
+        self._whole_db_scope = not self.params.get('table_name')
 
     def _build_pg_dump_cmd(self) -> list:
         p = self.params
@@ -39,6 +43,39 @@ class PgTransferHandler:
             '-v', 'ON_ERROR_STOP=1', p['dest_db_name'],
         ]
 
+    _COPY_HEADER_RE = re.compile(r'^COPY (\S+) \(([^)]*)\) FROM stdin;\n?$')
+
+    def _relay_lines(self, lines):
+        current_table = None
+        current_columns = []
+        current_rules = {}
+        warned_tables = set()
+        for line in lines:
+            if line.startswith('SET transaction_timeout'):
+                continue
+            header = self._COPY_HEADER_RE.match(line)
+            if header:
+                current_table = header.group(1)
+                current_columns = [c.strip() for c in header.group(2).split(',')]
+                current_rules = self.params.get('masking_rules', {}).get(current_table, {})
+                if not current_rules and self._whole_db_scope and current_table not in warned_tables and self._log_callback:
+                    self._log_callback('warn', f'Tabela "{current_table}" przesłana BEZ maskowania — brak zdefiniowanego profilu')
+                    warned_tables.add(current_table)
+                yield line
+                continue
+            if current_table and line != '\\.\n' and current_rules:
+                values = line.rstrip('\n').split('\t')
+                for i, col in enumerate(current_columns):
+                    if col in current_rules and i < len(values):
+                        values[i] = mask_value(current_rules[col])
+                yield '\t'.join(values) + '\n'
+                continue
+            if line == '\\.\n':
+                current_table = None
+                current_columns = []
+                current_rules = {}
+            yield line
+
     def _run_pipe(self, log_callback: Callable[[str, str], None]) -> tuple:
         dump_cmd = self._build_pg_dump_cmd()
         psql_cmd = self._build_psql_cmd()
@@ -48,15 +85,9 @@ class PgTransferHandler:
         dump_proc = subprocess.Popen(  # nosec B603 — cmd built from validated connection params, no shell=True
             dump_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=dump_env,
         )
-        filter_proc = subprocess.Popen(  # nosec B603 — static sed pattern, no user input
-            ['sed', '-E', SED_STRIP_INCOMPATIBLE_SET],
-            stdin=dump_proc.stdout, stdout=subprocess.PIPE, text=True,
-        )
-        dump_proc.stdout.close()
         psql_proc = subprocess.Popen(  # nosec B603
-            psql_cmd, stdin=filter_proc.stdout, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, env=psql_env,
+            psql_cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, env=psql_env,
         )
-        filter_proc.stdout.close()
 
         output_lines = []
         output_lock = threading.Lock()
@@ -69,15 +100,22 @@ class PgTransferHandler:
                         output_lines.append(line)
                     log_callback('info', line)
 
+        def _relay():
+            for line in self._relay_lines(dump_proc.stdout):
+                psql_proc.stdin.write(line)
+            psql_proc.stdin.close()
+
         psql_thread = threading.Thread(target=_drain, args=(psql_proc.stderr,))
         dump_thread = threading.Thread(target=_drain, args=(dump_proc.stderr,))
+        relay_thread = threading.Thread(target=_relay)
         psql_thread.start()
         dump_thread.start()
+        relay_thread.start()
         psql_thread.join()
         dump_thread.join()
+        relay_thread.join()
 
         psql_exit = psql_proc.wait()
-        filter_proc.wait()
         dump_exit = dump_proc.wait()
         return dump_exit, psql_exit, '\n'.join(output_lines)
 
@@ -134,6 +172,7 @@ class PgTransferHandler:
             dst_conn.close()
 
     def execute(self, log_callback: Callable[[str, str], None]) -> None:
+        self._log_callback = log_callback
         last_dump_exit = last_psql_exit = None
         for attempt in range(1, PG_DUMP_MAX_RETRIES + 1):
             log_callback('info', f'Starting pg_dump|psql (attempt {attempt})')
