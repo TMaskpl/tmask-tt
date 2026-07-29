@@ -28,7 +28,7 @@ import django
 from django.conf import settings as _dj_settings
 if not _dj_settings.configured:
     _dj_settings.configure(
-        INSTALLED_APPS=[],
+        INSTALLED_APPS=['apps.masking'],  # Include masking app so FAKER_PROVIDER_KEYS can be imported
         DATABASES={},
         CELERY_TASK_ALWAYS_EAGER=True,
         CELERY_BROKER_URL='memory://',
@@ -37,12 +37,12 @@ if not _dj_settings.configured:
         TRANSFERS_RETENTION_DAYS=1,
     )
 
-# Neutralise django.setup() — settings are already configured inline.
-django.setup = lambda: None
+# Call django.setup() to fully initialize Django, including apps registry
+django.setup()
 
 # (b) Stub out the Django app modules that tasks.py imports at the top level.
-# These modules live in services/web/ which is not on the worker's sys.path.
-sys.modules.setdefault('apps', MagicMock())
+# apps.masking is available as a real package (added to sys.path above),
+# but other apps are only on the web service and need to be mocked.
 sys.modules.setdefault('apps.transfers', MagicMock())
 sys.modules.setdefault('apps.transfers.models', MagicMock())
 sys.modules.setdefault('apps.connections', MagicMock())

@@ -4,6 +4,7 @@ paramiko==3.4.*
 psycopg2-binary==2.9.*
 pymysql==1.1.*
 pyodbc==5.*
+Faker==26.*
 # mssql-scripter: NOT installed — BLOCKED on arm64, see task-7-report.md.
 # Package has no stable 1.0 release (only 1.0.0a0-a23 pre-releases, last
 # published 2018) and its functional backend (mssqltoolsservice) has no
