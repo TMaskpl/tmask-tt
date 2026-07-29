@@ -1,30 +1,45 @@
 # tmask-transporter
 
-<img width="459" height="459" alt="Zrzut ekranu z 2026-05-21 08-23-32" src="https://github.com/user-attachments/assets/9b08543f-bd36-4d38-88da-811959ad1139" />
+Webowa aplikacja do przesyłania i replikacji danych między systemami przez SSH (SFTP/rsync) oraz bezpośrednio między bazami danych (Postgres/MySQL/MSSQL) — z harmonogramem cron, szyfrowaniem transferów (Fernet AES-256), opcjonalnym maskowaniem danych (Faker) przy replikacji do środowisk testowych, 2FA, rolami użytkowników i powiadomieniami (e-mail/webhook/Telegram).
 
+Interfejs "Dark Ops Console" — dark slate/navy, karty zamiast ramek, Inter (UI) + JetBrains Mono (logi/dane, self-hostowane), zero zewnętrznych CDN.
 
-Webowa aplikacja do przesyłania plików między systemami Linux przez SSH (SFTP/rsync).
+> Zrzut ekranu do dodania — obecny interfejs (2026-07-28, redesign "Dark Ops Console") nie ma jeszcze aktualnego screena w tym README. Uruchom aplikację lokalnie (patrz niżej) albo wrzuć własny zrzut przez drag&drop w edytorze GitHub, żeby go tu wstawić.
 
-Panel użytkownika, harmonogram cron, szyfrowanie transferów (Fernet AES-256), interfejs Terminal/CRT.
+## Funkcje
+
+- **Transfer plików**: SFTP/SCP i rsync przez SSH (retry, known_host_key, klucze z hasłem, batch upload wielu plików, dry-run, weryfikacja SHA-256, szyfrowanie GPG)
+- **Relay (Flows)**: transfer SFTP→SFTP bez pośredniego zapisu na dysku lokalnym
+- **Replikacja baz danych**: Postgres↔Postgres, MySQL↔MySQL, MSSQL↔MSSQL (cała baza albo pojedyncza tabela)
+- **Maskowanie danych**: opcjonalne podmienianie wybranych kolumn tekstowych danymi Faker przy replikacji do środowisk testowych (ochrona PII)
+- **Harmonogram**: Celery Beat + cron expressions, strefa czasowa
+- **Role i organizacja**: Admin / Operator / Read-only, audit log zmian konfiguracji
+- **Bezpieczeństwo**: 2FA (TOTP), szyfrowanie Fernet AES-256 haseł/kluczy SSH w bazie, HTTPS
+- **Powiadomienia**: e-mail, webhook (generyczny + natywny Slack/Telegram) z historią dostarczeń i circuit breakerem
+- **Dashboard**: wykresy sukces/porażka, historia transferów
+- **API**: REST endpoint do triggerowania transferów z zewnętrznych skryptów/CI (token per-user)
 
 ## Wymagania
 
-- Docker + Docker Compose v2 (`docker compose`, nie legacy `docker-compose`), buildx ≥ 0.17.0 — na Debian/Ubuntu z pakietem `docker.io` z repo dystrybucji obie wtyczki bywają za stare lub nieobecne; instalacja per-user bez `sudo`:
+- Serwer Debian lub Ubuntu (on-prem albo VPS) z uprawnieniami `sudo`/root
+- Docker Engine + Docker Compose v2 (wtyczka `docker compose`, nie legacy `docker-compose`) — na czystym serwerze zainstaluj jednym poleceniem:
   ```bash
-  mkdir -p ~/.docker/cli-plugins
-  curl -fSL "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64" -o ~/.docker/cli-plugins/docker-compose
-  curl -fSL "https://github.com/docker/buildx/releases/latest/download/buildx-v0.35.0.linux-amd64" -o ~/.docker/cli-plugins/docker-buildx
-  chmod +x ~/.docker/cli-plugins/docker-compose ~/.docker/cli-plugins/docker-buildx
+  curl -fsSL https://raw.githubusercontent.com/TMaskpl/tmask-tt/main/scripts/install-system-deps.sh | sudo bash
   ```
+  Skrypt instaluje Docker Engine + Compose z oficjalnego repozytorium Docker (nie z pakietu dystrybucji, który bywa przestarzały), `git`, `openssl`, dodaje bieżącego użytkownika do grupy `docker`. Po pierwszym uruchomieniu na koncie bez roota **wyloguj się i zaloguj ponownie**, żeby zmiana grupy zadziałała — albo sklonuj repo i doinstaluj lokalnie: `sudo ./scripts/install-system-deps.sh` (idempotentny, bezpieczny do ponownego odpalenia).
+- Na VPS: porty **80** i **443** muszą być otwarte na firewallu/security group dostawcy (np. `ufw allow 80,443/tcp` na Debian/Ubuntu z UFW).
 
 ## Uruchomienie
 
 ```bash
+git clone git@github.com:TMaskpl/tmask-tt.git
+cd tmask-tt
 cp .env.example .env
 # Wygeneruj klucze:
 python3 -c "import secrets; print(secrets.token_urlsafe(50))"   # SECRET_KEY
 python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"  # FIELD_ENCRYPTION_KEY
-# Uzupełnij .env, następnie wygeneruj certyfikat TLS (jednorazowo, self-signed, 10 lat):
+# Uzupełnij .env (SECRET_KEY, FIELD_ENCRYPTION_KEY, hasła Postgres, ALLOWED_HOSTS z domeną/IP serwera)
+# Wygeneruj certyfikat TLS (jednorazowo, self-signed, 10 lat) — na produkcyjnym VPS podmień na Let's Encrypt jeśli masz domenę publiczną:
 mkdir -p nginx/certs
 openssl req -x509 -nodes -newkey rsa:2048 \
   -keyout nginx/certs/selfsigned.key -out nginx/certs/selfsigned.crt \
@@ -33,9 +48,18 @@ openssl req -x509 -nodes -newkey rsa:2048 \
 docker compose up -d
 docker compose run --rm web python manage.py migrate
 docker compose run --rm web python manage.py createsuperuser
+# createsuperuser nadaje uprawnienia Django (is_superuser/is_staff), ale NIE
+# rolę aplikacji (nowe konta domyślnie dostają rolę Operator) — bez tego kroku
+# nie zobaczysz sekcji Admin-only (Connections, Masking, Users, Audit Log):
+docker compose run --rm web python manage.py shell -c "
+from apps.accounts.models import User
+u = User.objects.get(username='TWOJA_NAZWA_UZYTKOWNIKA')
+u.role = 'admin'
+u.save(update_fields=['role'])
+"
 ```
 
-Aplikacja dostępna pod: https://localhost lub https://tmask-transporter.local (dodaj wpis do `/etc/hosts`: `127.0.0.1 tmask-transporter.local` lub adres IP serwera w LAN). Certyfikat jest self-signed — przeglądarka pokaże ostrzeżenie o niezaufanym CA, zaakceptuj je ręcznie ("Zaawansowane → Kontynuuj"). HTTP (port 80) przekierowuje automatycznie na HTTPS.
+Aplikacja dostępna pod: `https://<adres-IP-serwera>` albo `https://tmask-transporter.local` (dodaj wpis do `/etc/hosts` na maszynie klienckiej: `<adres-IP-serwera> tmask-transporter.local`). Certyfikat jest self-signed — przeglądarka pokaże ostrzeżenie o niezaufanym CA, zaakceptuj je ręcznie ("Zaawansowane → Kontynuuj"). HTTP (port 80) przekierowuje automatycznie na HTTPS.
 
 ## Deployment (CI/CD)
 
@@ -64,7 +88,7 @@ Push uruchomi normalną ścieżkę test→deploy i odbuduje poprzednią wersję.
 | Serwis | Rola |
 |--------|------|
 | `web` | Django + Gunicorn — UI, auth, API |
-| `worker` | Celery worker — moduły SFTP/rsync |
+| `worker` | Celery worker — moduły transferu (patrz niżej) |
 | `beat` | Celery Beat — harmonogram cron |
 | `redis` | Broker Celery |
 | `postgres` | Baza danych |
@@ -72,8 +96,13 @@ Push uruchomi normalną ścieżkę test→deploy i odbuduje poprzednią wersję.
 
 ## Moduły transferu
 
-- `services/worker/modules/sftp/` — SFTP/SCP przez Paramiko (retry 3x, known_host_key, multi-type SSH keys)
-- `services/worker/modules/rsync/` — rsync przez SSH subprocess (compress, error classification, retry 3x)
+Niezależne moduły w `services/worker/modules/` — zmiana jednego nie dotyka pozostałych:
+
+- `sftp/` — SFTP/SCP przez Paramiko (retry 3x, known_host_key, klucze z hasłem, multi-type SSH keys)
+- `rsync/` — rsync przez SSH subprocess (compress, error classification, retry 3x, dry-run)
+- `relay/` — SFTP→SFTP bez pośredniego zapisu na dysku lokalnym (Flows)
+- `postgres/`, `mysql/`, `mssql/` — replikacja baza/tabela między instancjami tego samego silnika (`pg_dump`/`mysqldump`/`bcp` + introspekcja schematu)
+- `masking/` — wspólny moduł Faker używany przez `postgres/`, `mysql/`, `mssql/` do opcjonalnego maskowania kolumn w locie
 
 ## Bezpieczeństwo
 
