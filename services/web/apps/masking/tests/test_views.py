@@ -3,6 +3,7 @@ from django.test import Client
 from unittest.mock import patch
 from apps.connections.models import Connection, KIND_POSTGRES
 from apps.accounts.models import User
+from apps.masking.models import MaskingRule
 
 pytestmark = pytest.mark.django_db
 
@@ -84,3 +85,47 @@ class TestMaskingRuleCrudRbac:
         })
         assert response.status_code == 302
         assert ConfigAuditLog.objects.filter(model_name='MaskingRule', action='created').exists()
+
+    def test_operator_cannot_edit(self, operator_client, pg_connection):
+        rule = MaskingRule.objects.create(
+            connection=pg_connection, table_name='users',
+            column_name='email', faker_provider='email'
+        )
+        response = operator_client.post(f'/masking/{rule.pk}/edit/', {
+            'connection': pg_connection.pk, 'table_name': 'users',
+            'column_name': 'email', 'faker_provider': 'name',
+        })
+        assert response.status_code == 403
+
+    def test_admin_can_edit_and_it_is_audit_logged(self, admin_client, pg_connection):
+        from apps.audit_log.models import ConfigAuditLog
+        rule = MaskingRule.objects.create(
+            connection=pg_connection, table_name='users',
+            column_name='email', faker_provider='email'
+        )
+        response = admin_client.post(f'/masking/{rule.pk}/edit/', {
+            'connection': pg_connection.pk, 'table_name': 'users',
+            'column_name': 'email', 'faker_provider': 'name',
+        })
+        assert response.status_code == 302
+        assert ConfigAuditLog.objects.filter(model_name='MaskingRule', action='updated').exists()
+
+    def test_operator_cannot_delete(self, operator_client, pg_connection):
+        rule = MaskingRule.objects.create(
+            connection=pg_connection, table_name='users',
+            column_name='email', faker_provider='email'
+        )
+        response = operator_client.post(f'/masking/{rule.pk}/delete/')
+        assert response.status_code == 403
+
+    def test_admin_can_delete_and_it_is_audit_logged(self, admin_client, pg_connection):
+        from apps.audit_log.models import ConfigAuditLog
+        rule = MaskingRule.objects.create(
+            connection=pg_connection, table_name='users',
+            column_name='email', faker_provider='email'
+        )
+        rule_pk = rule.pk
+        response = admin_client.post(f'/masking/{rule_pk}/delete/')
+        assert response.status_code == 302
+        assert not MaskingRule.objects.filter(pk=rule_pk).exists()
+        assert ConfigAuditLog.objects.filter(model_name='MaskingRule', action='deleted').exists()
