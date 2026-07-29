@@ -1564,9 +1564,21 @@ Zamień całą metodę `_run_pipe` na:
                     log_callback('info', line)
 
         def _relay():
-            for line in self._relay_lines(dump_proc.stdout, strip_collation):
-                mysql_proc.stdin.write(line)
-            mysql_proc.stdin.close()
+            # Mirrors PgTransferHandler._run_pipe's guard (Task 6, fixed post-review):
+            # if mysql_proc dies early while dump_proc is still writing, closing
+            # dump_proc.stdout unblocks it instead of leaving it stuck once its
+            # own stdout OS pipe buffer fills.
+            try:
+                for line in self._relay_lines(dump_proc.stdout, strip_collation):
+                    mysql_proc.stdin.write(line)
+            except (BrokenPipeError, OSError):
+                pass
+            finally:
+                try:
+                    mysql_proc.stdin.close()
+                except (BrokenPipeError, OSError):
+                    pass
+                dump_proc.stdout.close()
 
         threads = [
             threading.Thread(target=_drain, args=(mysql_proc.stderr,)),
