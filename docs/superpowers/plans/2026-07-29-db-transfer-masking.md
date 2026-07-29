@@ -1641,10 +1641,13 @@ Dopisz do pliku testów MSSQL:
         assert '-c' not in cmd
 
     def test_table_with_masking_rule_uses_character_bcp_flag(self):
+        # native=False musi być przekazane explicite — _build_bcp_out_cmd nie ma
+        # dostępu do "czy ta tabela ma reguły", tę decyzję podejmuje wyłącznie
+        # _transfer_once (native = not bool(rules)) i przekazuje ją jawnie.
         handler = MssqlTransferHandler(self._make_params(
             masking_rules={'users': {'email': 'email'}},
         ))
-        cmd = handler._build_bcp_out_cmd('users', '/tmp/x.dat')
+        cmd = handler._build_bcp_out_cmd('users', '/tmp/x.dat', native=False)
         assert '-c' in cmd
         assert '-n' not in cmd
 ```
