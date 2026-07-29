@@ -20,6 +20,7 @@
     <a href="{% url 'flows:list' %}" class="{% if request.resolver_match.app_name == 'flows' %}active{% endif %}">Flows</a>
     <a href="{% url 'scheduler:list' %}" class="{% if request.resolver_match.app_name == 'scheduler' %}active{% endif %}">Scheduler</a>
     <a href="{% url 'db_transfers:list' %}" class="{% if request.resolver_match.app_name == 'db_transfers' %}active{% endif %}">DB Transfers</a>
+    <a href="{% url 'masking:list' %}" class="{% if request.resolver_match.app_name == 'masking' %}active{% endif %}">Masking</a>
     <a href="{% url 'transfers:logs' %}">Logs</a>
     {% if user.is_admin %}
     <a href="{% url 'accounts:users' %}">Users</a>

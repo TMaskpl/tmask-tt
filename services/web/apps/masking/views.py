@@ -1,13 +1,60 @@
 import psycopg2
 import pymysql
 import pyodbc
-from django.shortcuts import render
+from django.shortcuts import render, redirect, get_object_or_404
+from django.views.decorators.http import require_POST
 from apps.accounts.permissions import require_role
-from apps.accounts.models import ROLE_READONLY
+from apps.accounts.models import ROLE_ADMIN, ROLE_READONLY
+from apps.audit_log.services import log_created, log_updated, log_deleted, diff_fields
 from apps.connections.models import Connection, KIND_POSTGRES, KIND_MYSQL, KIND_MSSQL
 from apps.connections.pg_utils import list_columns as _list_pg_columns
 from apps.connections.mysql_utils import list_columns as _list_mysql_columns
 from apps.connections.mssql_utils import list_columns as _list_mssql_columns
+from .forms import MaskingRuleForm
+from .models import MaskingRule
+
+_MASKING_LIST = 'masking:list'
+MASKING_RULE_TRACKED_FIELDS = ['connection', 'table_name', 'column_name', 'faker_provider']
+
+
+@require_role(ROLE_READONLY)
+def masking_list(request):
+    rules = MaskingRule.objects.select_related('connection', 'created_by').all()
+    return render(request, 'masking/list.html', {'rules': rules})
+
+
+@require_role(ROLE_ADMIN)
+def masking_create(request):
+    form = MaskingRuleForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        rule = form.save(commit=False)
+        rule.created_by = request.user
+        rule.save()
+        log_created(request.user, rule)
+        return redirect(_MASKING_LIST)
+    return render(request, 'masking/form.html', {'form': form, 'action': 'CREATE'})
+
+
+@require_role(ROLE_ADMIN)
+def masking_edit(request, pk):
+    rule = get_object_or_404(MaskingRule, pk=pk)
+    old = MaskingRule.objects.get(pk=pk)
+    form = MaskingRuleForm(request.POST or None, instance=rule)
+    if request.method == 'POST' and form.is_valid():
+        updated = form.save()
+        changes = diff_fields(old, updated, MASKING_RULE_TRACKED_FIELDS)
+        log_updated(request.user, updated, changes)
+        return redirect(_MASKING_LIST)
+    return render(request, 'masking/form.html', {'form': form, 'action': 'EDIT'})
+
+
+@require_role(ROLE_ADMIN)
+@require_POST
+def masking_delete(request, pk):
+    rule = get_object_or_404(MaskingRule, pk=pk)
+    log_deleted(request.user, rule)
+    rule.delete()
+    return redirect(_MASKING_LIST)
 
 
 @require_role(ROLE_READONLY)

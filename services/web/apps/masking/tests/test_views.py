@@ -46,3 +46,41 @@ class TestMaskingColumnsView:
             '/masking/columns/', {'connection': 'not-a-number', 'table_name': 'users'}
         )
         assert response.status_code == 200
+
+
+@pytest.fixture
+def operator_client():
+    User.objects.create_user(username='op', password='x', role='operator')
+    client = Client()
+    client.login(username='op', password='x')
+    return client
+
+
+@pytest.fixture
+def admin_client():
+    User.objects.create_user(username='adm', password='x', role='admin')
+    client = Client()
+    client.login(username='adm', password='x')
+    return client
+
+
+class TestMaskingRuleCrudRbac:
+    def test_readonly_can_view_list(self, readonly_client):
+        response = readonly_client.get('/masking/')
+        assert response.status_code == 200
+
+    def test_operator_cannot_create(self, operator_client, pg_connection):
+        response = operator_client.post('/masking/new/', {
+            'connection': pg_connection.pk, 'table_name': 'users',
+            'column_name': 'email', 'faker_provider': 'email',
+        })
+        assert response.status_code == 403
+
+    def test_admin_can_create_and_it_is_audit_logged(self, admin_client, pg_connection):
+        from apps.audit_log.models import ConfigAuditLog
+        response = admin_client.post('/masking/new/', {
+            'connection': pg_connection.pk, 'table_name': 'users',
+            'column_name': 'email', 'faker_provider': 'email',
+        })
+        assert response.status_code == 302
+        assert ConfigAuditLog.objects.filter(model_name='MaskingRule', action='created').exists()

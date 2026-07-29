@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}{{ action }} MASKING RULE — TMASK-TRANSPORTER{% endblock %}
+{% block content %}
+<div class="panel" style="max-width:600px;">
+  <span class="panel-title">{{ action }} Masking Rule</span>
+  <form method="post" id="masking-rule-form" data-db-tables-url="{% url 'connections:db_tables' %}"
+    data-columns-url="{% url 'masking:columns' %}">
+    {% csrf_token %}
+    {% if form.non_field_errors %}
+    <div class="msg-error" style="margin-bottom:1rem;">
+      {% for error in form.non_field_errors %}{{ error }}<br>{% endfor %}
+    </div>
+    {% endif %}
+    <div class="field">
+      <label>{{ form.connection.label }}</label>
+      {{ form.connection }}
+      {% if form.connection.errors %}<div class="field-error">{{ form.connection.errors }}</div>{% endif %}
+    </div>
+    <div class="field">
+      <label>{{ form.table_name.label }}</label>
+      <select id="id_table_name_picker">
+        <option value="">— wybierz najpierw CONNECTION —</option>
+      </select>
+      <input type="hidden" name="table_name" id="id_table_name" value="{{ form.table_name.value|default:'' }}">
+      {% if form.table_name.errors %}<div class="field-error">{{ form.table_name.errors }}</div>{% endif %}
+    </div>
+    <div class="field">
+      <label>{{ form.column_name.label }}</label>
+      <select id="id_column_name_picker">
+        <option value="">— wybierz najpierw TABLE —</option>
+      </select>
+      <input type="hidden" name="column_name" id="id_column_name" value="{{ form.column_name.value|default:'' }}">
+      {% if form.column_name.errors %}<div class="field-error">{{ form.column_name.errors }}</div>{% endif %}
+    </div>
+    <div class="field">
+      <label>{{ form.faker_provider.label }}</label>
+      {{ form.faker_provider }}
+      {% if form.faker_provider.errors %}<div class="field-error">{{ form.faker_provider.errors }}</div>{% endif %}
+    </div>
+    <button type="submit" class="btn">Save Rule</button>
+  </form>
+</div>
+<script src="{% static 'js/masking_form.js' %}"></script>
+{% endblock %}
