@@ -9,6 +9,7 @@ urlpatterns = [
     path('flows/', include('apps.flows.urls')),
     path('transfers/', include('apps.transfers.urls')),
     path('db-transfers/', include('apps.db_transfers.urls')),
+    path('masking/', include('apps.masking.urls')),
     path('scheduler/', include('apps.scheduler.urls')),
     path('api/', include('apps.api.urls')),
     path('dashboard/', include('apps.dashboard.urls')),
