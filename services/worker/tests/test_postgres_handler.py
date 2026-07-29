@@ -251,6 +251,21 @@ class TestPgTransferHandler:
         assert row[1] != 'jan@firma.pl'
         assert output[2] == '\\.\n'
 
+    def test_masking_rule_matches_schema_qualified_copy_header(self):
+        # Real pg_dump always schema-qualifies COPY headers (public.users),
+        # never bare table names — this test would have caught the original bug.
+        handler = PgTransferHandler(self._make_params(
+            masking_rules={'users': {'email': 'email'}},
+        ))
+        dump_lines = [
+            'COPY public.users (id, email) FROM stdin;\n',
+            '1\tjan@firma.pl\n',
+            '\\.\n',
+        ]
+        output = list(handler._relay_lines(iter(dump_lines)))
+        row = output[1].rstrip('\n').split('\t')
+        assert row[1] != 'jan@firma.pl'
+
     def test_strips_transaction_timeout_line(self):
         handler = PgTransferHandler(self._make_params(masking_rules={}))
         dump_lines = ['SET transaction_timeout = 0;\n', 'SELECT 1;\n']

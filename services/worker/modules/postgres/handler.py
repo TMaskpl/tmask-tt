@@ -56,6 +56,9 @@ class PgTransferHandler:
             header = self._COPY_HEADER_RE.match(line)
             if header:
                 current_table = header.group(1)
+                if '.' in current_table:
+                    current_table = current_table.split('.', 1)[1]
+                current_table = current_table.strip('"')
                 current_columns = [c.strip() for c in header.group(2).split(',')]
                 current_rules = self.params.get('masking_rules', {}).get(current_table, {})
                 if not current_rules and self._whole_db_scope and current_table not in warned_tables and self._log_callback:
@@ -101,9 +104,17 @@ class PgTransferHandler:
                     log_callback('info', line)
 
         def _relay():
-            for line in self._relay_lines(dump_proc.stdout):
-                psql_proc.stdin.write(line)
-            psql_proc.stdin.close()
+            try:
+                for line in self._relay_lines(dump_proc.stdout):
+                    psql_proc.stdin.write(line)
+            except (BrokenPipeError, OSError):
+                pass
+            finally:
+                try:
+                    psql_proc.stdin.close()
+                except (BrokenPipeError, OSError):
+                    pass
+                dump_proc.stdout.close()
 
         psql_thread = threading.Thread(target=_drain, args=(psql_proc.stderr,))
         dump_thread = threading.Thread(target=_drain, args=(dump_proc.stderr,))
