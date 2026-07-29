@@ -41,8 +41,18 @@ if not _dj_settings.configured:
 django.setup()
 
 # (b) Stub out the Django app modules that tasks.py imports at the top level.
-# apps.masking is available as a real package (added to sys.path above),
-# but other apps are only on the web service and need to be mocked.
+# apps.masking is registered as a real Django app above (INSTALLED_APPS) so its
+# models.py — and constants like FAKER_PROVIDER_KEYS — can be imported for real.
+# The other apps are stubbed instead because their models.py/related modules
+# pull in dependencies not present in services/worker/requirements.txt.
+#
+# IMPORTANT: this only works because every cross-app reference in this codebase
+# uses `from apps.X.models import Y` (never a bare `import apps.X`). The parent
+# `apps` package itself is deliberately NOT stubbed in sys.modules — a bare
+# `import apps.connections` would resolve the real (near-empty) `apps` package
+# and then raise AttributeError, since only `from` imports hit these direct
+# sys.modules entries. If you add a bare `import apps.<name>` anywhere in
+# worker code, add `sys.modules.setdefault('apps', MagicMock())` back here.
 sys.modules.setdefault('apps.transfers', MagicMock())
 sys.modules.setdefault('apps.transfers.models', MagicMock())
 sys.modules.setdefault('apps.connections', MagicMock())
