@@ -26,6 +26,7 @@ INSTALLED_APPS = [
     'apps.dashboard',
     'apps.organization',
     'apps.db_transfers',
+    'apps.masking',
     'apps.audit_log',
     'apps.webhook_deliveries',
 ]
