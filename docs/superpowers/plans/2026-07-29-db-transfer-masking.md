@@ -1111,40 +1111,35 @@ def _build_db_transfer_params(job) -> dict:
 
 - [ ] **Step 3: Testy**
 
-Znajdź istniejący plik testów pokrywający `_build_db_transfer_params`/`execute_db_transfer` w `services/worker/tests/` i dopisz:
+**Ważne — poprawione po odkryciu podczas Task 4**: `services/worker/tests/conftest.py` konfiguruje Django z `DATABASES={}` (celowo pusty — worker's testy to w 100% testy jednostkowe na mockach, `docker compose run --rm worker python -m pytest tests/` NIGDY nie łączy się z prawdziwą bazą; sprawdź `grep -rn django_db services/worker/tests/*.py` — zero wystąpień w całym istniejącym suite). `@pytest.mark.django_db` + `Model.objects.create(...)` na prawdziwych obiektach (jak w oryginalnej wersji tego kroku) **nie zadziała** w tym środowisku. Zamiast tego mockuj `MaskingRule` dokładnie tym samym wzorcem co reszta `services/worker/tests/test_tasks.py` (`patch('tasks.NazwaModelu')` + `MagicMock()`, zobacz `TestExecuteTransferTask.test_dispatches_to_sftp_module` w tym samym pliku dla wzorca).
+
+Znajdź istniejący plik testów pokrywający `_build_db_transfer_params`/`execute_db_transfer` w `services/worker/tests/` (prawdopodobnie `test_tasks.py`) i dopisz:
 ```python
-import pytest
-from tasks import _masking_rules_for, _build_db_transfer_params
+from unittest.mock import patch, MagicMock
+from tasks import _masking_rules_for
 
 
 class TestMaskingRulesFor:
-    @pytest.mark.django_db
-    def test_returns_empty_dict_when_no_rules(self):
-        from apps.connections.models import Connection, KIND_POSTGRES
-        from apps.accounts.models import User
-        owner = User.objects.create_user(username='wowner', password='x')
-        conn = Connection.objects.create(
-            owner=owner, name='c', host='h', port=5432, username='u', password='p',
-            kind=KIND_POSTGRES, db_name='db',
-        )
-        assert _masking_rules_for(conn) == {}
+    @patch('tasks.MaskingRule')
+    def test_returns_empty_dict_when_no_rules(self, MockMaskingRule):
+        MockMaskingRule.objects.filter.return_value.values.return_value = []
+        mock_connection = MagicMock()
+        assert _masking_rules_for(mock_connection) == {}
+        MockMaskingRule.objects.filter.assert_called_once_with(connection=mock_connection)
 
-    @pytest.mark.django_db
-    def test_groups_rules_by_table_and_column_across_whole_connection(self):
-        from apps.connections.models import Connection, KIND_POSTGRES
-        from apps.accounts.models import User
-        from apps.masking.models import MaskingRule
-        owner = User.objects.create_user(username='wowner2', password='x')
-        conn = Connection.objects.create(
-            owner=owner, name='c2', host='h', port=5432, username='u', password='p',
-            kind=KIND_POSTGRES, db_name='db',
-        )
-        MaskingRule.objects.create(connection=conn, table_name='users', column_name='email', faker_provider='email')
-        MaskingRule.objects.create(connection=conn, table_name='clients', column_name='name', faker_provider='name')
-        assert _masking_rules_for(conn) == {
+    @patch('tasks.MaskingRule')
+    def test_groups_rules_by_table_and_column_across_whole_connection(self, MockMaskingRule):
+        MockMaskingRule.objects.filter.return_value.values.return_value = [
+            {'table_name': 'users', 'column_name': 'email', 'faker_provider': 'email'},
+            {'table_name': 'clients', 'column_name': 'name', 'faker_provider': 'name'},
+        ]
+        mock_connection = MagicMock()
+        assert _masking_rules_for(mock_connection) == {
             'users': {'email': 'email'}, 'clients': {'name': 'name'},
         }
 ```
+
+(`@patch('tasks.MaskingRule')` funkcjonuje identycznie do `@patch('tasks.SFTPHandler')` używanego w istniejących testach tego pliku — patchuje symbol zaimportowany do modułu `tasks`, nie oryginalną klasę w `apps.masking.models`.)
 
 Run: `docker compose build worker && docker compose run --rm worker python -m pytest tests/ -q` (pełna komenda workerowego suite — patrz [[reference-tmask-tt-test-command]] w vault dla wariantu z montowaniem źródła przy iteracyjnym TDD).
 Expected: nowe testy PASS, brak regresji w pozostałych testach workera.
