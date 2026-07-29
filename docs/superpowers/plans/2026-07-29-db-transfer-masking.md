@@ -1275,7 +1275,17 @@ Dodaj nową metodę `_relay_lines` w klasie `PgTransferHandler`, tuż przed `_ru
                 continue
             header = self._COPY_HEADER_RE.match(line)
             if header:
+                # pg_dump always schema-qualifies COPY headers (e.g. "public.users",
+                # never bare "users"), but masking_rules is keyed by the bare table
+                # name (populated from pg_tables.tablename via pg_utils.list_tables,
+                # which already filters schemaname='public' — this app never deals
+                # with non-public schemas). Strip the schema qualifier and any
+                # double-quoting before using it as a dict key, otherwise the
+                # lookup always misses and masking silently never fires.
                 current_table = header.group(1)
+                if '.' in current_table:
+                    current_table = current_table.split('.', 1)[1]
+                current_table = current_table.strip('"')
                 current_columns = [c.strip() for c in header.group(2).split(',')]
                 current_rules = self.params.get('masking_rules', {}).get(current_table, {})
                 if not current_rules and self._whole_db_scope and current_table not in warned_tables and self._log_callback:
