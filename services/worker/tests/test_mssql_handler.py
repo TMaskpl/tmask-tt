@@ -189,6 +189,24 @@ class TestMssqlMasking:
         assert 'jan@firma.pl' not in lines[0]
         assert 'ewa@firma.pl' not in lines[1]
 
+    def test_masking_truncates_to_column_max_length(self, tmp_path):
+        # Regression: mask_value() supports max_length truncation but nothing
+        # wired it through — a fake value longer than the destination column's
+        # character_maximum_length would blow up the restore.
+        handler = MssqlTransferHandler(self._make_params(
+            masking_rules={'users': {'email': 'email'}},
+        ))
+        dat_path = tmp_path / 'users.dat'
+        dat_path.write_text('1\tjan@firma.pl\n')
+        schema = {
+            'columns': [{'name': 'id', 'character_maximum_length': None}, {'name': 'email', 'character_maximum_length': 5}],
+            'primary_key': ['id'],
+        }
+        handler._mask_dat_file(str(dat_path), 'users', schema)
+        line = dat_path.read_text().splitlines()[0]
+        email_value = line.split('\t')[1]
+        assert len(email_value) <= 5
+
     def test_whole_db_scope_warns_for_table_without_profile(self):
         handler = MssqlTransferHandler(self._make_params(masking_rules={}, table_name=None))
         warnings = []

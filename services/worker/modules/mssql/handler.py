@@ -137,6 +137,7 @@ class MssqlTransferHandler:
         if not rules:
             return
         column_names = [c['name'] for c in schema['columns']]
+        column_lengths = {c['name']: c.get('character_maximum_length') for c in schema['columns']}
         with open(path, 'r') as f:
             lines = f.readlines()
         with open(path, 'w') as f:
@@ -144,7 +145,7 @@ class MssqlTransferHandler:
                 values = line.rstrip('\n').split('\t')
                 for i, col in enumerate(column_names):
                     if col in rules and i < len(values):
-                        values[i] = mask_value(rules[col])
+                        values[i] = mask_value(rules[col], max_length=column_lengths.get(col))
                 f.write('\t'.join(values) + '\n')
 
     def _run_step(self, cmd: list, log_callback: Callable[[str, str], None]) -> int:

@@ -25,6 +25,7 @@ class MysqlTransferHandler:
         self.params = params
         self._log_callback = None
         self._whole_db_scope = not self.params.get('table_name')
+        self._column_lengths = {}
 
     def _build_mysqldump_cmd(self) -> list:
         p = self.params
@@ -63,6 +64,35 @@ class MysqlTransferHandler:
             if log_callback:
                 log_callback('warn', f'VERSION CHECK FAILED — nie udało się wykryć wersji serwera docelowego dla sprawdzenia zgodności COLLATION: {e}. Zakładam brak konfliktu.')
             return False
+
+    def _fetch_column_lengths(self) -> dict:
+        masking_rules = self.params.get('masking_rules', {})
+        if not masking_rules:
+            return {}
+        p = self.params
+        try:
+            conn = pymysql.connect(
+                host=p['source_host'], port=p['source_port'], user=p['source_username'],
+                password=p['source_password'], database=p['source_db_name'], connect_timeout=10,
+            )
+        except pymysql.Error:
+            return {}
+        result = {}
+        try:
+            with conn.cursor() as cur:
+                for table, columns in masking_rules.items():
+                    placeholders = ','.join(['%s'] * len(columns))
+                    cur.execute(
+                        f'SELECT column_name, character_maximum_length FROM information_schema.columns '
+                        f'WHERE table_schema = %s AND table_name = %s AND column_name IN ({placeholders})',
+                        (p['source_db_name'], table, *columns.keys()),
+                    )
+                    result[table] = dict(cur.fetchall())
+        except pymysql.Error:
+            return {}
+        finally:
+            conn.close()
+        return result
 
     _INSERT_RE = re.compile(r"^INSERT INTO `([^`]+)` \(([^)]*)\) VALUES \((.*)\);\n?$")
 
@@ -114,7 +144,9 @@ class MysqlTransferHandler:
             values = self._split_values(values_str)
             for i, col in enumerate(columns):
                 if col in rules and i < len(values):
-                    values[i] = self._quote_mysql_value(mask_value(rules[col]))
+                    values[i] = self._quote_mysql_value(
+                        mask_value(rules[col], max_length=self._column_lengths.get(table, {}).get(col))
+                    )
             yield f"INSERT INTO `{table}` ({columns_str}) VALUES ({','.join(values)});\n"
 
     def _run_pipe(self, log_callback: Callable[[str, str], None], strip_collation: bool) -> tuple:
@@ -124,10 +156,12 @@ class MysqlTransferHandler:
         mysql_env = {**os.environ, 'MYSQL_PWD': self.params['dest_password']}
 
         dump_proc = subprocess.Popen(  # nosec B603
-            dump_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=dump_env,
+            dump_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            encoding='utf-8', errors='surrogateescape', env=dump_env,
         )
         mysql_proc = subprocess.Popen(  # nosec B603
-            mysql_cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, env=mysql_env,
+            mysql_cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True,
+            encoding='utf-8', errors='surrogateescape', env=mysql_env,
         )
 
         output_lines = []
@@ -179,6 +213,7 @@ class MysqlTransferHandler:
 
     def execute(self, log_callback: Callable[[str, str], None]) -> None:
         self._log_callback = log_callback
+        self._column_lengths = self._fetch_column_lengths()
         strip_collation = self._dest_needs_collation_strip(log_callback)
         last_dump_exit = last_mysql_exit = None
         for attempt in range(1, MYSQL_DUMP_MAX_RETRIES + 1):

@@ -26,6 +26,7 @@ class PgTransferHandler:
         self.params = params
         self._log_callback = None
         self._whole_db_scope = not self.params.get('table_name')
+        self._column_lengths = {}
 
     def _build_pg_dump_cmd(self) -> list:
         p = self.params
@@ -44,6 +45,37 @@ class PgTransferHandler:
         ]
 
     _COPY_HEADER_RE = re.compile(r'^COPY (\S+) \(([^)]*)\) FROM stdin;\n?$')
+
+    def _fetch_column_lengths(self) -> dict:
+        """Introspects character_maximum_length for every column referenced by
+        masking_rules — best-effort: jeśli introspekcja się nie uda, maskowanie
+        nadal działa, po prostu bez obcinania (mask_value akceptuje max_length=None)."""
+        masking_rules = self.params.get('masking_rules', {})
+        if not masking_rules:
+            return {}
+        p = self.params
+        try:
+            conn = psycopg2.connect(
+                host=p['source_host'], port=p['source_port'], user=p['source_username'],
+                password=p['source_password'], dbname=p['source_db_name'], connect_timeout=10,
+            )
+        except psycopg2.Error:
+            return {}
+        result = {}
+        try:
+            with conn.cursor() as cur:
+                for table, columns in masking_rules.items():
+                    cur.execute(
+                        "SELECT column_name, character_maximum_length FROM information_schema.columns "
+                        "WHERE table_schema = 'public' AND table_name = %s AND column_name = ANY(%s)",
+                        (table, list(columns.keys())),
+                    )
+                    result[table] = dict(cur.fetchall())
+        except psycopg2.Error:
+            return {}
+        finally:
+            conn.close()
+        return result
 
     def _relay_lines(self, lines):
         current_table = None
@@ -70,7 +102,10 @@ class PgTransferHandler:
                 values = line.rstrip('\n').split('\t')
                 for i, col in enumerate(current_columns):
                     if col in current_rules and i < len(values):
-                        values[i] = mask_value(current_rules[col])
+                        values[i] = mask_value(
+                            current_rules[col],
+                            max_length=self._column_lengths.get(current_table, {}).get(col),
+                        )
                 yield '\t'.join(values) + '\n'
                 continue
             if line == '\\.\n':
@@ -86,10 +121,12 @@ class PgTransferHandler:
         psql_env = {**os.environ, 'PGPASSWORD': self.params['dest_password']}
 
         dump_proc = subprocess.Popen(  # nosec B603 — cmd built from validated connection params, no shell=True
-            dump_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=dump_env,
+            dump_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            encoding='utf-8', errors='surrogateescape', env=dump_env,
         )
         psql_proc = subprocess.Popen(  # nosec B603
-            psql_cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, env=psql_env,
+            psql_cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True,
+            encoding='utf-8', errors='surrogateescape', env=psql_env,
         )
 
         output_lines = []
@@ -184,6 +221,7 @@ class PgTransferHandler:
 
     def execute(self, log_callback: Callable[[str, str], None]) -> None:
         self._log_callback = log_callback
+        self._column_lengths = self._fetch_column_lengths()
         last_dump_exit = last_psql_exit = None
         for attempt in range(1, PG_DUMP_MAX_RETRIES + 1):
             log_callback('info', f'Starting pg_dump|psql (attempt {attempt})')

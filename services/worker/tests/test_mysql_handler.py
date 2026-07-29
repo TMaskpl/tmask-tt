@@ -85,6 +85,19 @@ class TestMysqlTransferHandler:
         assert 'COLLATE utf8mb4_0900_ai_ci' not in output[0]
         assert output[0].startswith('CREATE TABLE `users`')
 
+    def test_masking_truncates_to_column_max_length(self):
+        # Regression: mask_value() supports max_length truncation but nothing
+        # wired it through — a fake value longer than the destination column's
+        # character_maximum_length would blow up the restore.
+        handler = MysqlTransferHandler(self._make_params(masking_rules={'users': {'email': 'email'}}))
+        handler._column_lengths = {'users': {'email': 5}}
+        lines = ["INSERT INTO `users` (`id`, `email`) VALUES (1,'jan@firma.pl');\n"]
+        output = list(handler._relay_lines(iter(lines), strip_collation=False))
+        inserted = output[0]
+        values_part = inserted.split('VALUES (', 1)[1].rsplit(');\n', 1)[0]
+        email_value = values_part.split(',', 1)[1].strip().strip("'")
+        assert len(email_value) <= 5
+
     def test_whole_db_scope_warns_once_per_table_not_per_row(self):
         handler = MysqlTransferHandler(self._make_params(masking_rules={}, table_name=None))
         warnings = []

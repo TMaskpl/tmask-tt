@@ -307,3 +307,15 @@ class TestPgTransferHandler:
         dump_lines = ['COPY sessions (id, token) FROM stdin;\n', '1\tabc123\n', '\\.\n']
         list(handler._relay_lines(iter(dump_lines)))
         assert warnings == []
+
+    def test_masking_truncates_to_column_max_length(self):
+        # Regression: mask_value() supports max_length truncation but nothing
+        # wired it through — a fake value longer than the destination column's
+        # character_maximum_length would blow up the restore with "value too
+        # long for type character varying(n)".
+        handler = PgTransferHandler(self._make_params(masking_rules={'users': {'email': 'email'}}))
+        handler._column_lengths = {'users': {'email': 5}}
+        dump_lines = ['COPY users (id, email) FROM stdin;\n', '1\tjan@firma.pl\n', '\\.\n']
+        output = list(handler._relay_lines(iter(dump_lines)))
+        row = output[1].rstrip('\n').split('\t')
+        assert len(row[1]) <= 5
