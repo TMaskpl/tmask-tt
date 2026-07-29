@@ -1,4 +1,5 @@
 import os
+import re
 import subprocess  # nosec B404
 import threading
 import time
@@ -6,11 +7,12 @@ from typing import Callable
 
 import pymysql
 
+from modules.masking.faker_engine import mask_value
+
 from .config import (
     MYSQL_DUMP_BASE_FLAGS,
     MYSQL_DUMP_MAX_RETRIES,
     MYSQL_DUMP_RETRY_DELAY,
-    SED_STRIP_MYSQL80_COLLATION,
 )
 
 
@@ -21,11 +23,15 @@ class MysqlTransferError(Exception):
 class MysqlTransferHandler:
     def __init__(self, params: dict):
         self.params = params
+        self._log_callback = None
+        self._whole_db_scope = not self.params.get('table_name')
 
     def _build_mysqldump_cmd(self) -> list:
         p = self.params
         cmd = ['mysqldump', '-h', p['source_host'], '-P', str(p['source_port']), '-u', p['source_username']]
         cmd += list(MYSQL_DUMP_BASE_FLAGS)
+        if p.get('masking_rules'):
+            cmd += ['--skip-extended-insert', '--complete-insert']
         cmd.append(p['source_db_name'])
         if p.get('table_name'):
             cmd.append(p['table_name'])
@@ -58,6 +64,59 @@ class MysqlTransferHandler:
                 log_callback('warn', f'VERSION CHECK FAILED — nie udało się wykryć wersji serwera docelowego dla sprawdzenia zgodności COLLATION: {e}. Zakładam brak konfliktu.')
             return False
 
+    _INSERT_RE = re.compile(r"^INSERT INTO `([^`]+)` \(([^)]*)\) VALUES \((.*)\);\n?$")
+
+    def _split_values(self, values_str: str) -> list:
+        # --complete-insert z mysqldump generuje jeden wiersz per INSERT (bo
+        # --skip-extended-insert wymusza brak batchowania) — string wartości
+        # to prosta lista rozdzielona przecinkami z opcjonalnym cudzysłowem;
+        # tokenizer musi respektować przecinki WEWNĄTRZ cudzysłowu.
+        values = []
+        current = ''
+        in_quotes = False
+        i = 0
+        while i < len(values_str):
+            ch = values_str[i]
+            if ch == "'" and (i == 0 or values_str[i - 1] != '\\'):
+                in_quotes = not in_quotes
+                current += ch
+            elif ch == ',' and not in_quotes:
+                values.append(current)
+                current = ''
+            else:
+                current += ch
+            i += 1
+        values.append(current)
+        return values
+
+    def _quote_mysql_value(self, value: str) -> str:
+        escaped = value.replace('\\', '\\\\').replace("'", "\\'")
+        return f"'{escaped}'"
+
+    def _relay_lines(self, lines, strip_collation: bool):
+        warned_tables = set()
+        for line in lines:
+            if strip_collation:
+                line = line.replace(' COLLATE utf8mb4_0900_ai_ci', '')
+            match = self._INSERT_RE.match(line)
+            if not match:
+                yield line
+                continue
+            table, columns_str, values_str = match.groups()
+            columns = [c.strip().strip('`') for c in columns_str.split(',')]
+            rules = self.params.get('masking_rules', {}).get(table, {})
+            if not rules:
+                if self._whole_db_scope and table not in warned_tables and self._log_callback:
+                    self._log_callback('warn', f'Tabela "{table}" przesłana BEZ maskowania — brak zdefiniowanego profilu')
+                    warned_tables.add(table)
+                yield line
+                continue
+            values = self._split_values(values_str)
+            for i, col in enumerate(columns):
+                if col in rules and i < len(values):
+                    values[i] = self._quote_mysql_value(mask_value(rules[col]))
+            yield f"INSERT INTO `{table}` ({columns_str}) VALUES ({','.join(values)});\n"
+
     def _run_pipe(self, log_callback: Callable[[str, str], None], strip_collation: bool) -> tuple:
         dump_cmd = self._build_mysqldump_cmd()
         mysql_cmd = self._build_mysql_cmd()
@@ -67,19 +126,9 @@ class MysqlTransferHandler:
         dump_proc = subprocess.Popen(  # nosec B603
             dump_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=dump_env,
         )
-        feed_stdout = dump_proc.stdout
-        sed_proc = None
-        if strip_collation:
-            sed_proc = subprocess.Popen(  # nosec B603 — static sed pattern, no user input
-                ['sed', SED_STRIP_MYSQL80_COLLATION], stdin=dump_proc.stdout, stdout=subprocess.PIPE, text=True,
-            )
-            dump_proc.stdout.close()
-            feed_stdout = sed_proc.stdout
-
         mysql_proc = subprocess.Popen(  # nosec B603
-            mysql_cmd, stdin=feed_stdout, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, env=mysql_env,
+            mysql_cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, env=mysql_env,
         )
-        feed_stdout.close()
 
         output_lines = []
         output_lock = threading.Lock()
@@ -92,16 +141,24 @@ class MysqlTransferHandler:
                         output_lines.append(line)
                     log_callback('info', line)
 
-        threads = [threading.Thread(target=_drain, args=(mysql_proc.stderr,)),
-                   threading.Thread(target=_drain, args=(dump_proc.stderr,))]
+        def _relay():
+            for line in self._relay_lines(dump_proc.stdout, strip_collation):
+                mysql_proc.stdin.write(line)
+            mysql_proc.stdin.close()
+
+        threads = [
+            threading.Thread(target=_drain, args=(mysql_proc.stderr,)),
+            threading.Thread(target=_drain, args=(dump_proc.stderr,)),
+        ]
+        relay_thread = threading.Thread(target=_relay)
         for t in threads:
             t.start()
+        relay_thread.start()
         for t in threads:
             t.join()
+        relay_thread.join()
 
         mysql_exit = mysql_proc.wait()
-        if sed_proc:
-            sed_proc.wait()
         dump_exit = dump_proc.wait()
         return dump_exit, mysql_exit, '\n'.join(output_lines)
 
@@ -113,6 +170,7 @@ class MysqlTransferHandler:
             raise MysqlTransferError(f'TABLE NOT FOUND: {self.params["table_name"]}')
 
     def execute(self, log_callback: Callable[[str, str], None]) -> None:
+        self._log_callback = log_callback
         strip_collation = self._dest_needs_collation_strip(log_callback)
         last_dump_exit = last_mysql_exit = None
         for attempt in range(1, MYSQL_DUMP_MAX_RETRIES + 1):
