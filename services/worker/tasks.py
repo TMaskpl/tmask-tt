@@ -13,6 +13,7 @@ from django.conf import settings  # noqa: E402
 from apps.connections.models import Connection  # noqa: E402
 from apps.transfers.models import TransferJob, TransferLog  # noqa: E402
 from apps.db_transfers.models import DbTransferJob, DbTransferLog  # noqa: E402
+from apps.masking.models import MaskingRule  # noqa: E402
 from apps.webhook_deliveries.models import WebhookDeliveryLog  # noqa: E402
 from apps.webhook_deliveries.services import (  # noqa: E402
     circuit_is_open, record_success, record_failure, CIRCUIT_SKIPPED_MESSAGE,
@@ -308,6 +309,16 @@ def _db_transfer_handlers() -> dict:
     }
 
 
+def _masking_rules_for(source_connection) -> dict:
+    rules = MaskingRule.objects.filter(connection=source_connection).values(
+        'table_name', 'column_name', 'faker_provider',
+    )
+    result = {}
+    for r in rules:
+        result.setdefault(r['table_name'], {})[r['column_name']] = r['faker_provider']
+    return result
+
+
 def _build_db_transfer_params(job) -> dict:
     return {
         'source_host': job.source_connection.host,
@@ -322,6 +333,7 @@ def _build_db_transfer_params(job) -> dict:
         'dest_db_name': job.dest_connection.db_name,
         'table_name': job.table_name or None,
         'verify_row_count': job.verify_row_count,
+        'masking_rules': _masking_rules_for(job.source_connection),
     }
 
 
