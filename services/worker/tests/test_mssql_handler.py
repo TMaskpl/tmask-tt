@@ -115,9 +115,32 @@ class TestMssqlCommandBuilding:
             'source_host': 'a', 'source_port': 1433, 'source_username': 'sa', 'source_password': 'srcpw',
             'source_db_name': 'src', 'dest_host': 'b', 'dest_port': 1433, 'dest_username': 'sa',
             'dest_password': 'dstpw', 'dest_db_name': 'dst', 'table_name': None, 'verify_row_count': False,
+            'masking_rules': {},
         }
         defaults.update(kwargs)
         return defaults
+
+    def test_table_without_masking_rules_uses_native_bcp_flag(self):
+        handler = MssqlTransferHandler(self._make_params(masking_rules={}))
+        cmd = handler._build_bcp_out_cmd('users', '/tmp/x.dat')
+        assert '-n' in cmd
+        assert '-c' not in cmd
+
+    def test_table_with_masking_rule_uses_character_bcp_flag(self):
+        # NOTE: fixed from the task brief's literal test code, which called
+        # _build_bcp_out_cmd('users', '/tmp/x.dat') with no `native` argument
+        # and expected '-c' back. _build_bcp_out_cmd defaults to native=True
+        # (i.e. '-n') per its own signature — it has no way to look at
+        # masking_rules itself; the decision to go character-mode lives in
+        # _transfer_once, which computes `native = not bool(rules)` and passes
+        # it explicitly. Passing native=False here is what actually exercises
+        # the real call path.
+        handler = MssqlTransferHandler(self._make_params(
+            masking_rules={'users': {'email': 'email'}},
+        ))
+        cmd = handler._build_bcp_out_cmd('users', '/tmp/x.dat', native=False)
+        assert '-c' in cmd
+        assert '-n' not in cmd
 
     def test_builds_sqlcmd_command(self, tmp_path):
         handler = MssqlTransferHandler(self._make_params())
@@ -140,6 +163,46 @@ class TestMssqlCommandBuilding:
         cmd = handler._build_bcp_in_cmd('users', str(tmp_path / 'users.dat'))
         assert cmd[0] == 'bcp'
         assert 'users' in cmd and 'in' in cmd and 'dst' in cmd and '-n' in cmd
+
+
+class TestMssqlMasking:
+    def _make_params(self, **kwargs):
+        defaults = {
+            'source_host': 'a', 'source_port': 1433, 'source_username': 'sa', 'source_password': 'srcpw',
+            'source_db_name': 'src', 'dest_host': 'b', 'dest_port': 1433, 'dest_username': 'sa',
+            'dest_password': 'dstpw', 'dest_db_name': 'dst', 'table_name': None, 'verify_row_count': False,
+            'masking_rules': {},
+        }
+        defaults.update(kwargs)
+        return defaults
+
+    def test_masking_replaces_column_in_character_mode_file(self, tmp_path):
+        handler = MssqlTransferHandler(self._make_params(
+            masking_rules={'users': {'email': 'email'}},
+        ))
+        dat_path = tmp_path / 'users.dat'
+        dat_path.write_text('1\tjan@firma.pl\n2\tewa@firma.pl\n')
+        schema = {'columns': [{'name': 'id'}, {'name': 'email'}], 'primary_key': ['id']}
+        handler._mask_dat_file(str(dat_path), 'users', schema)
+        lines = dat_path.read_text().splitlines()
+        assert lines[0].split('\t')[0] == '1'
+        assert 'jan@firma.pl' not in lines[0]
+        assert 'ewa@firma.pl' not in lines[1]
+
+    def test_whole_db_scope_warns_for_table_without_profile(self):
+        handler = MssqlTransferHandler(self._make_params(masking_rules={}, table_name=None))
+        warnings = []
+        handler._whole_db_scope = True
+        rules = handler._rules_for('sessions', log_callback=lambda level, msg: warnings.append((level, msg)))
+        assert rules == {}
+        assert any(level == 'warn' and 'sessions' in msg for level, msg in warnings)
+
+    def test_single_table_scope_does_not_warn(self):
+        handler = MssqlTransferHandler(self._make_params(masking_rules={}, table_name='sessions'))
+        warnings = []
+        handler._whole_db_scope = False
+        handler._rules_for('sessions', log_callback=lambda level, msg: warnings.append((level, msg)))
+        assert warnings == []
 
 
 class TestMssqlExecute:
