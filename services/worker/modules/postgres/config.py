@@ -7,4 +7,6 @@ PG_DUMP_RETRY_DELAY = 5
 # it with "unrecognized configuration parameter" and, with psql's ON_ERROR_STOP=1, abort
 # the whole restore — even though the rest of the dump is fully compatible. Strip it in
 # transit so newer client tools can still restore into older Postgres servers.
+# NOTE: no longer referenced directly — the same stripping logic now lives as a literal
+# check in handler._relay_lines(). Kept here as documentation of the pattern's origin.
 SED_STRIP_INCOMPATIBLE_SET = r'/^SET transaction_timeout/d'

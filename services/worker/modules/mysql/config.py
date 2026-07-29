@@ -7,4 +7,6 @@ MYSQL_DUMP_RETRY_DELAY = 5
 # CREATE TABLE statements; restoring into a pre-8.0 destination (which doesn't
 # know this collation) fails with "Unknown collation". Stripped in transit when
 # the destination is detected as < 8.0 — see handler._dest_needs_collation_strip().
+# NOTE: no longer referenced directly — the same stripping logic now lives as a literal
+# check in handler._relay_lines(). Kept here as documentation of the pattern's origin.
 SED_STRIP_MYSQL80_COLLATION = r's/ COLLATE utf8mb4_0900_ai_ci//g'

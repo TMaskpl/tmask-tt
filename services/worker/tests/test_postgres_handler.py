@@ -15,6 +15,7 @@ class TestPgTransferHandler:
             'dest_host': '10.0.0.2', 'dest_port': 5432, 'dest_username': 'postgres',
             'dest_password': 'dstpass', 'dest_db_name': 'testdb',
             'table_name': None, 'verify_row_count': False,
+            'masking_rules': {},
         }
         defaults.update(kwargs)
         return defaults
@@ -60,7 +61,7 @@ class TestPgTransferHandler:
             handler.execute(log_callback=lambda lvl, msg: None)
 
             dump_call = MockPopen.call_args_list[0]
-            psql_call = MockPopen.call_args_list[2]
+            psql_call = MockPopen.call_args_list[1]
             dump_argv = dump_call.args[0]
             psql_argv = psql_call.args[0]
             assert not any('srcpass' in str(a) for a in dump_argv)
@@ -68,33 +69,12 @@ class TestPgTransferHandler:
             assert dump_call.kwargs['env']['PGPASSWORD'] == 'srcpass'
             assert psql_call.kwargs['env']['PGPASSWORD'] == 'dstpass'
 
-    def test_filters_incompatible_transaction_timeout_set_via_sed(self):
-        # PG17's pg_dump emits `SET transaction_timeout = 0;` unconditionally, which
-        # older (<17) destination servers reject. A sed filter must sit between
-        # pg_dump and psql to strip it in transit.
-        dump_proc = self._mock_proc([], 0)
-        filter_proc = self._mock_proc([], 0)
-        psql_proc = self._mock_proc([], 0)
-        with patch('modules.postgres.handler.subprocess.Popen') as MockPopen:
-            MockPopen.side_effect = [dump_proc, filter_proc, psql_proc]
-            handler = PgTransferHandler(self._make_params())
-            handler.execute(log_callback=lambda lvl, msg: None)
-
-            filter_call = MockPopen.call_args_list[1]
-            filter_argv = filter_call.args[0]
-            assert filter_argv[0] == 'sed'
-            assert 'transaction_timeout' in ' '.join(filter_argv)
-            assert filter_call.kwargs['stdin'] is dump_proc.stdout
-            psql_call = MockPopen.call_args_list[2]
-            assert psql_call.kwargs['stdin'] is filter_proc.stdout
-
     def test_auth_failure_raises_without_retry(self):
         with patch('modules.postgres.handler.subprocess.Popen') as MockPopen, \
              patch('modules.postgres.handler.time.sleep') as mock_sleep:
             dump_proc = self._mock_proc(['pg_dump: error: connection to server failed'], 1)
-            filter_proc = self._mock_proc([], 0)
             psql_proc = self._mock_proc(['psql: error: password authentication failed for user "postgres"'], 1)
-            MockPopen.side_effect = [dump_proc, filter_proc, psql_proc]
+            MockPopen.side_effect = [dump_proc, psql_proc]
             handler = PgTransferHandler(self._make_params())
             with pytest.raises(PgTransferError, match='AUTH FAILED'):
                 handler.execute(log_callback=lambda lvl, msg: None)
@@ -104,28 +84,25 @@ class TestPgTransferHandler:
         with patch('modules.postgres.handler.subprocess.Popen') as MockPopen, \
              patch('modules.postgres.handler.time.sleep'):
             fail_dump = self._mock_proc(['pg_dump: error: server closed the connection unexpectedly'], 1)
-            fail_filter = self._mock_proc([], 0)
             fail_psql = self._mock_proc([], 1)
             ok_dump = self._mock_proc([], 0)
-            ok_filter = self._mock_proc([], 0)
             ok_psql = self._mock_proc([], 0)
-            MockPopen.side_effect = [fail_dump, fail_filter, fail_psql, ok_dump, ok_filter, ok_psql]
+            MockPopen.side_effect = [fail_dump, fail_psql, ok_dump, ok_psql]
             handler = PgTransferHandler(self._make_params())
             handler.execute(log_callback=lambda lvl, msg: None)  # should not raise
-            assert MockPopen.call_count == 6
+            assert MockPopen.call_count == 4
 
     def test_exhausted_retries_raises(self):
         with patch('modules.postgres.handler.subprocess.Popen') as MockPopen, \
              patch('modules.postgres.handler.time.sleep'):
             MockPopen.side_effect = [
                 self._mock_proc(['server closed the connection unexpectedly'], 1),
-                self._mock_proc([], 0),
                 self._mock_proc([], 1),
             ] * PG_DUMP_MAX_RETRIES
             handler = PgTransferHandler(self._make_params())
             with pytest.raises(PgTransferError, match='TRANSFER FAILED'):
                 handler.execute(log_callback=lambda lvl, msg: None)
-            assert MockPopen.call_count == PG_DUMP_MAX_RETRIES * 3
+            assert MockPopen.call_count == PG_DUMP_MAX_RETRIES * 2
 
     def test_verify_row_count_logs_ok_on_match(self):
         with patch('modules.postgres.handler.subprocess.Popen') as MockPopen, \
@@ -246,3 +223,99 @@ class TestPgTransferHandler:
             src_conn.close.assert_called_once()
             dst_conn.close.assert_called_once()
             assert any(lvl == 'warn' and 'ROW COUNT VERIFICATION FAILED' in msg for lvl, msg in logs)
+
+    def test_no_masking_rules_leaves_copy_data_untouched(self):
+        handler = PgTransferHandler(self._make_params(masking_rules={}))
+        dump_lines = [
+            'CREATE TABLE users (id int, email text);\n',
+            'COPY users (id, email) FROM stdin;\n',
+            '1\tjan@firma.pl\n',
+            '\\.\n',
+        ]
+        output = list(handler._relay_lines(iter(dump_lines)))
+        assert output == dump_lines
+
+    def test_masking_rule_replaces_configured_column_only(self):
+        handler = PgTransferHandler(self._make_params(
+            masking_rules={'users': {'email': 'email'}},
+        ))
+        dump_lines = [
+            'COPY users (id, email) FROM stdin;\n',
+            '1\tjan@firma.pl\n',
+            '\\.\n',
+        ]
+        output = list(handler._relay_lines(iter(dump_lines)))
+        assert output[0] == 'COPY users (id, email) FROM stdin;\n'
+        row = output[1].rstrip('\n').split('\t')
+        assert row[0] == '1'
+        assert row[1] != 'jan@firma.pl'
+        assert output[2] == '\\.\n'
+
+    def test_masking_rule_matches_schema_qualified_copy_header(self):
+        # Real pg_dump always schema-qualifies COPY headers (public.users),
+        # never bare table names — this test would have caught the original bug.
+        handler = PgTransferHandler(self._make_params(
+            masking_rules={'users': {'email': 'email'}},
+        ))
+        dump_lines = [
+            'COPY public.users (id, email) FROM stdin;\n',
+            '1\tjan@firma.pl\n',
+            '\\.\n',
+        ]
+        output = list(handler._relay_lines(iter(dump_lines)))
+        row = output[1].rstrip('\n').split('\t')
+        assert row[1] != 'jan@firma.pl'
+
+    def test_strips_transaction_timeout_line(self):
+        handler = PgTransferHandler(self._make_params(masking_rules={}))
+        dump_lines = ['SET transaction_timeout = 0;\n', 'SELECT 1;\n']
+        output = list(handler._relay_lines(iter(dump_lines)))
+        assert output == ['SELECT 1;\n']
+
+    def test_unmasked_table_in_same_dump_passes_through(self):
+        handler = PgTransferHandler(self._make_params(
+            masking_rules={'users': {'email': 'email'}},
+        ))
+        dump_lines = [
+            'COPY sessions (id, token) FROM stdin;\n',
+            '1\tabc123\n',
+            '\\.\n',
+        ]
+        output = list(handler._relay_lines(iter(dump_lines)))
+        assert output[1] == '1\tabc123\n'
+
+    def test_whole_db_scope_warns_once_on_table_without_profile(self):
+        # table_name=None w params ⇒ scope CAŁA BAZA. Tabela 'sessions' nie ma
+        # wpisu w masking_rules (brak profilu) ⇒ oczekujemy WARN w logu.
+        handler = PgTransferHandler(self._make_params(
+            masking_rules={'users': {'email': 'email'}}, table_name=None,
+        ))
+        warnings = []
+        handler._log_callback = lambda level, msg: warnings.append((level, msg))
+        handler._whole_db_scope = True
+        dump_lines = ['COPY sessions (id, token) FROM stdin;\n', '1\tabc123\n', '\\.\n']
+        list(handler._relay_lines(iter(dump_lines)))
+        assert any(level == 'warn' and 'sessions' in msg and 'brak zdefiniowanego profilu' in msg for level, msg in warnings)
+
+    def test_single_table_scope_does_not_warn_for_unmasked_table(self):
+        # scope POJEDYNCZA TABELA — brak reguły dla tej tabeli jest świadomym
+        # wyborem użytkownika, nie luką pokrycia jak w scope CAŁA BAZA. Zero WARN.
+        handler = PgTransferHandler(self._make_params(masking_rules={}, table_name='sessions'))
+        warnings = []
+        handler._log_callback = lambda level, msg: warnings.append((level, msg))
+        handler._whole_db_scope = False
+        dump_lines = ['COPY sessions (id, token) FROM stdin;\n', '1\tabc123\n', '\\.\n']
+        list(handler._relay_lines(iter(dump_lines)))
+        assert warnings == []
+
+    def test_masking_truncates_to_column_max_length(self):
+        # Regression: mask_value() supports max_length truncation but nothing
+        # wired it through — a fake value longer than the destination column's
+        # character_maximum_length would blow up the restore with "value too
+        # long for type character varying(n)".
+        handler = PgTransferHandler(self._make_params(masking_rules={'users': {'email': 'email'}}))
+        handler._column_lengths = {'users': {'email': 5}}
+        dump_lines = ['COPY users (id, email) FROM stdin;\n', '1\tjan@firma.pl\n', '\\.\n']
+        output = list(handler._relay_lines(iter(dump_lines)))
+        row = output[1].rstrip('\n').split('\t')
+        assert len(row[1]) <= 5

@@ -653,7 +653,9 @@ class TestExecuteDbTransferPostgresDispatch:
     def test_dispatches_to_postgres_handler_and_marks_done(self):
         with patch('tasks.PgTransferHandler') as MockHandler, \
              patch('tasks.DbTransferJob') as MockJob, \
-             patch('tasks.DbTransferLog') as _:
+             patch('tasks.DbTransferLog') as _, \
+             patch('tasks.MaskingRule') as MockMaskingRule:
+            MockMaskingRule.objects.filter.return_value.values.return_value = []
             mock_job = MagicMock()
             MockJob.objects.select_related.return_value.get.return_value = mock_job
             mock_job.pk = 1
@@ -671,7 +673,9 @@ class TestExecuteDbTransferPostgresDispatch:
     def test_builds_params_with_correct_source_dest_field_mapping(self):
         with patch('tasks.PgTransferHandler') as MockHandler, \
              patch('tasks.DbTransferJob') as MockJob, \
-             patch('tasks.DbTransferLog') as _:
+             patch('tasks.DbTransferLog') as _, \
+             patch('tasks.MaskingRule') as MockMaskingRule:
+            MockMaskingRule.objects.filter.return_value.values.return_value = []
             mock_job = MagicMock()
             MockJob.objects.select_related.return_value.get.return_value = mock_job
             mock_job.pk = 1
@@ -708,7 +712,9 @@ class TestExecuteDbTransferPostgresDispatch:
     def test_marks_job_failed_on_pg_transfer_error(self):
         with patch('tasks.PgTransferHandler') as MockHandler, \
              patch('tasks.DbTransferJob') as MockJob, \
-             patch('tasks.DbTransferLog') as _:
+             patch('tasks.DbTransferLog') as _, \
+             patch('tasks.MaskingRule') as MockMaskingRule:
+            MockMaskingRule.objects.filter.return_value.values.return_value = []
             mock_job = MagicMock()
             MockJob.objects.select_related.return_value.get.return_value = mock_job
             mock_job.pk = 1
@@ -740,7 +746,9 @@ class TestExecuteDbTransferEngineDispatch:
     def test_dispatches_to_mysql_handler(self):
         with patch('tasks.DbTransferJob') as MockJob, \
              patch('tasks.DbTransferLog'), \
+             patch('tasks.MaskingRule') as MockMaskingRule, \
              patch('tasks.MysqlTransferHandler') as MockMysql:
+            MockMaskingRule.objects.filter.return_value.values.return_value = []
             self._mock_job(MockJob, 'mysql')
             MockMysql.return_value.execute.return_value = None
             from tasks import execute_db_transfer
@@ -750,7 +758,9 @@ class TestExecuteDbTransferEngineDispatch:
     def test_dispatches_to_mssql_handler(self):
         with patch('tasks.DbTransferJob') as MockJob, \
              patch('tasks.DbTransferLog'), \
+             patch('tasks.MaskingRule') as MockMaskingRule, \
              patch('tasks.MssqlTransferHandler') as MockMssql:
+            MockMaskingRule.objects.filter.return_value.values.return_value = []
             self._mock_job(MockJob, 'mssql')
             MockMssql.return_value.execute.return_value = None
             from tasks import execute_db_transfer
@@ -760,7 +770,9 @@ class TestExecuteDbTransferEngineDispatch:
     def test_dispatches_to_postgres_handler_unchanged(self):
         with patch('tasks.DbTransferJob') as MockJob, \
              patch('tasks.DbTransferLog'), \
+             patch('tasks.MaskingRule') as MockMaskingRule, \
              patch('tasks.PgTransferHandler') as MockPg:
+            MockMaskingRule.objects.filter.return_value.values.return_value = []
             self._mock_job(MockJob, 'postgres')
             MockPg.return_value.execute.return_value = None
             from tasks import execute_db_transfer
@@ -770,7 +782,9 @@ class TestExecuteDbTransferEngineDispatch:
     def test_mysql_error_marks_job_failed(self):
         with patch('tasks.DbTransferJob') as MockJob, \
              patch('tasks.DbTransferLog'), \
+             patch('tasks.MaskingRule') as MockMaskingRule, \
              patch('tasks.MysqlTransferHandler') as MockMysql:
+            MockMaskingRule.objects.filter.return_value.values.return_value = []
             from modules.mysql.handler import MysqlTransferError
             mock_job = self._mock_job(MockJob, 'mysql')
             MockMysql.return_value.execute.side_effect = MysqlTransferError('AUTH FAILED')
@@ -781,10 +795,34 @@ class TestExecuteDbTransferEngineDispatch:
     def test_mssql_error_marks_job_failed(self):
         with patch('tasks.DbTransferJob') as MockJob, \
              patch('tasks.DbTransferLog'), \
+             patch('tasks.MaskingRule') as MockMaskingRule, \
              patch('tasks.MssqlTransferHandler') as MockMssql:
+            MockMaskingRule.objects.filter.return_value.values.return_value = []
             from modules.mssql.handler import MssqlTransferError
             mock_job = self._mock_job(MockJob, 'mssql')
             MockMssql.return_value.execute.side_effect = MssqlTransferError('CONN FAILED')
             from tasks import execute_db_transfer
             execute_db_transfer(job_id=1)
             mock_job.mark_failed.assert_called_once_with('CONN FAILED')
+
+
+class TestMaskingRulesFor:
+    @patch('tasks.MaskingRule')
+    def test_returns_empty_dict_when_no_rules(self, MockMaskingRule):
+        MockMaskingRule.objects.filter.return_value.values.return_value = []
+        mock_connection = MagicMock()
+        from tasks import _masking_rules_for
+        assert _masking_rules_for(mock_connection) == {}
+        MockMaskingRule.objects.filter.assert_called_once_with(connection=mock_connection)
+
+    @patch('tasks.MaskingRule')
+    def test_groups_rules_by_table_and_column_across_whole_connection(self, MockMaskingRule):
+        MockMaskingRule.objects.filter.return_value.values.return_value = [
+            {'table_name': 'users', 'column_name': 'email', 'faker_provider': 'email'},
+            {'table_name': 'clients', 'column_name': 'name', 'faker_provider': 'name'},
+        ]
+        mock_connection = MagicMock()
+        from tasks import _masking_rules_for
+        assert _masking_rules_for(mock_connection) == {
+            'users': {'email': 'email'}, 'clients': {'name': 'name'},
+        }

@@ -1,4 +1,5 @@
 import os
+import re
 import subprocess  # nosec B404
 import threading
 import time
@@ -7,11 +8,12 @@ from typing import Callable
 import psycopg2
 from psycopg2 import sql
 
+from modules.masking.faker_engine import mask_value
+
 from .config import (
     PG_DUMP_BASE_FLAGS,
     PG_DUMP_MAX_RETRIES,
     PG_DUMP_RETRY_DELAY,
-    SED_STRIP_INCOMPATIBLE_SET,
 )
 
 
@@ -22,6 +24,9 @@ class PgTransferError(Exception):
 class PgTransferHandler:
     def __init__(self, params: dict):
         self.params = params
+        self._log_callback = None
+        self._whole_db_scope = not self.params.get('table_name')
+        self._column_lengths = {}
 
     def _build_pg_dump_cmd(self) -> list:
         p = self.params
@@ -39,6 +44,76 @@ class PgTransferHandler:
             '-v', 'ON_ERROR_STOP=1', p['dest_db_name'],
         ]
 
+    _COPY_HEADER_RE = re.compile(r'^COPY (\S+) \(([^)]*)\) FROM stdin;\n?$')
+
+    def _fetch_column_lengths(self) -> dict:
+        """Introspects character_maximum_length for every column referenced by
+        masking_rules — best-effort: jeśli introspekcja się nie uda, maskowanie
+        nadal działa, po prostu bez obcinania (mask_value akceptuje max_length=None)."""
+        masking_rules = self.params.get('masking_rules', {})
+        if not masking_rules:
+            return {}
+        p = self.params
+        try:
+            conn = psycopg2.connect(
+                host=p['source_host'], port=p['source_port'], user=p['source_username'],
+                password=p['source_password'], dbname=p['source_db_name'], connect_timeout=10,
+            )
+        except psycopg2.Error:
+            return {}
+        result = {}
+        try:
+            with conn.cursor() as cur:
+                for table, columns in masking_rules.items():
+                    cur.execute(
+                        "SELECT column_name, character_maximum_length FROM information_schema.columns "
+                        "WHERE table_schema = 'public' AND table_name = %s AND column_name = ANY(%s)",
+                        (table, list(columns.keys())),
+                    )
+                    result[table] = dict(cur.fetchall())
+        except psycopg2.Error:
+            return {}
+        finally:
+            conn.close()
+        return result
+
+    def _relay_lines(self, lines):
+        current_table = None
+        current_columns = []
+        current_rules = {}
+        warned_tables = set()
+        for line in lines:
+            if line.startswith('SET transaction_timeout'):
+                continue
+            header = self._COPY_HEADER_RE.match(line)
+            if header:
+                current_table = header.group(1)
+                if '.' in current_table:
+                    current_table = current_table.split('.', 1)[1]
+                current_table = current_table.strip('"')
+                current_columns = [c.strip() for c in header.group(2).split(',')]
+                current_rules = self.params.get('masking_rules', {}).get(current_table, {})
+                if not current_rules and self._whole_db_scope and current_table not in warned_tables and self._log_callback:
+                    self._log_callback('warn', f'Tabela "{current_table}" przesłana BEZ maskowania — brak zdefiniowanego profilu')
+                    warned_tables.add(current_table)
+                yield line
+                continue
+            if current_table and line != '\\.\n' and current_rules:
+                values = line.rstrip('\n').split('\t')
+                for i, col in enumerate(current_columns):
+                    if col in current_rules and i < len(values):
+                        values[i] = mask_value(
+                            current_rules[col],
+                            max_length=self._column_lengths.get(current_table, {}).get(col),
+                        )
+                yield '\t'.join(values) + '\n'
+                continue
+            if line == '\\.\n':
+                current_table = None
+                current_columns = []
+                current_rules = {}
+            yield line
+
     def _run_pipe(self, log_callback: Callable[[str, str], None]) -> tuple:
         dump_cmd = self._build_pg_dump_cmd()
         psql_cmd = self._build_psql_cmd()
@@ -46,17 +121,13 @@ class PgTransferHandler:
         psql_env = {**os.environ, 'PGPASSWORD': self.params['dest_password']}
 
         dump_proc = subprocess.Popen(  # nosec B603 — cmd built from validated connection params, no shell=True
-            dump_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=dump_env,
+            dump_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            encoding='utf-8', errors='surrogateescape', env=dump_env,
         )
-        filter_proc = subprocess.Popen(  # nosec B603 — static sed pattern, no user input
-            ['sed', '-E', SED_STRIP_INCOMPATIBLE_SET],
-            stdin=dump_proc.stdout, stdout=subprocess.PIPE, text=True,
-        )
-        dump_proc.stdout.close()
         psql_proc = subprocess.Popen(  # nosec B603
-            psql_cmd, stdin=filter_proc.stdout, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, env=psql_env,
+            psql_cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True,
+            encoding='utf-8', errors='surrogateescape', env=psql_env,
         )
-        filter_proc.stdout.close()
 
         output_lines = []
         output_lock = threading.Lock()
@@ -69,15 +140,30 @@ class PgTransferHandler:
                         output_lines.append(line)
                     log_callback('info', line)
 
+        def _relay():
+            try:
+                for line in self._relay_lines(dump_proc.stdout):
+                    psql_proc.stdin.write(line)
+            except (BrokenPipeError, OSError):
+                pass
+            finally:
+                try:
+                    psql_proc.stdin.close()
+                except (BrokenPipeError, OSError):
+                    pass
+                dump_proc.stdout.close()
+
         psql_thread = threading.Thread(target=_drain, args=(psql_proc.stderr,))
         dump_thread = threading.Thread(target=_drain, args=(dump_proc.stderr,))
+        relay_thread = threading.Thread(target=_relay)
         psql_thread.start()
         dump_thread.start()
+        relay_thread.start()
         psql_thread.join()
         dump_thread.join()
+        relay_thread.join()
 
         psql_exit = psql_proc.wait()
-        filter_proc.wait()
         dump_exit = dump_proc.wait()
         return dump_exit, psql_exit, '\n'.join(output_lines)
 
@@ -134,6 +220,8 @@ class PgTransferHandler:
             dst_conn.close()
 
     def execute(self, log_callback: Callable[[str, str], None]) -> None:
+        self._log_callback = log_callback
+        self._column_lengths = self._fetch_column_lengths()
         last_dump_exit = last_psql_exit = None
         for attempt in range(1, PG_DUMP_MAX_RETRIES + 1):
             log_callback('info', f'Starting pg_dump|psql (attempt {attempt})')

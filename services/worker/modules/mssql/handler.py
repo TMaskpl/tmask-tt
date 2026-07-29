@@ -6,6 +6,8 @@ from typing import Callable
 
 import pyodbc
 
+from modules.masking.faker_engine import mask_value
+
 from .config import MSSQL_MAX_RETRIES, MSSQL_RETRY_DELAY
 
 
@@ -16,6 +18,7 @@ class MssqlTransferError(Exception):
 class MssqlTransferHandler:
     def __init__(self, params: dict):
         self.params = params
+        self._whole_db_scope = not self.params.get('table_name')
 
     def _quote_identifier(self, name: str) -> str:
         # pyodbc has no sql.Identifier()-equivalent safe-quoting API (unlike
@@ -107,19 +110,43 @@ class MssqlTransferHandler:
             '-U', p['dest_username'], '-P', p['dest_password'], '-i', ddl_path, '-b',
         ]
 
-    def _build_bcp_out_cmd(self, table_name: str, out_path: str) -> list:
+    def _build_bcp_out_cmd(self, table_name: str, out_path: str, native: bool = True) -> list:
         p = self.params
+        mode_flag = '-n' if native else '-c'
         return [
             'bcp', table_name, 'out', out_path, '-S', f'{p["source_host"]},{p["source_port"]}',
-            '-U', p['source_username'], '-P', p['source_password'], '-d', p['source_db_name'], '-n',
+            '-U', p['source_username'], '-P', p['source_password'], '-d', p['source_db_name'], mode_flag,
         ]
 
-    def _build_bcp_in_cmd(self, table_name: str, in_path: str) -> list:
+    def _build_bcp_in_cmd(self, table_name: str, in_path: str, native: bool = True) -> list:
         p = self.params
+        mode_flag = '-n' if native else '-c'
         return [
             'bcp', table_name, 'in', in_path, '-S', f'{p["dest_host"]},{p["dest_port"]}',
-            '-U', p['dest_username'], '-P', p['dest_password'], '-d', p['dest_db_name'], '-n',
+            '-U', p['dest_username'], '-P', p['dest_password'], '-d', p['dest_db_name'], mode_flag,
         ]
+
+    def _rules_for(self, table_name: str, log_callback: Callable[[str, str], None] = None) -> dict:
+        rules = self.params.get('masking_rules', {}).get(table_name, {})
+        if not rules and self._whole_db_scope and log_callback:
+            log_callback('warn', f'Tabela "{table_name}" przesłana BEZ maskowania — brak zdefiniowanego profilu')
+        return rules
+
+    def _mask_dat_file(self, path: str, table_name: str, schema: dict) -> None:
+        rules = self.params.get('masking_rules', {}).get(table_name, {})
+        if not rules:
+            return
+        column_names = [c['name'] for c in schema['columns']]
+        column_lengths = {c['name']: c.get('character_maximum_length') for c in schema['columns']}
+        with open(path, 'r') as f:
+            lines = f.readlines()
+        with open(path, 'w') as f:
+            for line in lines:
+                values = line.rstrip('\n').split('\t')
+                for i, col in enumerate(column_names):
+                    if col in rules and i < len(values):
+                        values[i] = mask_value(rules[col], max_length=column_lengths.get(col))
+                f.write('\t'.join(values) + '\n')
 
     def _run_step(self, cmd: list, log_callback: Callable[[str, str], None]) -> int:
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)  # nosec B603 — cmd built from validated connection params
@@ -148,9 +175,14 @@ class MssqlTransferHandler:
                 fd, data_path = tempfile.mkstemp(suffix='.dat')
                 os.close(fd)
                 tmp_paths.append(data_path)
-                if self._run_step(self._build_bcp_out_cmd(table_name, data_path), log_callback) != 0:
+                rules = self._rules_for(table_name, log_callback)
+                native = not bool(rules)
+                if self._run_step(self._build_bcp_out_cmd(table_name, data_path, native=native), log_callback) != 0:
                     return False
-                if self._run_step(self._build_bcp_in_cmd(table_name, data_path), log_callback) != 0:
+                if rules:
+                    schema = self._introspect_table(table_name)
+                    self._mask_dat_file(data_path, table_name, schema)
+                if self._run_step(self._build_bcp_in_cmd(table_name, data_path, native=native), log_callback) != 0:
                     return False
             return True
         finally:

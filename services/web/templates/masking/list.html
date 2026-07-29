@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}MASKING RULES — TMASK-TRANSPORTER{% endblock %}
+{% block content %}
+<div class="panel">
+  <span class="panel-title">Masking Rules</span>
+  <div class="toolbar">
+    {% if user.is_admin %}
+    <a href="{% url 'masking:create' %}" class="btn">+ New Rule</a>
+    {% endif %}
+  </div>
+  {% if rules %}
+  <table>
+    <thead>
+      <tr>
+        <th>Connection</th><th>Table</th><th>Column</th><th>Provider</th><th>Utworzył</th>
+        {% if user.is_admin %}<th class="col-actions">Actions</th>{% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for rule in rules %}
+      <tr>
+        <td>{{ rule.connection.name }}</td>
+        <td>{{ rule.table_name }}</td>
+        <td>{{ rule.column_name }}</td>
+        <td>{{ rule.get_faker_provider_display }}</td>
+        <td>{{ rule.created_by.username|default:"—" }}</td>
+        {% if user.is_admin %}
+        <td class="col-actions">
+          <div class="row-actions">
+            <a href="{% url 'masking:edit' rule.pk %}" class="btn btn-small">Edit</a>
+            <form method="post" action="{% url 'masking:delete' rule.pk %}" class="inline-form"
+              data-confirm="DELETE regułę {{ rule.table_name }}.{{ rule.column_name }}?">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-small btn-danger">Del</button>
+            </form>
+          </div>
+        </td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="text-muted">Brak reguł maskowania — dodaj jedną powyżej</p>
+  {% endif %}
+</div>
+{% endblock %}

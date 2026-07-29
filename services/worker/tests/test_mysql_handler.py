@@ -13,6 +13,7 @@ class TestMysqlTransferHandler:
             'dest_host': '10.0.0.2', 'dest_port': 3306, 'dest_username': 'root',
             'dest_password': 'dstpass', 'dest_db_name': 'testdb',
             'table_name': None, 'verify_row_count': False,
+            'masking_rules': {},
         }
         defaults.update(kwargs)
         return defaults
@@ -48,6 +49,67 @@ class TestMysqlTransferHandler:
         assert handler._quote_identifier('users') == '`users`'
         assert handler._quote_identifier('a`b') == '`a``b`'
         assert handler._quote_identifier('a`; DROP TABLE x;--') == '`a``; DROP TABLE x;--`'
+
+    def test_no_masking_rules_omits_complete_insert_flags(self):
+        handler = MysqlTransferHandler(self._make_params(masking_rules={}))
+        cmd = handler._build_mysqldump_cmd()
+        assert '--skip-extended-insert' not in cmd
+        assert '--complete-insert' not in cmd
+
+    def test_active_masking_rule_adds_complete_insert_flags(self):
+        handler = MysqlTransferHandler(self._make_params(
+            masking_rules={'users': {'email': 'email'}},
+        ))
+        cmd = handler._build_mysqldump_cmd()
+        assert '--skip-extended-insert' in cmd
+        assert '--complete-insert' in cmd
+
+    def test_masking_rule_replaces_configured_column_in_insert(self):
+        handler = MysqlTransferHandler(self._make_params(
+            masking_rules={'users': {'email': 'email'}},
+        ))
+        lines = ["INSERT INTO `users` (`id`, `email`) VALUES (1,'jan@firma.pl');\n"]
+        output = list(handler._relay_lines(iter(lines), strip_collation=False))
+        assert output[0].startswith("INSERT INTO `users` (`id`, `email`) VALUES (1,'")
+        assert 'jan@firma.pl' not in output[0]
+
+    def test_unrelated_line_passes_through(self):
+        handler = MysqlTransferHandler(self._make_params(masking_rules={}))
+        lines = ['LOCK TABLES `users` WRITE;\n']
+        assert list(handler._relay_lines(iter(lines), strip_collation=False)) == lines
+
+    def test_strip_collation_removes_inline_clause(self):
+        handler = MysqlTransferHandler(self._make_params(masking_rules={}))
+        lines = ['CREATE TABLE `users` (`email` varchar(255) COLLATE utf8mb4_0900_ai_ci);\n']
+        output = list(handler._relay_lines(iter(lines), strip_collation=True))
+        assert 'COLLATE utf8mb4_0900_ai_ci' not in output[0]
+        assert output[0].startswith('CREATE TABLE `users`')
+
+    def test_masking_truncates_to_column_max_length(self):
+        # Regression: mask_value() supports max_length truncation but nothing
+        # wired it through — a fake value longer than the destination column's
+        # character_maximum_length would blow up the restore.
+        handler = MysqlTransferHandler(self._make_params(masking_rules={'users': {'email': 'email'}}))
+        handler._column_lengths = {'users': {'email': 5}}
+        lines = ["INSERT INTO `users` (`id`, `email`) VALUES (1,'jan@firma.pl');\n"]
+        output = list(handler._relay_lines(iter(lines), strip_collation=False))
+        inserted = output[0]
+        values_part = inserted.split('VALUES (', 1)[1].rsplit(');\n', 1)[0]
+        email_value = values_part.split(',', 1)[1].strip().strip("'")
+        assert len(email_value) <= 5
+
+    def test_whole_db_scope_warns_once_per_table_not_per_row(self):
+        handler = MysqlTransferHandler(self._make_params(masking_rules={}, table_name=None))
+        warnings = []
+        handler._log_callback = lambda level, msg: warnings.append((level, msg))
+        handler._whole_db_scope = True
+        lines = [
+            "INSERT INTO `sessions` (`id`, `token`) VALUES (1,'a');\n",
+            "INSERT INTO `sessions` (`id`, `token`) VALUES (2,'b');\n",
+        ]
+        list(handler._relay_lines(iter(lines), strip_collation=False))
+        warn_count = sum(1 for level, msg in warnings if level == 'warn' and 'sessions' in msg)
+        assert warn_count == 1
 
 
 class TestMysqlCollationCompat:
@@ -119,13 +181,18 @@ class TestMysqlTransferExecute:
                 assert 'MYSQL_PWD' in call.kwargs['env']
 
     def test_collation_stripped_when_dest_below_8(self):
+        # Collation-stripping now happens in-process via _relay_lines (applied
+        # to every line unconditionally when strip_collation=True), not via an
+        # external `sed` subprocess spliced into the OS pipeline — so no `sed`
+        # Popen call should occur, and only the dump+mysql processes are spawned.
         handler = MysqlTransferHandler(self._make_params())
         with patch('modules.mysql.handler.MysqlTransferHandler._dest_needs_collation_strip', return_value=True), \
              patch('modules.mysql.handler.subprocess.Popen') as MockPopen:
-            MockPopen.side_effect = [self._mock_proc([], 0), self._mock_proc([], 0), self._mock_proc([], 0)]
+            MockPopen.side_effect = [self._mock_proc([], 0), self._mock_proc([], 0)]
             handler.execute(log_callback=lambda lvl, msg: None)
             sed_calls = [c for c in MockPopen.call_args_list if c.args[0][0] == 'sed']
-            assert len(sed_calls) == 1
+            assert len(sed_calls) == 0
+            assert MockPopen.call_count == 2
 
     def test_retries_on_failure_then_raises(self):
         handler = MysqlTransferHandler(self._make_params())

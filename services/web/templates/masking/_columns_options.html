@@ -1,0 +1,14 @@
+<select id="id_column_name" name="column_name">
+  {% if error %}
+  <option value="">— błąd połączenia z bazą źródłową —</option>
+  {% elif columns %}
+  <option value="">— wybierz kolumnę —</option>
+  {% for c in columns %}
+  {% if c.maskable %}
+  <option value="{{ c.name }}" data-suggested="{{ c.suggested_provider|default:'' }}">{{ c.name }} ({{ c.data_type }})</option>
+  {% endif %}
+  {% endfor %}
+  {% else %}
+  <option value="">— brak kolumn tekstowych w tej tabeli —</option>
+  {% endif %}
+</select>

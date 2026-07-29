@@ -28,7 +28,7 @@ import django
 from django.conf import settings as _dj_settings
 if not _dj_settings.configured:
     _dj_settings.configure(
-        INSTALLED_APPS=[],
+        INSTALLED_APPS=['apps.masking'],  # Include masking app so FAKER_PROVIDER_KEYS can be imported
         DATABASES={},
         CELERY_TASK_ALWAYS_EAGER=True,
         CELERY_BROKER_URL='memory://',
@@ -37,12 +37,22 @@ if not _dj_settings.configured:
         TRANSFERS_RETENTION_DAYS=1,
     )
 
-# Neutralise django.setup() — settings are already configured inline.
-django.setup = lambda: None
+# Call django.setup() to fully initialize Django, including apps registry
+django.setup()
 
 # (b) Stub out the Django app modules that tasks.py imports at the top level.
-# These modules live in services/web/ which is not on the worker's sys.path.
-sys.modules.setdefault('apps', MagicMock())
+# apps.masking is registered as a real Django app above (INSTALLED_APPS) so its
+# models.py — and constants like FAKER_PROVIDER_KEYS — can be imported for real.
+# The other apps are stubbed instead because their models.py/related modules
+# pull in dependencies not present in services/worker/requirements.txt.
+#
+# IMPORTANT: this only works because every cross-app reference in this codebase
+# uses `from apps.X.models import Y` (never a bare `import apps.X`). The parent
+# `apps` package itself is deliberately NOT stubbed in sys.modules — a bare
+# `import apps.connections` would resolve the real (near-empty) `apps` package
+# and then raise AttributeError, since only `from` imports hit these direct
+# sys.modules entries. If you add a bare `import apps.<name>` anywhere in
+# worker code, add `sys.modules.setdefault('apps', MagicMock())` back here.
 sys.modules.setdefault('apps.transfers', MagicMock())
 sys.modules.setdefault('apps.transfers.models', MagicMock())
 sys.modules.setdefault('apps.connections', MagicMock())
