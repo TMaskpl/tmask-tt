@@ -142,9 +142,17 @@ class MysqlTransferHandler:
                     log_callback('info', line)
 
         def _relay():
-            for line in self._relay_lines(dump_proc.stdout, strip_collation):
-                mysql_proc.stdin.write(line)
-            mysql_proc.stdin.close()
+            try:
+                for line in self._relay_lines(dump_proc.stdout, strip_collation):
+                    mysql_proc.stdin.write(line)
+            except (BrokenPipeError, OSError):
+                pass
+            finally:
+                try:
+                    mysql_proc.stdin.close()
+                except (BrokenPipeError, OSError):
+                    pass
+                dump_proc.stdout.close()
 
         threads = [
             threading.Thread(target=_drain, args=(mysql_proc.stderr,)),
