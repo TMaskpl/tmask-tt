@@ -1,5 +1,8 @@
 # tmask-transporter
 
+![Uploading obraz.png…]()
+
+
 Webowa aplikacja do przesyłania i replikacji danych między systemami przez SSH (SFTP/rsync) oraz bezpośrednio między bazami danych (Postgres/MySQL/MSSQL) — z harmonogramem cron, szyfrowaniem transferów (Fernet AES-256), opcjonalnym maskowaniem danych (Faker) przy replikacji do środowisk testowych, 2FA, rolami użytkowników i powiadomieniami (e-mail/webhook/Telegram).
 
 Interfejs "Dark Ops Console" — dark slate/navy, karty zamiast ramek, Inter (UI) + JetBrains Mono (logi/dane, self-hostowane), zero zewnętrznych CDN.
