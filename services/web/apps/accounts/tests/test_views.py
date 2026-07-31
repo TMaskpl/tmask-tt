@@ -451,3 +451,40 @@ class TestUserCreate:
         })
         assert resp.status_code == 200
         assert not django_user_model.objects.filter(username='numericpass').exists()
+
+    def test_create_writes_audit_log_entry(self, admin_client, admin_user, django_user_model):
+        from apps.audit_log.models import ConfigAuditLog
+        admin_client.post('/accounts/users/new/', {
+            'username': 'auditeduser',
+            'email': 'audited@example.com',
+            'role': 'operator',
+            'password1': 'a-decent-password-1',
+            'password2': 'a-decent-password-1',
+        })
+        entry = ConfigAuditLog.objects.get()
+        assert entry.user == admin_user
+        assert entry.action == 'created'
+        assert entry.model_name == 'User'
+        assert entry.object_repr == 'auditeduser'
+
+
+@pytest.mark.django_db
+class TestChangeUserRoleAuditLog:
+    def test_change_role_writes_audit_log_with_diff(self, admin_client, admin_user, regular_user):
+        from apps.audit_log.models import ConfigAuditLog
+        admin_client.post(f'/accounts/users/{regular_user.pk}/role/', {'role': 'readonly'})
+        entry = ConfigAuditLog.objects.get()
+        assert entry.user == admin_user
+        assert entry.action == 'updated'
+        assert entry.model_name == 'User'
+        assert entry.changed_fields == {'role': ['operator', 'readonly']}
+
+    def test_change_role_to_same_value_writes_no_audit_entry(self, admin_client, regular_user):
+        from apps.audit_log.models import ConfigAuditLog
+        admin_client.post(f'/accounts/users/{regular_user.pk}/role/', {'role': 'operator'})
+        assert ConfigAuditLog.objects.count() == 0
+
+    def test_rejected_role_change_writes_no_audit_entry(self, admin_client, admin_user):
+        from apps.audit_log.models import ConfigAuditLog
+        admin_client.post(f'/accounts/users/{admin_user.pk}/role/', {'role': 'operator'})
+        assert ConfigAuditLog.objects.count() == 0
