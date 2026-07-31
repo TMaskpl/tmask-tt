@@ -9,6 +9,7 @@ from apps.connections.models import Connection
 from apps.flows.models import Flow
 from apps.transfers.forms import _validate_transfer_path
 from apps.transfers.models import TransferJob, STATUS_CHOICES
+from apps.db_transfers.models import DbTransferJob, STATUS_CHOICES as DB_STATUS_CHOICES
 from celery import current_app
 from .auth import require_api_token
 
@@ -42,6 +43,21 @@ def _serialize_transfer_job(job):
         'flow_id': job.flow_id,
         'source_path': job.source_path,
         'destination_path': job.destination_path,
+        'created_at': job.created_at.isoformat(),
+        'started_at': job.started_at.isoformat() if job.started_at else None,
+        'finished_at': job.finished_at.isoformat() if job.finished_at else None,
+        'error': job.error_message or None,
+    }
+
+
+def _serialize_db_transfer_job(job):
+    return {
+        'job_id': job.pk,
+        'status': job.status,
+        'engine': job.engine,
+        'source_connection_id': job.source_connection_id,
+        'dest_connection_id': job.dest_connection_id,
+        'table_name': job.table_name or None,
         'created_at': job.created_at.isoformat(),
         'started_at': job.started_at.isoformat() if job.started_at else None,
         'finished_at': job.finished_at.isoformat() if job.finished_at else None,
@@ -132,3 +148,25 @@ def job_list(request):
         jobs = jobs.filter(status=status)
     jobs = jobs[:_LIST_PAGE_SIZE]
     return JsonResponse({'jobs': [_serialize_transfer_job(j) for j in jobs]})
+
+
+@require_api_token
+def db_job_status(request, job_id):
+    try:
+        job = DbTransferJob.objects.get(pk=job_id)
+    except DbTransferJob.DoesNotExist:
+        return JsonResponse({'error': _NOT_FOUND}, status=404)
+
+    return JsonResponse(_serialize_db_transfer_job(job))
+
+
+@require_api_token
+def db_job_list(request):
+    status, error = _parse_status_filter(request, DB_STATUS_CHOICES)
+    if error:
+        return error
+    jobs = DbTransferJob.objects.all()
+    if status:
+        jobs = jobs.filter(status=status)
+    jobs = jobs[:_LIST_PAGE_SIZE]
+    return JsonResponse({'jobs': [_serialize_db_transfer_job(j) for j in jobs]})
