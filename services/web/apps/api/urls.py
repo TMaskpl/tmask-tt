@@ -7,4 +7,5 @@ urlpatterns = [
     path('transfers/trigger/connection/<int:connection_id>/', views.trigger_connection, name='trigger_connection'),
     path('transfers/trigger/flow/<int:flow_id>/', views.trigger_flow, name='trigger_flow'),
     path('jobs/<int:job_id>/status/', views.job_status, name='job_status'),
+    path('jobs/', views.job_list, name='job_list'),
 ]

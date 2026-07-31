@@ -8,12 +8,45 @@ from apps.accounts.models import ROLE_LEVEL, ROLE_OPERATOR
 from apps.connections.models import Connection
 from apps.flows.models import Flow
 from apps.transfers.forms import _validate_transfer_path
-from apps.transfers.models import TransferJob
+from apps.transfers.models import TransferJob, STATUS_CHOICES
 from celery import current_app
 from .auth import require_api_token
 
 _NOT_FOUND = 'Not found'
 _FORBIDDEN = 'Operator or admin role required'
+_LIST_PAGE_SIZE = 200
+
+
+def _parse_status_filter(request, status_choices):
+    """Reads ?status= from the query string and validates it against the
+    given model's STATUS_CHOICES. Returns (status_or_None, error_response_or_None) —
+    exactly one of the two is non-None."""
+    status = request.GET.get('status')
+    if not status:
+        return None, None
+    valid_values = [choice for choice, _ in status_choices]
+    if status not in valid_values:
+        error = JsonResponse(
+            {'error': f"Invalid status. Choices: {', '.join(valid_values)}"},
+            status=400,
+        )
+        return None, error
+    return status, None
+
+
+def _serialize_transfer_job(job):
+    return {
+        'job_id': job.pk,
+        'status': job.status,
+        'connection_id': job.connection_id,
+        'flow_id': job.flow_id,
+        'source_path': job.source_path,
+        'destination_path': job.destination_path,
+        'created_at': job.created_at.isoformat(),
+        'started_at': job.started_at.isoformat() if job.started_at else None,
+        'finished_at': job.finished_at.isoformat() if job.finished_at else None,
+        'error': job.error_message or None,
+    }
 
 
 @csrf_exempt
@@ -86,10 +119,16 @@ def job_status(request, job_id):
     except TransferJob.DoesNotExist:
         return JsonResponse({'error': _NOT_FOUND}, status=404)
 
-    return JsonResponse({
-        'job_id': job.pk,
-        'status': job.status,
-        'started_at': job.started_at.isoformat() if job.started_at else None,
-        'finished_at': job.finished_at.isoformat() if job.finished_at else None,
-        'error': job.error_message or None,
-    })
+    return JsonResponse(_serialize_transfer_job(job))
+
+
+@require_api_token
+def job_list(request):
+    status, error = _parse_status_filter(request, STATUS_CHOICES)
+    if error:
+        return error
+    jobs = TransferJob.objects.all()
+    if status:
+        jobs = jobs.filter(status=status)
+    jobs = jobs[:_LIST_PAGE_SIZE]
+    return JsonResponse({'jobs': [_serialize_transfer_job(j) for j in jobs]})
