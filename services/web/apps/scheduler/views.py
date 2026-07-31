@@ -2,10 +2,12 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.http import require_POST
 from apps.accounts.permissions import require_role
 from apps.accounts.models import ROLE_ADMIN, ROLE_READONLY
+from apps.audit_log.services import log_created, log_updated, log_deleted, diff_fields
 from .models import ScheduledTransfer
 from .forms import ScheduledTransferForm
 
 _SCHEDULER_LIST = 'scheduler:list'
+SCHEDULE_TRACKED_FIELDS = ['flow', 'cron_expr', 'enabled']
 
 
 @require_role(ROLE_READONLY)
@@ -22,6 +24,7 @@ def schedule_create(request):
         sched.owner = request.user
         sched.save()
         _sync_celery_beat(sched)
+        log_created(request.user, sched)
         return redirect(_SCHEDULER_LIST)
     return render(request, 'scheduler/form.html', {'form': form, 'action': 'CREATE'})
 
@@ -31,8 +34,11 @@ def schedule_edit(request, pk):
     sched = get_object_or_404(ScheduledTransfer, pk=pk)
     form = ScheduledTransferForm(request.POST or None, instance=sched, user=request.user)
     if request.method == 'POST' and form.is_valid():
+        before = ScheduledTransfer.objects.get(pk=sched.pk)
         form.save()
         _sync_celery_beat(sched)
+        changes = diff_fields(before, sched, SCHEDULE_TRACKED_FIELDS)
+        log_updated(request.user, sched, changes)
         return redirect(_SCHEDULER_LIST)
     return render(request, 'scheduler/form.html', {'form': form, 'action': 'EDIT', 'sched': sched})
 
@@ -41,9 +47,11 @@ def schedule_edit(request, pk):
 @require_POST
 def schedule_toggle(request, pk):
     sched = get_object_or_404(ScheduledTransfer, pk=pk)
+    old_enabled = sched.enabled
     sched.enabled = not sched.enabled
     sched.save(update_fields=['enabled'])
     _sync_celery_beat(sched)
+    log_updated(request.user, sched, {'enabled': [str(old_enabled), str(sched.enabled)]})
     return redirect(_SCHEDULER_LIST)
 
 
@@ -51,6 +59,7 @@ def schedule_toggle(request, pk):
 @require_POST
 def schedule_delete(request, pk):
     sched = get_object_or_404(ScheduledTransfer, pk=pk)
+    log_deleted(request.user, sched)
     _delete_celery_beat(sched)
     sched.delete()
     return redirect(_SCHEDULER_LIST)

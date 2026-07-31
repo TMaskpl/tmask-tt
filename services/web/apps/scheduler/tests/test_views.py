@@ -213,3 +213,69 @@ class TestScheduledTransferFormOrgWideFlows:
         requester = django_user_model.objects.create_user(username='requester2', password='p', role='admin')
         form = ScheduledTransferForm(user=requester)
         assert flow in form.fields['flow'].queryset
+
+
+@pytest.mark.django_db
+class TestScheduleAuditLog:
+    def test_create_writes_audit_log_entry(self, admin_client, admin_user, make_flow):
+        from apps.audit_log.models import ConfigAuditLog
+        flow = make_flow(admin_user)
+        with patch('apps.scheduler.views._sync_celery_beat'):
+            admin_client.post(reverse('scheduler:create'), {
+                'flow': flow.pk,
+                'cron_expr': '0 3 * * *',
+                'enabled': True,
+            })
+        entry = ConfigAuditLog.objects.get()
+        assert entry.user == admin_user
+        assert entry.action == 'created'
+        assert entry.model_name == 'ScheduledTransfer'
+
+    def test_edit_writes_audit_log_with_field_diff(self, admin_client, admin_user, regular_user, make_flow, make_schedule):
+        from apps.audit_log.models import ConfigAuditLog
+        flow = make_flow(regular_user)
+        sched = make_schedule(regular_user, flow, cron_expr='0 1 * * *')
+        with patch('apps.scheduler.views._sync_celery_beat'):
+            admin_client.post(reverse('scheduler:edit', args=[sched.pk]), {
+                'flow': flow.pk,
+                'cron_expr': '0 5 * * *',
+                'enabled': True,
+            })
+        entry = ConfigAuditLog.objects.get()
+        assert entry.user == admin_user
+        assert entry.action == 'updated'
+        assert entry.model_name == 'ScheduledTransfer'
+        assert entry.changed_fields['cron_expr'] == ['0 1 * * *', '0 5 * * *']
+
+    def test_edit_without_real_changes_writes_no_audit_entry(self, admin_client, regular_user, make_flow, make_schedule):
+        from apps.audit_log.models import ConfigAuditLog
+        flow = make_flow(regular_user)
+        sched = make_schedule(regular_user, flow, cron_expr='0 1 * * *', enabled=True)
+        with patch('apps.scheduler.views._sync_celery_beat'):
+            admin_client.post(reverse('scheduler:edit', args=[sched.pk]), {
+                'flow': flow.pk,
+                'cron_expr': '0 1 * * *',
+                'enabled': True,
+            })
+        assert ConfigAuditLog.objects.count() == 0
+
+    def test_toggle_writes_audit_log_entry(self, admin_client, admin_user, regular_user, make_flow, make_schedule):
+        from apps.audit_log.models import ConfigAuditLog
+        sched = make_schedule(regular_user, make_flow(regular_user), enabled=True)
+        with patch('apps.scheduler.views._sync_celery_beat'):
+            admin_client.post(reverse('scheduler:toggle', args=[sched.pk]))
+        entry = ConfigAuditLog.objects.get()
+        assert entry.user == admin_user
+        assert entry.action == 'updated'
+        assert entry.model_name == 'ScheduledTransfer'
+        assert entry.changed_fields == {'enabled': ['True', 'False']}
+
+    def test_delete_writes_audit_log_entry(self, admin_client, admin_user, regular_user, make_flow, make_schedule):
+        from apps.audit_log.models import ConfigAuditLog
+        sched = make_schedule(regular_user, make_flow(regular_user))
+        with patch('apps.scheduler.views._delete_celery_beat'):
+            admin_client.post(reverse('scheduler:delete', args=[sched.pk]))
+        entry = ConfigAuditLog.objects.get()
+        assert entry.user == admin_user
+        assert entry.action == 'deleted'
+        assert entry.model_name == 'ScheduledTransfer'

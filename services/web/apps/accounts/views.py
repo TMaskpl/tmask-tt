@@ -15,6 +15,7 @@ from . import totp
 from .forms import LoginForm, ProfileForm, UserCreateForm, TOTPCodeForm, TOTPDisableForm
 from .permissions import require_role
 from .models import ROLE_ADMIN, ROLE_CHOICES
+from apps.audit_log.services import log_created, log_updated
 from utils.url_validator import block_private_url
 from apps.api.models import ApiToken, MAX_TOKENS_PER_USER
 from apps.organization.models import get_organization
@@ -123,8 +124,11 @@ def change_user_role(request, pk):
             if remaining_admins == 0:
                 messages.error(request, 'Nie można odebrać roli Admin ostatniemu administratorowi.')
                 return redirect(USERS_LIST)
+        old_role = target.role
         target.role = new_role
         target.save(update_fields=['role'])
+        if old_role != new_role:
+            log_updated(request.user, target, {'role': [old_role, new_role]})
     messages.success(request, f'Rola {target.username} zmieniona na {valid_roles[new_role]}.')
     return redirect(USERS_LIST)
 
@@ -134,6 +138,7 @@ def user_create(request):
     form = UserCreateForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
         user = form.save()
+        log_created(request.user, user)
         messages.success(request, f'Użytkownik {user.username} utworzony z rolą {user.get_role_display()}.')
         return redirect(USERS_LIST)
     return render(request, 'users/create.html', {'form': form})
