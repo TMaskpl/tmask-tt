@@ -988,6 +988,28 @@ class TestHealthCheckOneTask:
             health_check_one(5)
             mock_notify.delay.assert_not_called()
 
+    def test_notifies_on_regression_from_ok_to_failed(self):
+        with patch('tasks.Connection') as MockConnection, \
+             patch('tasks.ssh_test_connection') as mock_ssh_test, \
+             patch('tasks.send_health_notification') as mock_notify:
+            self._mock_connection(MockConnection, kind='ssh', old_status='ok')
+            mock_ssh_test.return_value.success = False
+            mock_ssh_test.return_value.message = 'CONNECTION FAILED — timeout'
+            from tasks import health_check_one
+            health_check_one(5)
+            mock_notify.delay.assert_called_once_with(5, 'failed')
+
+    def test_tester_exception_is_caught_and_marks_failed(self):
+        with patch('tasks.Connection') as MockConnection, \
+             patch('tasks.ssh_test_connection', side_effect=OSError('Connection refused')), \
+             patch('tasks.send_health_notification') as mock_notify:
+            mock_conn = self._mock_connection(MockConnection, kind='ssh', old_status='unknown')
+            from tasks import health_check_one
+            health_check_one(5)  # should not raise
+            assert mock_conn.health_status == 'failed'
+            assert 'Connection refused' in mock_conn.health_error
+            mock_notify.delay.assert_called_once_with(5, 'failed')
+
 
 class TestSendHealthNotificationTask:
     def _mock_connection(self, MockConnection, webhook_url='http://hooks.example.com/'):

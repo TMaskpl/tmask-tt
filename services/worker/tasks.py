@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import django
 
@@ -387,14 +388,17 @@ def health_check_one(connection_id: int):
         logger.error(f'Connection {connection_id} not found — health check skipped')
         return
 
-    if connection.kind == 'postgres':
-        result = pg_test_connection(connection)
-    elif connection.kind == 'mysql':
-        result = mysql_test_connection(connection)
-    elif connection.kind == 'mssql':
-        result = mssql_test_connection(connection)
-    else:
-        result = ssh_test_connection(connection)
+    try:
+        if connection.kind == 'postgres':
+            result = pg_test_connection(connection)
+        elif connection.kind == 'mysql':
+            result = mysql_test_connection(connection)
+        elif connection.kind == 'mssql':
+            result = mssql_test_connection(connection)
+        else:
+            result = ssh_test_connection(connection)
+    except Exception as exc:
+        result = SimpleNamespace(success=False, message=f'UNEXPECTED ERROR — {exc}')
 
     from django.utils import timezone
 
