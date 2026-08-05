@@ -102,3 +102,37 @@ class TestConnectionDbKinds:
         conn = Connection(owner=regular_user, name='x', host='h', port=3306,
                            username='u', password='p', kind=KIND_MYSQL, db_name='mydb')
         conn.clean()  # should not raise
+
+
+@pytest.mark.django_db
+class TestConnectionHealthFields:
+    def test_health_status_defaults_to_unknown(self, regular_user):
+        conn = Connection.objects.create(
+            owner=regular_user, name='X', host='h', port=22,
+            username='u', password='p', protocol='sftp',
+        )
+        assert conn.health_status == 'unknown'
+
+    def test_health_checked_at_defaults_to_none(self, regular_user):
+        conn = Connection.objects.create(
+            owner=regular_user, name='X', host='h', port=22,
+            username='u', password='p', protocol='sftp',
+        )
+        assert conn.health_checked_at is None
+
+    def test_health_error_defaults_to_empty_string(self, regular_user):
+        conn = Connection.objects.create(
+            owner=regular_user, name='X', host='h', port=22,
+            username='u', password='p', protocol='sftp',
+        )
+        assert conn.health_error == ''
+
+    def test_health_status_accepts_ok_and_failed(self, regular_user):
+        conn = Connection.objects.create(
+            owner=regular_user, name='X', host='h', port=22,
+            username='u', password='p', protocol='sftp',
+            health_status='failed', health_error='CONNECTION FAILED — timeout',
+        )
+        conn.refresh_from_db()
+        assert conn.health_status == 'failed'
+        assert conn.health_error == 'CONNECTION FAILED — timeout'

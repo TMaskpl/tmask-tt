@@ -34,6 +34,13 @@ class Connection(models.Model):
     verify_checksum = models.BooleanField(default=False)
     kind     = models.CharField(max_length=10, choices=KIND_CHOICES, default=KIND_SSH)
     db_name  = models.CharField(max_length=255, blank=True)
+    health_status = models.CharField(
+        max_length=10,
+        choices=[('unknown', 'Unknown'), ('ok', 'OK'), ('failed', 'Failed')],
+        default='unknown',
+    )
+    health_checked_at = models.DateTimeField(null=True, blank=True)
+    health_error = models.TextField(blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
