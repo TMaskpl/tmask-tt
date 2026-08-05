@@ -398,6 +398,7 @@ def health_check_one(connection_id: int):
         else:
             result = ssh_test_connection(connection)
     except Exception as exc:
+        logger.error(f'Connection {connection_id} health check raised unexpectedly: {exc}')
         result = SimpleNamespace(success=False, message=f'UNEXPECTED ERROR — {exc}')
 
     from django.utils import timezone
