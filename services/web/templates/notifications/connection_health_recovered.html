@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  body { background:#0f172a; color:#f8fafc; font-family:sans-serif; padding:20px; }
+  .header { border:1px solid #22c55e; border-radius:8px; padding:10px 20px; margin-bottom:20px; }
+  .header h1 { color:#22c55e; font-size:16px; margin:0; letter-spacing:0.02em; }
+  table { border-collapse:collapse; width:100%; }
+  td { padding:4px 12px; color:#f8fafc; }
+  td:first-child { color:#94a3b8; width:80px; }
+  .footer { margin-top:20px; border-top:1px solid #334155; padding-top:10px; font-size:11px; color:#64748b; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <h1>TMask Transporter — Connection Health Recovered</h1>
+  </div>
+  <p>Połączenie "{{ connection.name }}" znów odpowiada poprawnie.</p>
+  <table>
+    <tr><td>HOST</td><td>{{ connection.host }}:{{ connection.port }}</td></tr>
+    <tr><td>KIND</td><td>{{ connection.kind|upper }}</td></tr>
+  </table>
+  <div class="footer">TMask Transporter &mdash; ustawienia powiadomień: /accounts/profile/</div>
+</body>
+</html>

@@ -1,0 +1,11 @@
+╔══════════════════════════════════════════════════╗
+║  TMASK TRANSPORTER — CONNECTION HEALTH RECOVERED ║
+╚══════════════════════════════════════════════════╝
+
+Połączenie "{{ connection.name }}" znów odpowiada poprawnie.
+
+  HOST : {{ connection.host }}:{{ connection.port }}
+  KIND : {{ connection.kind|upper }}
+
+--
+TMask Transporter | ustawienia powiadomień: /accounts/profile/

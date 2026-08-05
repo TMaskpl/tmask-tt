@@ -1,0 +1,12 @@
+╔══════════════════════════════════════════════════╗
+║  TMASK TRANSPORTER — CONNECTION HEALTH FAILED    ║
+╚══════════════════════════════════════════════════╝
+
+Połączenie "{{ connection.name }}" nie odpowiada na cykliczny health-check.
+
+  HOST  : {{ connection.host }}:{{ connection.port }}
+  KIND  : {{ connection.kind|upper }}
+  ERROR : {{ error|default:"UNKNOWN ERROR" }}
+
+--
+TMask Transporter | ustawienia powiadomień: /accounts/profile/

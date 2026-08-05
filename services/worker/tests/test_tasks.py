@@ -826,3 +826,249 @@ class TestMaskingRulesFor:
         assert _masking_rules_for(mock_connection) == {
             'users': {'email': 'email'}, 'clients': {'name': 'name'},
         }
+
+
+class TestHealthCheckAllTask:
+    def test_dispatches_one_child_task_per_connection(self):
+        with patch('tasks.Connection') as MockConnection, \
+             patch('tasks.health_check_one') as mock_health_check_one:
+            MockConnection.objects.values_list.return_value = [1, 2, 3]
+            from tasks import health_check_all
+            health_check_all()
+            assert mock_health_check_one.delay.call_count == 3
+            mock_health_check_one.delay.assert_any_call(1)
+            mock_health_check_one.delay.assert_any_call(2)
+            mock_health_check_one.delay.assert_any_call(3)
+
+    def test_no_connections_dispatches_nothing(self):
+        with patch('tasks.Connection') as MockConnection, \
+             patch('tasks.health_check_one') as mock_health_check_one:
+            MockConnection.objects.values_list.return_value = []
+            from tasks import health_check_all
+            health_check_all()
+            mock_health_check_one.delay.assert_not_called()
+
+
+class TestHealthCheckOneTask:
+    def _mock_connection(self, MockConnection, kind='ssh', old_status='unknown'):
+        mock_conn = MagicMock()
+        mock_conn.pk = 5
+        mock_conn.kind = kind
+        mock_conn.health_status = old_status
+        MockConnection.objects.select_related.return_value.get.return_value = mock_conn
+        return mock_conn
+
+    def test_logs_and_skips_when_connection_not_found(self):
+        with patch('tasks.Connection') as MockConnection:
+            MockConnection.objects.select_related.return_value.get.side_effect = Exception('not found')
+            from tasks import health_check_one
+            health_check_one(999)  # should not raise
+
+    def test_dispatches_to_ssh_tester_for_ssh_kind(self):
+        with patch('tasks.Connection') as MockConnection, \
+             patch('tasks.ssh_test_connection') as mock_ssh_test, \
+             patch('tasks.send_health_notification'):
+            mock_conn = self._mock_connection(MockConnection, kind='ssh')
+            mock_ssh_test.return_value.success = True
+            mock_ssh_test.return_value.message = 'CONNECTION OK'
+            from tasks import health_check_one
+            health_check_one(5)
+            mock_ssh_test.assert_called_once_with(mock_conn)
+
+    def test_dispatches_to_pg_tester_for_postgres_kind(self):
+        with patch('tasks.Connection') as MockConnection, \
+             patch('tasks.pg_test_connection') as mock_pg_test, \
+             patch('tasks.send_health_notification'):
+            mock_conn = self._mock_connection(MockConnection, kind='postgres')
+            mock_pg_test.return_value.success = True
+            mock_pg_test.return_value.message = 'CONNECTION OK'
+            from tasks import health_check_one
+            health_check_one(5)
+            mock_pg_test.assert_called_once_with(mock_conn)
+
+    def test_dispatches_to_mysql_tester_for_mysql_kind(self):
+        with patch('tasks.Connection') as MockConnection, \
+             patch('tasks.mysql_test_connection') as mock_mysql_test, \
+             patch('tasks.send_health_notification'):
+            mock_conn = self._mock_connection(MockConnection, kind='mysql')
+            mock_mysql_test.return_value.success = True
+            mock_mysql_test.return_value.message = 'CONNECTION OK'
+            from tasks import health_check_one
+            health_check_one(5)
+            mock_mysql_test.assert_called_once_with(mock_conn)
+
+    def test_dispatches_to_mssql_tester_for_mssql_kind(self):
+        with patch('tasks.Connection') as MockConnection, \
+             patch('tasks.mssql_test_connection') as mock_mssql_test, \
+             patch('tasks.send_health_notification'):
+            mock_conn = self._mock_connection(MockConnection, kind='mssql')
+            mock_mssql_test.return_value.success = True
+            mock_mssql_test.return_value.message = 'CONNECTION OK'
+            from tasks import health_check_one
+            health_check_one(5)
+            mock_mssql_test.assert_called_once_with(mock_conn)
+
+    def test_saves_ok_status_and_clears_error(self):
+        with patch('tasks.Connection') as MockConnection, \
+             patch('tasks.ssh_test_connection') as mock_ssh_test, \
+             patch('tasks.send_health_notification'):
+            mock_conn = self._mock_connection(MockConnection, kind='ssh', old_status='failed')
+            mock_ssh_test.return_value.success = True
+            mock_ssh_test.return_value.message = 'CONNECTION OK'
+            from tasks import health_check_one
+            health_check_one(5)
+            assert mock_conn.health_status == 'ok'
+            assert mock_conn.health_error == ''
+            mock_conn.save.assert_called_once()
+
+    def test_saves_failed_status_and_error_message(self):
+        with patch('tasks.Connection') as MockConnection, \
+             patch('tasks.ssh_test_connection') as mock_ssh_test, \
+             patch('tasks.send_health_notification'):
+            mock_conn = self._mock_connection(MockConnection, kind='ssh', old_status='unknown')
+            mock_ssh_test.return_value.success = False
+            mock_ssh_test.return_value.message = 'CONNECTION FAILED — timeout'
+            from tasks import health_check_one
+            health_check_one(5)
+            assert mock_conn.health_status == 'failed'
+            assert mock_conn.health_error == 'CONNECTION FAILED — timeout'
+
+    def test_notifies_on_first_failure(self):
+        with patch('tasks.Connection') as MockConnection, \
+             patch('tasks.ssh_test_connection') as mock_ssh_test, \
+             patch('tasks.send_health_notification') as mock_notify:
+            self._mock_connection(MockConnection, kind='ssh', old_status='unknown')
+            mock_ssh_test.return_value.success = False
+            mock_ssh_test.return_value.message = 'CONNECTION FAILED — timeout'
+            from tasks import health_check_one
+            health_check_one(5)
+            mock_notify.delay.assert_called_once_with(5, 'failed')
+
+    def test_no_notification_on_first_ok(self):
+        with patch('tasks.Connection') as MockConnection, \
+             patch('tasks.ssh_test_connection') as mock_ssh_test, \
+             patch('tasks.send_health_notification') as mock_notify:
+            self._mock_connection(MockConnection, kind='ssh', old_status='unknown')
+            mock_ssh_test.return_value.success = True
+            mock_ssh_test.return_value.message = 'CONNECTION OK'
+            from tasks import health_check_one
+            health_check_one(5)
+            mock_notify.delay.assert_not_called()
+
+    def test_no_notification_when_still_failed(self):
+        with patch('tasks.Connection') as MockConnection, \
+             patch('tasks.ssh_test_connection') as mock_ssh_test, \
+             patch('tasks.send_health_notification') as mock_notify:
+            self._mock_connection(MockConnection, kind='ssh', old_status='failed')
+            mock_ssh_test.return_value.success = False
+            mock_ssh_test.return_value.message = 'CONNECTION FAILED — timeout'
+            from tasks import health_check_one
+            health_check_one(5)
+            mock_notify.delay.assert_not_called()
+
+    def test_notifies_on_recovery(self):
+        with patch('tasks.Connection') as MockConnection, \
+             patch('tasks.ssh_test_connection') as mock_ssh_test, \
+             patch('tasks.send_health_notification') as mock_notify:
+            self._mock_connection(MockConnection, kind='ssh', old_status='failed')
+            mock_ssh_test.return_value.success = True
+            mock_ssh_test.return_value.message = 'CONNECTION OK'
+            from tasks import health_check_one
+            health_check_one(5)
+            mock_notify.delay.assert_called_once_with(5, 'ok')
+
+    def test_no_notification_when_still_ok(self):
+        with patch('tasks.Connection') as MockConnection, \
+             patch('tasks.ssh_test_connection') as mock_ssh_test, \
+             patch('tasks.send_health_notification') as mock_notify:
+            self._mock_connection(MockConnection, kind='ssh', old_status='ok')
+            mock_ssh_test.return_value.success = True
+            mock_ssh_test.return_value.message = 'CONNECTION OK'
+            from tasks import health_check_one
+            health_check_one(5)
+            mock_notify.delay.assert_not_called()
+
+
+class TestSendHealthNotificationTask:
+    def _mock_connection(self, MockConnection, webhook_url='http://hooks.example.com/'):
+        mock_conn = MagicMock()
+        mock_conn.pk = 5
+        mock_conn.owner.webhook_url = webhook_url
+        mock_conn.owner.webhook_circuit_open_until = None
+        MockConnection.objects.select_related.return_value.get.return_value = mock_conn
+        return mock_conn
+
+    def test_logs_and_skips_when_connection_not_found(self):
+        with patch('tasks.Connection') as MockConnection:
+            MockConnection.objects.select_related.return_value.get.side_effect = Exception('not found')
+            from tasks import send_health_notification
+            send_health_notification(999, 'failed')  # should not raise
+
+    def test_calls_email_and_telegram(self):
+        with patch('tasks.Connection') as MockConnection, \
+             patch('tasks.send_connection_health_email') as mock_email, \
+             patch('tasks.send_connection_health_telegram') as mock_telegram, \
+             patch('tasks.send_connection_health_webhook'), \
+             patch('tasks.WebhookDeliveryLog'), \
+             patch('tasks.circuit_is_open', return_value=False), \
+             patch('tasks.record_success'):
+            mock_conn = self._mock_connection(MockConnection)
+            from tasks import send_health_notification
+            send_health_notification(5, 'failed')
+            mock_email.assert_called_once_with(mock_conn, 'failed')
+            mock_telegram.assert_called_once_with(mock_conn, 'failed')
+
+    def test_skips_webhook_when_no_url_configured(self):
+        with patch('tasks.Connection') as MockConnection, \
+             patch('tasks.send_connection_health_email'), \
+             patch('tasks.send_connection_health_telegram'), \
+             patch('tasks.send_connection_health_webhook') as mock_webhook, \
+             patch('tasks.WebhookDeliveryLog') as MockLog:
+            self._mock_connection(MockConnection, webhook_url='')
+            from tasks import send_health_notification
+            send_health_notification(5, 'failed')
+            mock_webhook.assert_not_called()
+            MockLog.objects.create.assert_not_called()
+
+    def test_skips_and_logs_when_circuit_open(self):
+        with patch('tasks.Connection') as MockConnection, \
+             patch('tasks.send_connection_health_email'), \
+             patch('tasks.send_connection_health_telegram'), \
+             patch('tasks.send_connection_health_webhook') as mock_webhook, \
+             patch('tasks.WebhookDeliveryLog') as MockLog, \
+             patch('tasks.circuit_is_open', return_value=True):
+            self._mock_connection(MockConnection)
+            from tasks import send_health_notification
+            send_health_notification(5, 'failed')
+            mock_webhook.assert_not_called()
+            MockLog.objects.create.assert_called_once()
+            assert MockLog.objects.create.call_args[1]['skipped'] is True
+
+    def test_records_success_and_logs_delivery_on_success(self):
+        with patch('tasks.Connection') as MockConnection, \
+             patch('tasks.send_connection_health_email'), \
+             patch('tasks.send_connection_health_telegram'), \
+             patch('tasks.send_connection_health_webhook', return_value=True), \
+             patch('tasks.WebhookDeliveryLog') as MockLog, \
+             patch('tasks.circuit_is_open', return_value=False), \
+             patch('tasks.record_success') as mock_record_success:
+            mock_conn = self._mock_connection(MockConnection)
+            from tasks import send_health_notification
+            send_health_notification(5, 'ok')
+            mock_record_success.assert_called_once()
+            MockLog.objects.create.assert_called_once_with(
+                user=mock_conn.owner, job=None, url='http://hooks.example.com/', success=True,
+            )
+
+    def test_records_failure_and_logs_delivery_on_exception(self):
+        with patch('tasks.Connection') as MockConnection, \
+             patch('tasks.send_connection_health_email'), \
+             patch('tasks.send_connection_health_telegram'), \
+             patch('tasks.send_connection_health_webhook', side_effect=Exception('boom')), \
+             patch('tasks.WebhookDeliveryLog') as MockLog, \
+             patch('tasks.circuit_is_open', return_value=False), \
+             patch('tasks.record_failure') as mock_record_failure:
+            mock_conn = self._mock_connection(MockConnection)
+            from tasks import send_health_notification
+            send_health_notification(5, 'failed')  # should not raise
+            mock_record_failure.assert_called_once_with(mock_conn.owner)

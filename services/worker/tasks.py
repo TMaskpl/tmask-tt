@@ -11,6 +11,10 @@ django.setup()
 
 from django.conf import settings  # noqa: E402
 from apps.connections.models import Connection  # noqa: E402
+from apps.connections.ssh_tester import test_connection as ssh_test_connection  # noqa: E402
+from apps.connections.pg_tester import test_connection as pg_test_connection  # noqa: E402
+from apps.connections.mysql_tester import test_connection as mysql_test_connection  # noqa: E402
+from apps.connections.mssql_tester import test_connection as mssql_test_connection  # noqa: E402
 from apps.transfers.models import TransferJob, TransferLog  # noqa: E402
 from apps.db_transfers.models import DbTransferJob, DbTransferLog  # noqa: E402
 from apps.masking.models import MaskingRule  # noqa: E402
@@ -24,7 +28,10 @@ from modules.relay.handler import RelayHandler, RelayTransferError  # noqa: E402
 from modules.postgres.handler import PgTransferHandler, PgTransferError  # noqa: E402
 from modules.mysql.handler import MysqlTransferHandler, MysqlTransferError  # noqa: E402
 from modules.mssql.handler import MssqlTransferHandler, MssqlTransferError  # noqa: E402
-from notifications import send_email_notification, send_webhook_notification, send_telegram_notification  # noqa: E402
+from notifications import (  # noqa: E402
+    send_email_notification, send_webhook_notification, send_telegram_notification,
+    send_connection_health_email, send_connection_health_telegram, send_connection_health_webhook,
+)
 
 app = Celery('transporter')
 app.config_from_object('django.conf:settings', namespace='CELERY')
@@ -364,3 +371,75 @@ def execute_db_transfer(self, job_id: int):
         log_callback('error', f'UNEXPECTED ERROR — {e}')
         logger.error(f'DbTransferJob {job.pk} unexpected error: {e}')
         raise
+
+
+@app.task(name='connections.health_check_all')
+def health_check_all():
+    for connection_id in Connection.objects.values_list('pk', flat=True):
+        health_check_one.delay(connection_id)
+
+
+@app.task(name='connections.health_check_one')
+def health_check_one(connection_id: int):
+    try:
+        connection = Connection.objects.select_related('owner').get(pk=connection_id)
+    except Exception:
+        logger.error(f'Connection {connection_id} not found — health check skipped')
+        return
+
+    if connection.kind == 'postgres':
+        result = pg_test_connection(connection)
+    elif connection.kind == 'mysql':
+        result = mysql_test_connection(connection)
+    elif connection.kind == 'mssql':
+        result = mssql_test_connection(connection)
+    else:
+        result = ssh_test_connection(connection)
+
+    from django.utils import timezone
+
+    old_status = connection.health_status
+    new_status = 'ok' if result.success else 'failed'
+
+    connection.health_status = new_status
+    connection.health_checked_at = timezone.now()
+    connection.health_error = '' if result.success else result.message
+    connection.save(update_fields=['health_status', 'health_checked_at', 'health_error'])
+
+    became_failed = old_status != 'failed' and new_status == 'failed'
+    recovered = old_status == 'failed' and new_status == 'ok'
+    if became_failed or recovered:
+        send_health_notification.delay(connection.pk, new_status)
+
+
+@app.task(name='connections.send_health_notification')
+def send_health_notification(connection_id: int, status: str):
+    try:
+        connection = Connection.objects.select_related('owner').get(pk=connection_id)
+    except Exception:
+        logger.error(f'Connection {connection_id} not found — health notification skipped')
+        return
+
+    send_connection_health_email(connection, status)
+    send_connection_health_telegram(connection, status)
+
+    user = connection.owner
+    if not user.webhook_url:
+        return
+    if circuit_is_open(user):
+        WebhookDeliveryLog.objects.create(
+            user=user, job=None, url=user.webhook_url,
+            success=False, skipped=True, error_message=CIRCUIT_SKIPPED_MESSAGE,
+        )
+        return
+    try:
+        sent = send_connection_health_webhook(connection, status)
+    except Exception as exc:
+        record_failure(user)
+        WebhookDeliveryLog.objects.create(
+            user=user, job=None, url=user.webhook_url, success=False, error_message=str(exc),
+        )
+        return
+    if sent:
+        record_success(user)
+        WebhookDeliveryLog.objects.create(user=user, job=None, url=user.webhook_url, success=True)
