@@ -472,3 +472,31 @@ class TestConnectionTestDispatchDbKinds:
             mock_test.return_value = None
             admin_client.get(reverse('connections:test', args=[conn.pk]))
             mock_test.assert_called_once()
+
+
+@pytest.mark.django_db
+class TestConnectionListHealthBadge:
+    def test_shows_unknown_badge_by_default(self, auth_client, regular_user, make_connection):
+        make_connection(regular_user, name='Fresh')
+        response = auth_client.get(reverse('connections:list'))
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert 'status-pending' in content
+
+    def test_shows_ok_badge_when_healthy(self, auth_client, regular_user, make_connection):
+        conn = make_connection(regular_user, name='Healthy')
+        conn.health_status = 'ok'
+        conn.save(update_fields=['health_status'])
+        response = auth_client.get(reverse('connections:list'))
+        content = response.content.decode()
+        assert 'status-done' in content
+
+    def test_shows_failed_badge_with_error_tooltip(self, auth_client, regular_user, make_connection):
+        conn = make_connection(regular_user, name='Broken')
+        conn.health_status = 'failed'
+        conn.health_error = 'CONNECTION FAILED — timeout'
+        conn.save(update_fields=['health_status', 'health_error'])
+        response = auth_client.get(reverse('connections:list'))
+        content = response.content.decode()
+        assert 'status-failed' in content
+        assert 'CONNECTION FAILED — timeout' in content

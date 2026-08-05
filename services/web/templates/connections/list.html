@@ -13,7 +13,7 @@
     <thead>
       <tr>
         <th>Name</th><th>Kind</th><th>Host</th><th>Port</th><th>Proto</th>
-        <th>Compress</th><th>Encrypt</th><th>Utworzył</th><th class="col-actions">Actions</th>
+        <th>Compress</th><th>Encrypt</th><th>Utworzył</th><th>Health</th><th class="col-actions">Actions</th>
       </tr>
     </thead>
     <tbody>
@@ -27,6 +27,15 @@
         <td>{% if conn.compress %}Yes{% else %}—{% endif %}</td>
         <td>{% if conn.encrypt %}Yes{% else %}—{% endif %}</td>
         <td>{{ conn.owner.username }}</td>
+        <td>
+          {% if conn.health_status == 'ok' %}
+          <span class="status status-done" title="Ostatnio sprawdzono: {{ conn.health_checked_at|date:'Y-m-d H:i' }}">OK</span>
+          {% elif conn.health_status == 'failed' %}
+          <span class="status status-failed" title="{{ conn.health_error }}">FAILED</span>
+          {% else %}
+          <span class="status status-pending" title="Jeszcze nie sprawdzono">—</span>
+          {% endif %}
+        </td>
         <td class="col-actions">
           <div class="row-actions">
             <button class="btn btn-small btn-warn"
