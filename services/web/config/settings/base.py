@@ -29,6 +29,7 @@ INSTALLED_APPS = [
     'apps.masking',
     'apps.audit_log',
     'apps.webhook_deliveries',
+    'apps.monitoring',
 ]
 
 MIDDLEWARE = [
@@ -129,3 +130,4 @@ TELEGRAM_BOT_TOKEN  = config('TELEGRAM_BOT_TOKEN', default='')
 TRANSFERS_DIR = '/transfers'
 MAX_UPLOAD_BYTES = 100 * 1024 * 1024  # 100 MB, matches nginx client_max_body_size
 TRANSFERS_RETENTION_DAYS = config('TRANSFERS_RETENTION_DAYS', default=1, cast=int)
+METRICS_TOKEN = config('METRICS_TOKEN')

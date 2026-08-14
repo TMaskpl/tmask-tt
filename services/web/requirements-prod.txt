@@ -16,3 +16,4 @@ requests==2.*
 django-htmx==1.19.*
 pyotp==2.*
 qrcode[pil]==8.*
+prometheus_client
