@@ -1,6 +1,7 @@
 import redis
 from django.conf import settings
 from django.db.models import Count, Sum, Case, When, Value, F, CharField, ExpressionWrapper, DurationField
+from django.db.models.functions import Coalesce
 
 from apps.transfers.models import TransferJob
 from apps.db_transfers.models import DbTransferJob
@@ -8,7 +9,7 @@ from prometheus_client.core import CounterMetricFamily, GaugeMetricFamily, Summa
 
 _FILE_MODULE_EXPR = Case(
     When(flow_id__isnull=False, then=Value('relay')),
-    default=F('connection__protocol'),
+    default=Coalesce(F('connection__protocol'), Value('unknown')),
     output_field=CharField(),
 )
 

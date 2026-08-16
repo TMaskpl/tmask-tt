@@ -15,6 +15,11 @@ class TestMetricsView:
         response = client.get(reverse('monitoring:metrics'), HTTP_AUTHORIZATION='Bearer wrong-token')
         assert response.status_code == 401
 
+    def test_rejects_non_ascii_token_with_401_not_500(self, client, settings):
+        settings.METRICS_TOKEN = 'correct-token'
+        response = client.get(reverse('monitoring:metrics'), HTTP_AUTHORIZATION='Bearer \xff\xff')
+        assert response.status_code == 401
+
     def test_returns_prometheus_text_with_correct_token(self, client, settings):
         settings.METRICS_TOKEN = 'correct-token'
         with patch('apps.monitoring.collectors.redis.Redis') as MockRedis:

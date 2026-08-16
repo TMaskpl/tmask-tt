@@ -1,5 +1,5 @@
 from datetime import timedelta
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 from django.utils import timezone
@@ -55,6 +55,19 @@ class TestJobsTotal:
     def test_no_samples_for_empty_database(self, regular_user):
         families = {f.name: f for f in TmaskCollector().collect()}
         assert families['tmask_transfer_jobs'].samples == []
+
+    def test_orphan_job_without_connection_or_flow_uses_unknown_module(self, regular_user, make_connection):
+        conn = make_connection(regular_user, protocol='sftp')
+        job = TransferJob.objects.create(
+            owner=regular_user, connection=conn,
+            source_path='/x', destination_path='/y', status='failed',
+        )
+        TransferJob.objects.filter(pk=job.pk).update(connection=None)
+        families = {f.name: f for f in TmaskCollector().collect()}
+        samples = families['tmask_transfer_jobs'].samples
+        matching = [s for s in samples if s.labels == {'type': 'file', 'module': 'unknown', 'status': 'failed'}]
+        assert len(matching) == 1
+        assert matching[0].value == 1
 
 
 @pytest.mark.django_db
